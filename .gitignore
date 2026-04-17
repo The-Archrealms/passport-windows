@@ -1,0 +1,16 @@
+.vs/
+*.user
+*.suo
+*.cache
+
+src/**/bin/
+src/**/obj/
+tools/**/bin/
+tools/**/obj/
+
+records/
+*.car
+ipfs-publication.json
+verification-report.json
+
+*.pkcs8.protected

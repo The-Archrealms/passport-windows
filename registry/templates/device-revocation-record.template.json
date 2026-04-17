@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "record_type": "device_revocation_record",
+  "record_id": "<record-id>",
+  "created_utc": "<YYYY-MM-DDTHH:MM:SSZ>",
+  "effective_utc": "<YYYY-MM-DDTHH:MM:SSZ>",
+  "status": "active",
+  "archrealms_identity_id": "<identity-id>",
+  "revoked_device_record_id": "<device-record-id>",
+  "device_id": "<device-id>",
+  "revocation_reason": "retired",
+  "supersedes_credential_status": "active",
+  "replacement_device_record_id": "",
+  "incident_reference": "",
+  "summary": "<short-summary>"
+}

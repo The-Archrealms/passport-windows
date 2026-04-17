@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "record_type": "attestation_record",
+  "record_id": "<record-id>",
+  "created_utc": "<YYYY-MM-DDTHH:MM:SSZ>",
+  "effective_utc": "<YYYY-MM-DDTHH:MM:SSZ>",
+  "status": "active",
+  "attestation_type": "identity_support",
+  "subject_record_ids": [
+    "<subject-record-id>"
+  ],
+  "attestor_label": "<attestor-label>",
+  "attestor_identity_id": "",
+  "attestor_external_reference": "",
+  "attestation_statement": "<statement>",
+  "evidence_refs": [],
+  "scope_note": "",
+  "summary": "<short-summary>"
+}

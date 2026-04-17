@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "record_type": "passport_identity_record",
+  "record_id": "<record-id>",
+  "created_utc": "<YYYY-MM-DDTHH:MM:SSZ>",
+  "effective_utc": "<YYYY-MM-DDTHH:MM:SSZ>",
+  "status": "active",
+  "archrealms_identity_id": "<identity-id>",
+  "display_name": "<display-name>",
+  "identity_mode": "pseudonymous",
+  "citizenship_class": "citizen",
+  "declared_scope": "personal",
+  "public_biography": "",
+  "recovery_authority": {
+    "method": "identity-key",
+    "reference": "<recovery-reference>"
+  },
+  "attestation_refs": [],
+  "supersedes_record_id": "",
+  "summary": "<short-summary>"
+}
