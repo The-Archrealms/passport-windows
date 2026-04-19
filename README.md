@@ -150,7 +150,7 @@ That produces:
 - a public signing certificate under `artifacts/release/passport-windows-msix/x64/passport-windows-signing.cer`
 - an `MSIX` package manifest with hashes under `artifacts/release/passport-windows-msix/x64/msix-package-manifest.json`
 
-The script publishes the app, assembles a package layout, builds the package with `MakeAppx.exe`, and signs it with `signtool.exe`, so it requires the Windows SDK packaging tools on the machine that runs it.
+The script publishes the app, assembles a package layout, builds the package with `MakeAppx.exe`, and signs it with `signtool.exe`, so it requires the Windows SDK packaging tools on the machine that runs it. Post-sign verification can be skipped with `-SkipSignatureVerification`, which is the mode used in CI for self-signed preview packages.
 
 The packaging script accepts a stable signing certificate through either:
 

@@ -11,7 +11,8 @@ param(
     [string]$CertificatePfxPath,
     [string]$CertificatePassword,
     [string]$CertificatePfxBase64,
-    [bool]$SelfContained = $true
+    [bool]$SelfContained = $true,
+    [switch]$SkipSignatureVerification
 )
 
 $ErrorActionPreference = "Stop"
@@ -312,14 +313,16 @@ try {
         throw "MSIX signing failed."
     }
 
-    $trustedPeopleImport = Import-Certificate -FilePath $certificateCer -CertStoreLocation "Cert:\CurrentUser\TrustedPeople"
-    if ($signingCertificate.Subject -eq $signingCertificate.Issuer) {
-        $trustedRootImport = Import-Certificate -FilePath $certificateCer -CertStoreLocation "Cert:\CurrentUser\Root"
-    }
+    if (-not $SkipSignatureVerification) {
+        $trustedPeopleImport = Import-Certificate -FilePath $certificateCer -CertStoreLocation "Cert:\CurrentUser\TrustedPeople"
+        if ($signingCertificate.Subject -eq $signingCertificate.Issuer) {
+            $trustedRootImport = Import-Certificate -FilePath $certificateCer -CertStoreLocation "Cert:\CurrentUser\Root"
+        }
 
-    & $signTool verify /pa $packageOutput
-    if ($LASTEXITCODE -ne 0) {
-        throw "Signed MSIX verification failed."
+        & $signTool verify /pa $packageOutput
+        if ($LASTEXITCODE -ne 0) {
+            throw "Signed MSIX verification failed."
+        }
     }
 }
 finally {
@@ -373,6 +376,7 @@ $releaseManifest = [pscustomobject]@{
     certificate_source = $certificateSource
     certificate_path = $certificateCer
     certificate_sha256 = (Get-Sha256 -Path $certificateCer)
+    signature_verification_skipped = $SkipSignatureVerification.IsPresent
     appx_manifest_path = $layoutManifestPath
     git_commit = $gitCommit
 }

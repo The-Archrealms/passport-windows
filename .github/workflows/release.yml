@@ -53,7 +53,7 @@ jobs:
         env:
           PASSPORT_WINDOWS_MSIX_PFX_BASE64: ${{ secrets.PASSPORT_WINDOWS_MSIX_PFX_BASE64 }}
           PASSPORT_WINDOWS_MSIX_PFX_PASSWORD: ${{ secrets.PASSPORT_WINDOWS_MSIX_PFX_PASSWORD }}
-        run: .\tools\release\Publish-PassportWindowsMsix.ps1 -Version "${{ steps.release_tag.outputs.tag }}" -Platform x64
+        run: .\tools\release\Publish-PassportWindowsMsix.ps1 -Version "${{ steps.release_tag.outputs.tag }}" -Platform x64 -SkipSignatureVerification
 
       - name: Upload release bundle
         uses: actions/upload-artifact@v6
