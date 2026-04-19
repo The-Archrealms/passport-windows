@@ -45,10 +45,7 @@ namespace ArchrealmsPassport.Windows.Services
 
                 var challengeBytes = Encoding.UTF8.GetBytes(challenge);
                 byte[] signatureBytes;
-                using (var rsa = LoadPrivateKey(privateKeyPath))
-                {
-                    signatureBytes = rsa.SignData(challengeBytes, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
-                }
+                signatureBytes = PassportDeviceKeyStore.SignData(privateKeyPath, challengeBytes);
 
                 var verified = VerifySignature(publicKeyPath, challengeBytes, signatureBytes);
                 var createdUtc = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
@@ -182,10 +179,7 @@ namespace ArchrealmsPassport.Windows.Services
 
                 var authorizationBytes = File.ReadAllBytes(authorizationPath);
                 byte[] authorizationSignatureBytes;
-                using (var rsa = LoadPrivateKey(authorizerPrivateKeyPath))
-                {
-                    authorizationSignatureBytes = rsa.SignData(authorizationBytes, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
-                }
+                authorizationSignatureBytes = PassportDeviceKeyStore.SignData(authorizerPrivateKeyPath, authorizationBytes);
 
                 var authorizationSignaturePath = Path.Combine(approvalRoot, "device-authorization-signature.json");
                 var authorizationSignatureRecord = new Dictionary<string, object?>
@@ -266,7 +260,7 @@ namespace ArchrealmsPassport.Windows.Services
                     return FailedJoinActivation("The approval package contains an invalid authorization signature.");
                 }
 
-                var localPublicKeyBytes = ExportPublicKeyFromPrivateKey(pendingDeviceKeyPath);
+                var localPublicKeyBytes = PassportDeviceKeyStore.ExportPublicKey(pendingDeviceKeyPath);
                 var localPublicKeySha256 = ComputeSha256(localPublicKeyBytes);
                 var requestDeviceId = GetRequiredString(requestRoot, "device_id");
                 if (!string.Equals(requestDeviceId, pendingDeviceId, StringComparison.Ordinal))
@@ -440,10 +434,7 @@ namespace ArchrealmsPassport.Windows.Services
 
                 var manifestBytes = File.ReadAllBytes(manifestPath);
                 byte[] signatureBytes;
-                using (var rsa = LoadPrivateKey(privateKeyPath))
-                {
-                    signatureBytes = rsa.SignData(manifestBytes, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
-                }
+                signatureBytes = PassportDeviceKeyStore.SignData(privateKeyPath, manifestBytes);
 
                 var verified = VerifySignature(publicKeyPath, manifestBytes, signatureBytes);
                 var signaturePath = Path.Combine(packageRoot, "manifest-signature.json");
@@ -611,32 +602,6 @@ namespace ArchrealmsPassport.Windows.Services
             }
 
             return value;
-        }
-
-        private static RSA LoadPrivateKey(string privateKeyPath)
-        {
-            if (string.IsNullOrWhiteSpace(privateKeyPath) || !File.Exists(privateKeyPath))
-            {
-                throw new FileNotFoundException("Protected device key not found.", privateKeyPath);
-            }
-
-            var protectedPrivateKey = File.ReadAllBytes(privateKeyPath);
-            var privateKeyBytes = ProtectedData.Unprotect(
-                protectedPrivateKey,
-                Encoding.UTF8.GetBytes("ArchrealmsPassportWindows"),
-                DataProtectionScope.CurrentUser);
-
-            var rsa = RSA.Create();
-            rsa.ImportPkcs8PrivateKey(privateKeyBytes, out _);
-            return rsa;
-        }
-
-        private static byte[] ExportPublicKeyFromPrivateKey(string privateKeyPath)
-        {
-            using (var rsa = LoadPrivateKey(privateKeyPath))
-            {
-                return rsa.ExportSubjectPublicKeyInfo();
-            }
         }
 
         private static string CopyFile(string sourcePath, string destinationPath)

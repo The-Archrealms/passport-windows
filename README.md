@@ -5,7 +5,7 @@
 It is a public-facing desktop app and tooling bundle for:
 
 - creating a new Passport identity or requesting authorization under an existing identity
-- generating protected local device credentials
+- generating persisted Windows device credentials
 - signing Passport challenges
 - preparing portable registry submission packages
 - publishing registry submission packages to IPFS
@@ -43,6 +43,18 @@ By default it uses local app data:
 - workspace: `%LOCALAPPDATA%\\Archrealms\\PassportWindows\\workspace`
 - protected device keys: `%LOCALAPPDATA%\\Archrealms\\PassportWindows\\keys`
 - default IPFS repo: `%LOCALAPPDATA%\\Archrealms\\PassportWindows\\ipfs\\kubo`
+
+Device key references live under:
+
+- `%LOCALAPPDATA%\\Archrealms\\PassportWindows\\keys`
+
+These are reference files, not exported private keys. New Passport device credentials are created as persisted Windows CNG keys with provider preference in this order:
+
+1. `Microsoft Passport Key Storage Provider`
+2. `Microsoft Platform Crypto Provider`
+3. `Microsoft Software Key Storage Provider`
+
+If Windows Hello or TPM-backed creation is unavailable, the client falls back to the software KSP while keeping the private key outside the source tree and outside exportable PKCS#8 files.
 
 The workspace contains local Passport records such as:
 

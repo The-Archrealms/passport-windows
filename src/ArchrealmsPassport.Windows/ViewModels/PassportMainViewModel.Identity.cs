@@ -100,7 +100,8 @@ namespace ArchrealmsPassport.Windows.ViewModels
                 AppendLog("Join request: " + joinResult.JoinRequestPath);
                 AppendLog("Join request signature: " + joinResult.RequestSignaturePath);
                 AppendLog("Candidate public key: " + joinResult.PublicKeyPath);
-                AppendLog("Protected private key: " + joinResult.PrivateKeyPath);
+                AppendLog("Device key reference: " + joinResult.PrivateKeyPath);
+                AppendLog("Key storage: " + PassportDeviceKeyStore.DescribeReference(joinResult.PrivateKeyPath));
                 await RefreshStatusAsync();
                 return;
             }
@@ -131,7 +132,8 @@ namespace ArchrealmsPassport.Windows.ViewModels
             AppendLog("Identity record: " + result.IdentityRecordPath);
             AppendLog("Device credential record: " + result.DeviceRecordPath);
             AppendLog("Public key: " + result.PublicKeyPath);
-            AppendLog("Protected private key: " + result.PrivateKeyPath);
+            AppendLog("Device key reference: " + result.PrivateKeyPath);
+            AppendLog("Key storage: " + PassportDeviceKeyStore.DescribeReference(result.PrivateKeyPath));
 
             await RefreshStatusAsync();
         }

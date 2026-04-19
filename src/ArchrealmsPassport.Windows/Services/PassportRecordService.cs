@@ -33,7 +33,7 @@ namespace ArchrealmsPassport.Windows.Services
                 var timestamp = DateTime.UtcNow.ToString("yyyyMMddTHHmmssZ");
                 var createdUtc = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
                 var deviceId = CreateDeviceId(normalizedDeviceLabel);
-                var deviceKeyPair = CreateDeviceKeyPair(deviceId);
+                var deviceKeyPair = PassportDeviceKeyStore.CreatePersistedKey(deviceId);
                 var publicKeyPath = WritePublicKey(resolvedWorkspaceRoot, deviceId, deviceKeyPair.PublicKeyBytes);
 
                 var identityRecordPath = Path.Combine(
@@ -99,7 +99,7 @@ namespace ArchrealmsPassport.Windows.Services
                     Message = "Created a new Passport identity and authorized this device.",
                     IdentityId = identityId,
                     DeviceId = deviceId,
-                    PrivateKeyPath = deviceKeyPair.PrivateKeyPath,
+                    PrivateKeyPath = deviceKeyPair.KeyReferencePath,
                     PublicKeyPath = publicKeyPath,
                     IdentityRecordPath = identityRecordPath,
                     DeviceRecordPath = deviceRecordPath
@@ -130,7 +130,7 @@ namespace ArchrealmsPassport.Windows.Services
                 var timestamp = DateTime.UtcNow.ToString("yyyyMMddTHHmmssZ");
                 var createdUtc = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
                 var deviceId = CreateDeviceId(normalizedDeviceLabel);
-                var deviceKeyPair = CreateDeviceKeyPair(deviceId);
+                var deviceKeyPair = PassportDeviceKeyStore.CreatePersistedKey(deviceId);
                 var publicKeyPath = WritePublicKey(resolvedWorkspaceRoot, deviceId, deviceKeyPair.PublicKeyBytes);
 
                 var pendingRecordPath = Path.Combine(
@@ -194,10 +194,7 @@ namespace ArchrealmsPassport.Windows.Services
 
                 var requestBytes = File.ReadAllBytes(requestPath);
                 byte[] signatureBytes;
-                using (var rsa = LoadPrivateKey(deviceKeyPair.PrivateKeyPath))
-                {
-                    signatureBytes = rsa.SignData(requestBytes, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
-                }
+                signatureBytes = PassportDeviceKeyStore.SignData(deviceKeyPair.KeyReferencePath, requestBytes);
 
                 bool verified;
                 using (var rsa = RSA.Create())
@@ -231,7 +228,7 @@ namespace ArchrealmsPassport.Windows.Services
                     Message = "Prepared a join request for approval by an existing authorized device.",
                     IdentityId = identityId,
                     DeviceId = deviceId,
-                    PrivateKeyPath = deviceKeyPair.PrivateKeyPath,
+                    PrivateKeyPath = deviceKeyPair.KeyReferencePath,
                     PublicKeyPath = publicKeyPath,
                     PendingDeviceRecordPath = pendingRecordPath,
                     JoinRequestPath = requestPath,
@@ -393,37 +390,6 @@ namespace ArchrealmsPassport.Windows.Services
             }
 
             return builder.ToString().Trim('-');
-        }
-
-        private static (byte[] PublicKeyBytes, string PrivateKeyPath) CreateDeviceKeyPair(string deviceId)
-        {
-            using (var rsa = RSA.Create(3072))
-            {
-                var publicKeyBytes = rsa.ExportSubjectPublicKeyInfo();
-                var privateKeyBytes = rsa.ExportPkcs8PrivateKey();
-                var protectedPrivateKey = ProtectedData.Protect(
-                    privateKeyBytes,
-                    Encoding.UTF8.GetBytes("ArchrealmsPassportWindows"),
-                    DataProtectionScope.CurrentUser);
-
-                var privateKeyPath = Path.Combine(PassportEnvironment.GetKeysRoot(), deviceId + ".pkcs8.protected");
-                File.WriteAllBytes(privateKeyPath, protectedPrivateKey);
-
-                return (publicKeyBytes, privateKeyPath);
-            }
-        }
-
-        private static RSA LoadPrivateKey(string privateKeyPath)
-        {
-            var protectedPrivateKey = File.ReadAllBytes(privateKeyPath);
-            var privateKeyBytes = ProtectedData.Unprotect(
-                protectedPrivateKey,
-                Encoding.UTF8.GetBytes("ArchrealmsPassportWindows"),
-                DataProtectionScope.CurrentUser);
-
-            var rsa = RSA.Create();
-            rsa.ImportPkcs8PrivateKey(privateKeyBytes, out _);
-            return rsa;
         }
 
         private static string ComputeSha256(byte[] value)

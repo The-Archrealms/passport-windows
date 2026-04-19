@@ -115,7 +115,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
             return CanRunWorkspaceAction()
                 && !string.IsNullOrWhiteSpace(PendingDeviceId)
                 && !string.IsNullOrWhiteSpace(PendingDeviceKeyPath)
-                && File.Exists(PendingDeviceKeyPath)
+                && PassportDeviceKeyStore.ReferenceExists(PendingDeviceKeyPath)
                 && !string.IsNullOrWhiteSpace(JoinApprovalPath)
                 && (File.Exists(JoinApprovalPath) || Directory.Exists(JoinApprovalPath));
         }
@@ -126,7 +126,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
                 && !string.IsNullOrWhiteSpace(ActiveIdentityId)
                 && !string.IsNullOrWhiteSpace(ActiveDeviceId)
                 && !string.IsNullOrWhiteSpace(ActiveDeviceKeyPath)
-                && File.Exists(ActiveDeviceKeyPath);
+                && PassportDeviceKeyStore.ReferenceExists(ActiveDeviceKeyPath);
         }
 
         private bool CanPublishRegistrySubmission()
