@@ -1,36 +1,69 @@
 param(
     [string]$Version,
-    [ValidateSet("x64", "x86", "ARM64")]
+    [ValidateSet("x64", "x86", "arm64")]
     [string]$Platform = "x64",
     [string]$Configuration = "Release",
     [string]$OutputRoot,
-    [string]$MsBuildPath,
+    [string]$DotnetPath,
+    [string]$MakeAppxPath,
+    [string]$SignToolPath,
+    [string]$TimestampUrl,
     [string]$CertificatePfxPath,
     [string]$CertificatePassword,
     [string]$CertificatePfxBase64,
-    [switch]$UseTestCertificate
+    [bool]$SelfContained = $true
 )
 
 $ErrorActionPreference = "Stop"
 
-function Resolve-MsBuildPath {
+function Resolve-DotnetPath {
     param(
         [string]$PreferredPath
+    )
+
+    if (-not $PreferredPath -and $env:ARCHREALMS_DOTNET) {
+        $PreferredPath = $env:ARCHREALMS_DOTNET
+    }
+
+    if ($PreferredPath) {
+        return (Resolve-Path -LiteralPath $PreferredPath).Path
+    }
+
+    return (Get-Command dotnet -ErrorAction Stop).Source
+}
+
+function Resolve-WindowsSdkTool {
+    param(
+        [string]$PreferredPath,
+        [string]$ToolName
     )
 
     if ($PreferredPath) {
         return (Resolve-Path -LiteralPath $PreferredPath).Path
     }
 
-    $vswherePath = "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe"
-    if (Test-Path -LiteralPath $vswherePath) {
-        $resolved = & $vswherePath -latest -products * -requires Microsoft.Component.MSBuild -find "MSBuild\**\Bin\MSBuild.exe" | Select-Object -First 1
-        if ($resolved) {
-            return $resolved.Trim()
-        }
+    $tool = Get-Command $ToolName -ErrorAction SilentlyContinue
+    if ($tool) {
+        return $tool.Source
     }
 
-    throw "MSBuild.exe was not found. Use -MsBuildPath or build on a Windows runner with Visual Studio build tools."
+    $kitsRoot = "C:\Program Files (x86)\Windows Kits\10\bin"
+    if (-not (Test-Path -LiteralPath $kitsRoot)) {
+        throw "$ToolName was not found. Install the Windows SDK or provide -$($ToolName -replace '\.exe$', 'Path')."
+    }
+
+    $candidate = Get-ChildItem -LiteralPath $kitsRoot -Directory | Sort-Object Name -Descending | ForEach-Object {
+        $path = Join-Path $_.FullName ("x64\" + $ToolName)
+        if (Test-Path -LiteralPath $path) {
+            return $path
+        }
+    } | Select-Object -First 1
+
+    if (-not $candidate) {
+        throw "$ToolName was not found under the Windows SDK bin folder."
+    }
+
+    return $candidate
 }
 
 function ConvertTo-AppxVersion {
@@ -69,6 +102,23 @@ function ConvertTo-AppxVersion {
     return ($versionParts -join '.')
 }
 
+function ConvertTo-AssemblyVersion {
+    param(
+        [string]$RawVersion
+    )
+
+    if (-not $RawVersion) {
+        return ""
+    }
+
+    $normalized = $RawVersion.Trim()
+    if ($normalized -match '^[vV](.+)$') {
+        $normalized = $Matches[1]
+    }
+
+    return ($normalized -split '[-+]')[0]
+}
+
 function Get-Sha256 {
     param(
         [string]$Path
@@ -77,17 +127,36 @@ function Get-Sha256 {
     return (Get-FileHash -Algorithm SHA256 -LiteralPath $Path).Hash.ToLowerInvariant()
 }
 
+function Copy-DirectoryContents {
+    param(
+        [string]$Source,
+        [string]$Destination
+    )
+
+    New-Item -ItemType Directory -Force $Destination | Out-Null
+    Copy-Item -Path (Join-Path $Source "*") -Destination $Destination -Recurse -Force
+}
+
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
-$packageProject = Join-Path $repoRoot "src\ArchrealmsPassport.Windows.Package\ArchrealmsPassport.Windows.Package.wapproj"
-$packageManifest = Join-Path $repoRoot "src\ArchrealmsPassport.Windows.Package\Package.appxmanifest"
+$appProject = Join-Path $repoRoot "src\ArchrealmsPassport.Windows\ArchrealmsPassport.Windows.csproj"
+$packageManifestTemplate = Join-Path $repoRoot "src\ArchrealmsPassport.Windows.Package\Package.appxmanifest"
+$assetsRoot = Join-Path $repoRoot "src\ArchrealmsPassport.Windows.Package\Assets"
 $assetScript = Join-Path $repoRoot "tools\release\New-PassportWindowsMsixAssets.ps1"
 $packagePublisher = "CN=The Archrealms"
 $packageIdentityName = "TheArchrealms.PassportWindows"
 $packageVersion = ConvertTo-AppxVersion -RawVersion $Version
-$msbuild = Resolve-MsBuildPath -PreferredPath $MsBuildPath
+$assemblyVersion = ConvertTo-AssemblyVersion -RawVersion $Version
+$runtimeIdentifier = "win-" + $Platform
+$dotnet = Resolve-DotnetPath -PreferredPath $DotnetPath
+$makeAppx = Resolve-WindowsSdkTool -PreferredPath $MakeAppxPath -ToolName "makeappx.exe"
+$signTool = Resolve-WindowsSdkTool -PreferredPath $SignToolPath -ToolName "signtool.exe"
 
 if (-not $OutputRoot) {
     $OutputRoot = Join-Path $repoRoot "artifacts\release\passport-windows-msix"
+}
+
+if (-not $TimestampUrl -and $env:PASSPORT_WINDOWS_MSIX_TIMESTAMP_URL) {
+    $TimestampUrl = $env:PASSPORT_WINDOWS_MSIX_TIMESTAMP_URL
 }
 
 if (-not $CertificatePfxBase64 -and $env:PASSPORT_WINDOWS_MSIX_PFX_BASE64) {
@@ -103,15 +172,30 @@ if ($LASTEXITCODE -ne 0) {
     throw "Failed to generate MSIX branding assets."
 }
 
-$artifactRoot = Join-Path $OutputRoot $Platform.ToLowerInvariant()
-$stagingRoot = Join-Path $artifactRoot "staging"
+$artifactRoot = Join-Path $OutputRoot $Platform
+$publishRoot = Join-Path $artifactRoot "publish"
+$layoutRoot = Join-Path $artifactRoot "layout"
 $certificateRoot = Join-Path $artifactRoot "certificate"
-$packageOutput = Join-Path $artifactRoot ("passport-windows-" + $Platform.ToLowerInvariant() + ".msix")
+$packageOutput = Join-Path $artifactRoot ("passport-windows-" + $Platform + ".msix")
 $releaseManifestPath = Join-Path $artifactRoot "msix-package-manifest.json"
+$layoutManifestPath = Join-Path $layoutRoot "AppxManifest.xml"
+$appProjectXml = [xml](Get-Content -LiteralPath $appProject -Raw)
+$applicationExecutable = $appProjectXml.Project.PropertyGroup.AssemblyName | Select-Object -First 1
+if (-not $applicationExecutable) {
+    $applicationExecutable = [System.IO.Path]::GetFileNameWithoutExtension($appProject)
+}
+$applicationExecutable += ".exe"
 
 New-Item -ItemType Directory -Force $artifactRoot | Out-Null
-New-Item -ItemType Directory -Force $stagingRoot | Out-Null
 New-Item -ItemType Directory -Force $certificateRoot | Out-Null
+
+if (Test-Path -LiteralPath $publishRoot) {
+    Remove-Item -Recurse -Force $publishRoot
+}
+
+if (Test-Path -LiteralPath $layoutRoot) {
+    Remove-Item -Recurse -Force $layoutRoot
+}
 
 $certificateSource = if ($CertificatePfxPath) { "provided-path" } elseif ($CertificatePfxBase64) { "provided-base64" } else { "generated-test-certificate" }
 $certificatePasswordValue = $CertificatePassword
@@ -119,6 +203,8 @@ $certificatePfx = Join-Path $certificateRoot "passport-windows-signing.pfx"
 $certificateCer = Join-Path $artifactRoot "passport-windows-signing.cer"
 $generatedCertificate = $null
 $removeGeneratedCertificate = $false
+$trustedPeopleImport = $null
+$trustedRootImport = $null
 
 if ($CertificatePfxPath) {
     Copy-Item -LiteralPath $CertificatePfxPath -Destination $certificatePfx -Force
@@ -162,46 +248,96 @@ if (-not (Test-Path -LiteralPath $certificateCer)) {
     [System.IO.File]::WriteAllBytes($certificateCer, $collection[0].Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Cert))
 }
 
-$manifestXml = [xml](Get-Content -LiteralPath $packageManifest -Raw)
-$namespaceManager = New-Object System.Xml.XmlNamespaceManager($manifestXml.NameTable)
-$namespaceManager.AddNamespace("appx", "http://schemas.microsoft.com/appx/manifest/foundation/windows10")
-$identityNode = $manifestXml.SelectSingleNode("/appx:Package/appx:Identity", $namespaceManager)
-if (-not $identityNode) {
-    throw "Package manifest identity element was not found."
-}
-
-$originalVersion = $identityNode.Version
+$signingCertificate = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2 $certificateCer
 
 try {
+    $publishArgs = @(
+        "publish", $appProject,
+        "-c", $Configuration,
+        "-r", $runtimeIdentifier,
+        "-o", $publishRoot,
+        "--self-contained", ($(if ($SelfContained) { "true" } else { "false" })),
+        "-p:UseSharedCompilation=false"
+    )
+
+    if ($assemblyVersion) {
+        $publishArgs += @("-p:Version=" + $assemblyVersion)
+    }
+
+    & $dotnet @publishArgs
+    if ($LASTEXITCODE -ne 0) {
+        throw "Application publish failed."
+    }
+
+    Copy-DirectoryContents -Source $publishRoot -Destination $layoutRoot
+    Copy-DirectoryContents -Source $assetsRoot -Destination (Join-Path $layoutRoot "Assets")
+
+    $manifestXml = [xml](Get-Content -LiteralPath $packageManifestTemplate -Raw)
+    $namespaceManager = New-Object System.Xml.XmlNamespaceManager($manifestXml.NameTable)
+    $namespaceManager.AddNamespace("appx", "http://schemas.microsoft.com/appx/manifest/foundation/windows10")
+    $namespaceManager.AddNamespace("uap", "http://schemas.microsoft.com/appx/manifest/uap/windows10")
+    $identityNode = $manifestXml.SelectSingleNode("/appx:Package/appx:Identity", $namespaceManager)
+    if (-not $identityNode) {
+        throw "Package manifest identity element was not found."
+    }
+    $applicationNode = $manifestXml.SelectSingleNode("/appx:Package/appx:Applications/appx:Application", $namespaceManager)
+    if (-not $applicationNode) {
+        throw "Package manifest application element was not found."
+    }
+
     $identityNode.Version = $packageVersion
-    $manifestXml.Save($packageManifest)
+    $applicationNode.Executable = $applicationExecutable
+    $manifestXml.Save($layoutManifestPath)
 
     if (Test-Path -LiteralPath $packageOutput) {
         Remove-Item -Force $packageOutput
     }
 
-    $msbuildArgs = @(
-        $packageProject,
-        "/restore",
-        "/p:Configuration=$Configuration",
-        "/p:Platform=$Platform",
-        "/p:UapAppxPackageBuildMode=SideloadOnly",
-        "/p:AppxBundle=Never",
-        "/p:GenerateAppInstallerFile=false",
-        "/p:AppxPackageOutput=$packageOutput",
-        "/p:AppxPackageSigningEnabled=true",
-        "/p:PackageCertificateKeyFile=$certificatePfx",
-        "/p:PackageCertificatePassword=$certificatePasswordValue"
-    )
-
-    & $msbuild @msbuildArgs
+    & $makeAppx pack /d $layoutRoot /p $packageOutput /o
     if ($LASTEXITCODE -ne 0) {
-        throw "MSIX packaging failed."
+        throw "MakeAppx packaging failed."
+    }
+
+    $signArgs = @("sign", "/fd", "SHA256", "/f", $certificatePfx)
+    if ($certificatePasswordValue) {
+        $signArgs += @("/p", $certificatePasswordValue)
+    }
+    if ($TimestampUrl) {
+        $signArgs += @("/tr", $TimestampUrl, "/td", "SHA256")
+    }
+    $signArgs += $packageOutput
+
+    & $signTool @signArgs
+    if ($LASTEXITCODE -ne 0) {
+        throw "MSIX signing failed."
+    }
+
+    $trustedPeopleImport = Import-Certificate -FilePath $certificateCer -CertStoreLocation "Cert:\CurrentUser\TrustedPeople"
+    if ($signingCertificate.Subject -eq $signingCertificate.Issuer) {
+        $trustedRootImport = Import-Certificate -FilePath $certificateCer -CertStoreLocation "Cert:\CurrentUser\Root"
+    }
+
+    & $signTool verify /pa $packageOutput
+    if ($LASTEXITCODE -ne 0) {
+        throw "Signed MSIX verification failed."
     }
 }
 finally {
-    $identityNode.Version = $originalVersion
-    $manifestXml.Save($packageManifest)
+    if ($trustedPeopleImport) {
+        try {
+            Remove-Item -LiteralPath ("Cert:\CurrentUser\TrustedPeople\" + $trustedPeopleImport.Thumbprint) -Force
+        }
+        catch {
+        }
+    }
+
+    if ($trustedRootImport) {
+        try {
+            Remove-Item -LiteralPath ("Cert:\CurrentUser\Root\" + $trustedRootImport.Thumbprint) -Force
+        }
+        catch {
+        }
+    }
 
     if ($removeGeneratedCertificate -and $generatedCertificate) {
         try {
@@ -226,13 +362,18 @@ $releaseManifest = [pscustomobject]@{
     package_identity = $packageIdentityName
     publisher = $packagePublisher
     platform = $Platform
+    runtime_identifier = $runtimeIdentifier
     configuration = $Configuration
-    msbuild = $msbuild
+    self_contained = $SelfContained
+    dotnet = $dotnet
+    makeappx = $makeAppx
+    signtool = $signTool
     package_path = $packageOutput
     package_sha256 = (Get-Sha256 -Path $packageOutput)
     certificate_source = $certificateSource
     certificate_path = $certificateCer
     certificate_sha256 = (Get-Sha256 -Path $certificateCer)
+    appx_manifest_path = $layoutManifestPath
     git_commit = $gitCommit
 }
 
