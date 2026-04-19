@@ -159,6 +159,17 @@ The packaging script accepts a stable signing certificate through either:
 
 If those are not provided, the script falls back to a generated self-signed test certificate. That fallback is suitable for preview and sideload testing, but a stable certificate should be configured before treating `MSIX` upgrades as production-grade.
 
+Create and install a stable release-signing certificate:
+
+```powershell
+.\tools\release\New-PassportWindowsReleaseCertificate.ps1
+.\tools\release\Set-PassportWindowsReleaseSecrets.ps1 `
+  -CertificatePfxPath "$env:LOCALAPPDATA\Archrealms\PassportWindows\release-signing\passport-windows-signing.pfx" `
+  -CertificatePassword "<password-returned-by-the-certificate-script>"
+```
+
+That stores the persistent signing `PFX` outside the repo, pushes it into the `passport-windows` GitHub repository secrets, and lets all future tagged releases reuse the same signer. If you keep using a self-signed certificate, users will still need the attached `.cer` for sideload trust, but upgrades will remain consistent because the signer stays stable.
+
 GitHub Actions includes:
 
 - `ci.yml` for build plus smoke test on pushes and pull requests
