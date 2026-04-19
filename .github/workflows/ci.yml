@@ -6,19 +6,16 @@ on:
       - main
   pull_request:
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-
 jobs:
   build-and-smoke:
     runs-on: windows-latest
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup .NET 8
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 8.0.x
 
@@ -35,7 +32,7 @@ jobs:
         run: .\tools\passport\Invoke-ArchrealmsPassportSmokeTest.ps1 -DotnetPath (Get-Command dotnet).Source -OutputPath .\artifacts\passport-smoke-report.json
 
       - name: Upload smoke report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: passport-smoke-report
           path: artifacts/passport-smoke-report.json
