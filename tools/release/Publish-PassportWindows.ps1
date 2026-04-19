@@ -31,6 +31,10 @@ $publishDir = Join-Path $publishRoot "publish"
 $zipPath = Join-Path $publishRoot ("passport-windows-" + $RuntimeIdentifier + ".zip")
 $manifestPath = Join-Path $publishRoot "release-manifest.json"
 $selfContainedValue = if ($SelfContained) { "true" } else { "false" }
+$packageVersion = $Version
+if ($packageVersion -and $packageVersion -match '^[vV](.+)$') {
+    $packageVersion = $Matches[1]
+}
 
 New-Item -ItemType Directory -Force $publishRoot | Out-Null
 if (Test-Path -LiteralPath $publishDir) {
@@ -46,8 +50,8 @@ $publishArgs = @(
     "-p:UseSharedCompilation=false"
 )
 
-if ($Version) {
-    $publishArgs += @("-p:Version=" + $Version)
+if ($packageVersion) {
+    $publishArgs += @("-p:Version=" + $packageVersion)
 }
 
 & $dotnet @publishArgs
@@ -84,6 +88,7 @@ $manifest = [pscustomobject]@{
     configuration = $Configuration
     self_contained = $SelfContained
     version = $Version
+    package_version = $packageVersion
     git_commit = $gitCommit
     publish_dir = $publishDir
     zip_path = $zipPath
