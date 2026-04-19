@@ -18,12 +18,12 @@ namespace ArchrealmsPassport.Windows.Commands
 
         public event EventHandler? CanExecuteChanged;
 
-        public bool CanExecute(object parameter)
+        public bool CanExecute(object? parameter)
         {
             return !_isRunning && (_canExecute == null || _canExecute());
         }
 
-        public async void Execute(object parameter)
+        public async void Execute(object? parameter)
         {
             if (!CanExecute(parameter))
             {

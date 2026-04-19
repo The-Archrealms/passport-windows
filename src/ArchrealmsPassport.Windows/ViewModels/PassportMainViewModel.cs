@@ -44,6 +44,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
         private string _ipfsRepoPath = string.Empty;
         private double _storageAllocationGb = 25;
         private bool _participateInPublicRegistry = true;
+        private bool _preferWindowsHelloCredentials;
         private bool _publishCarExports = true;
         private bool _preferWifiOnly;
         private string _workspaceStateText = "Workspace unavailable";

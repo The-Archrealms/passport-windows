@@ -18,6 +18,7 @@ namespace ArchrealmsPassport.Windows.Models
         public string IpfsRepoPath { get; set; } = string.Empty;
         public int StorageAllocationGb { get; set; } = 25;
         public bool ParticipateInPublicRegistry { get; set; } = true;
+        public bool PreferWindowsHelloCredentials { get; set; }
         public bool PublishCarExports { get; set; } = true;
         public bool PreferWifiOnly { get; set; }
     }

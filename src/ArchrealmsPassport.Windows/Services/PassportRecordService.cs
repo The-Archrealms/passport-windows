@@ -19,7 +19,8 @@ namespace ArchrealmsPassport.Windows.Services
             string workspaceRoot,
             string displayName,
             string identityMode,
-            string deviceLabel)
+            string deviceLabel,
+            bool preferWindowsHello)
         {
             var identityId = CreateIdentityId(displayName);
 
@@ -33,7 +34,7 @@ namespace ArchrealmsPassport.Windows.Services
                 var timestamp = DateTime.UtcNow.ToString("yyyyMMddTHHmmssZ");
                 var createdUtc = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
                 var deviceId = CreateDeviceId(normalizedDeviceLabel);
-                var deviceKeyPair = PassportDeviceKeyStore.CreatePersistedKey(deviceId);
+                var deviceKeyPair = PassportDeviceKeyStore.CreatePersistedKey(deviceId, preferWindowsHello);
                 var publicKeyPath = WritePublicKey(resolvedWorkspaceRoot, deviceId, deviceKeyPair.PublicKeyBytes);
 
                 var identityRecordPath = Path.Combine(
@@ -114,7 +115,8 @@ namespace ArchrealmsPassport.Windows.Services
         public PassportJoinRequestResult CreateJoinRequest(
             string workspaceRoot,
             string identityId,
-            string deviceLabel)
+            string deviceLabel,
+            bool preferWindowsHello)
         {
             try
             {
@@ -130,7 +132,7 @@ namespace ArchrealmsPassport.Windows.Services
                 var timestamp = DateTime.UtcNow.ToString("yyyyMMddTHHmmssZ");
                 var createdUtc = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
                 var deviceId = CreateDeviceId(normalizedDeviceLabel);
-                var deviceKeyPair = PassportDeviceKeyStore.CreatePersistedKey(deviceId);
+                var deviceKeyPair = PassportDeviceKeyStore.CreatePersistedKey(deviceId, preferWindowsHello);
                 var publicKeyPath = WritePublicKey(resolvedWorkspaceRoot, deviceId, deviceKeyPair.PublicKeyBytes);
 
                 var pendingRecordPath = Path.Combine(

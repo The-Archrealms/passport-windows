@@ -48,7 +48,11 @@ Device key references live under:
 
 - `%LOCALAPPDATA%\\Archrealms\\PassportWindows\\keys`
 
-These are reference files, not exported private keys. New Passport device credentials are created as persisted Windows CNG keys with provider preference in this order:
+These are reference files, not exported private keys.
+
+The client now has an explicit Windows Hello path for new device credentials. When the user enables `Use Windows Hello for new device credentials when available`, Passport tries Windows Hello first and falls back to persisted Windows CNG storage if Hello enrollment or signing is unavailable.
+
+Fallback provider preference is:
 
 1. `Microsoft Passport Key Storage Provider`
 2. `Microsoft Platform Crypto Provider`
@@ -84,6 +88,8 @@ Registry submission verification now distinguishes:
 Delegated devices should only be treated as fully verified when the package is checked against a trusted workspace anchor.
 
 ## Build
+
+This repo is pinned to `.NET 8` via [global.json](global.json). Install a .NET 8 SDK before building.
 
 Build the app:
 
@@ -127,6 +133,13 @@ Verify a delegated submission package against a trusted workspace root:
 .\tools\passport\Verify-ArchrealmsRegistrySubmission.ps1 `
   -SubmissionPath "<path-to-submission.json>" `
   -TrustedWorkspaceRoot "$env:LOCALAPPDATA\Archrealms\PassportWindows\workspace"
+```
+
+If your machine has multiple `dotnet` installations and the default `dotnet` on `PATH` is not .NET 8, pass an explicit SDK path or set an environment override:
+
+```powershell
+$env:ARCHREALMS_DOTNET = "C:\path\to\dotnet.exe"
+.\tools\passport\Verify-ArchrealmsRegistrySubmission.ps1 -SubmissionPath "<path-to-submission.json>"
 ```
 
 ## Repository Layout

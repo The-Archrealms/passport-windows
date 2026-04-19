@@ -34,6 +34,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
             IpfsRepoPath = string.IsNullOrWhiteSpace(settings.IpfsRepoPath) ? PassportEnvironment.GetDefaultIpfsRepoPath() : settings.IpfsRepoPath;
             StorageAllocationGb = settings.StorageAllocationGb <= 0 ? 25 : settings.StorageAllocationGb;
             ParticipateInPublicRegistry = settings.ParticipateInPublicRegistry;
+            PreferWindowsHelloCredentials = settings.PreferWindowsHelloCredentials;
             PublishCarExports = settings.PublishCarExports;
             PreferWifiOnly = settings.PreferWifiOnly;
         }
@@ -80,7 +81,8 @@ namespace ArchrealmsPassport.Windows.ViewModels
                 var joinResult = _recordService.CreateJoinRequest(
                     WorkspaceRoot,
                     ExistingIdentityId.Trim(),
-                    DeviceLabel);
+                    DeviceLabel,
+                    PreferWindowsHelloCredentials);
 
                 if (!joinResult.Succeeded)
                 {
@@ -110,7 +112,8 @@ namespace ArchrealmsPassport.Windows.ViewModels
                 WorkspaceRoot,
                 CitizenName,
                 SelectedIdentityMode,
-                DeviceLabel);
+                DeviceLabel,
+                PreferWindowsHelloCredentials);
 
             if (!result.Succeeded)
             {

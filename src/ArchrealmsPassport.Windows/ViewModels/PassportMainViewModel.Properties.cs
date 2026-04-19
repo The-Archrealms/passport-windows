@@ -96,6 +96,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
 
         public string StorageAllocationLabel { get { return string.Format("{0:0} GB", Math.Round(StorageAllocationGb)); } }
         public bool ParticipateInPublicRegistry { get { return _participateInPublicRegistry; } set { SetField(ref _participateInPublicRegistry, value); } }
+        public bool PreferWindowsHelloCredentials { get { return _preferWindowsHelloCredentials; } set { SetField(ref _preferWindowsHelloCredentials, value); } }
         public bool PublishCarExports { get { return _publishCarExports; } set { SetField(ref _publishCarExports, value); } }
         public bool PreferWifiOnly { get { return _preferWifiOnly; } set { SetField(ref _preferWifiOnly, value); } }
         public string WorkspaceStateText { get { return _workspaceStateText; } private set { SetField(ref _workspaceStateText, value); } }

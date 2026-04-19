@@ -156,6 +156,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
                 IpfsRepoPath = IpfsRepoPath,
                 StorageAllocationGb = Math.Max(5, (int)Math.Round(StorageAllocationGb)),
                 ParticipateInPublicRegistry = ParticipateInPublicRegistry,
+                PreferWindowsHelloCredentials = PreferWindowsHelloCredentials,
                 PublishCarExports = PublishCarExports,
                 PreferWifiOnly = PreferWifiOnly
             };

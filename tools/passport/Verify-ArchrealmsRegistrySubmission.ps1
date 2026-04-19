@@ -2,7 +2,8 @@ param(
     [string]$SubmissionPath,
     [string]$PackagePath,
     [string]$OutputPath,
-    [string]$TrustedWorkspaceRoot
+    [string]$TrustedWorkspaceRoot,
+    [string]$DotnetPath
 )
 
 $ErrorActionPreference = "Stop"
@@ -37,7 +38,17 @@ if (-not $OutputPath) {
 }
 
 $projectPath = Join-Path $repoRoot "tools\registry-verifier\Archrealms.RegistryVerifier.csproj"
-$dotnet = (Get-Command dotnet -ErrorAction Stop).Source
+
+if (-not $DotnetPath -and $env:ARCHREALMS_DOTNET) {
+    $DotnetPath = $env:ARCHREALMS_DOTNET
+}
+
+if ($DotnetPath) {
+    $dotnet = (Resolve-Path -LiteralPath $DotnetPath).Path
+}
+else {
+    $dotnet = (Get-Command dotnet -ErrorAction Stop).Source
+}
 
 if ($TrustedWorkspaceRoot) {
     $TrustedWorkspaceRoot = (Resolve-Path -LiteralPath $TrustedWorkspaceRoot).Path

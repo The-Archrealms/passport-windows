@@ -3,6 +3,8 @@ using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Windows.Security.Cryptography;
+using Windows.Security.Credentials;
 
 namespace ArchrealmsPassport.Windows.Services
 {
@@ -14,8 +16,17 @@ namespace ArchrealmsPassport.Windows.Services
             PropertyNameCaseInsensitive = true
         };
 
-        public static PassportDeviceKeyMaterial CreatePersistedKey(string deviceId)
+        public static PassportDeviceKeyMaterial CreatePersistedKey(string deviceId, bool preferWindowsHello)
         {
+            if (preferWindowsHello)
+            {
+                var helloKey = TryCreateWindowsHelloKey(deviceId);
+                if (helloKey != null)
+                {
+                    return helloKey;
+                }
+            }
+
             var keyName = "archrealms-passport-" + deviceId + "-" + Guid.NewGuid().ToString("N");
             Exception? lastError = null;
 
@@ -59,6 +70,18 @@ namespace ArchrealmsPassport.Windows.Services
             throw new CryptographicException("Unable to create a persisted Windows device key.", lastError);
         }
 
+        public static bool IsWindowsHelloSupported()
+        {
+            try
+            {
+                return KeyCredentialManager.IsSupportedAsync().AsTask().GetAwaiter().GetResult();
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         public static byte[] SignData(string keyReferencePath, byte[] data)
         {
             if (IsLegacyProtectedPkcs8Path(keyReferencePath))
@@ -67,6 +90,11 @@ namespace ArchrealmsPassport.Windows.Services
                 {
                     return rsa.SignData(data, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
                 }
+            }
+
+            if (IsWindowsHelloReference(keyReferencePath))
+            {
+                return SignDataWithWindowsHello(keyReferencePath, data);
             }
 
             using (var rsa = OpenPersistedKey(keyReferencePath))
@@ -83,6 +111,11 @@ namespace ArchrealmsPassport.Windows.Services
                 {
                     return rsa.ExportSubjectPublicKeyInfo();
                 }
+            }
+
+            if (IsWindowsHelloReference(keyReferencePath))
+            {
+                return ExportWindowsHelloPublicKey(keyReferencePath);
             }
 
             using (var rsa = OpenPersistedKey(keyReferencePath))
@@ -106,6 +139,12 @@ namespace ArchrealmsPassport.Windows.Services
             try
             {
                 var keyReference = LoadKeyReference(keyReferencePath);
+                if (string.Equals(keyReference.ReferenceType, "windows-hello-keycredential", StringComparison.Ordinal))
+                {
+                    var openResult = KeyCredentialManager.OpenAsync(keyReference.KeyName).AsTask().GetAwaiter().GetResult();
+                    return openResult.Status == KeyCredentialStatus.Success;
+                }
+
                 return CngKey.Exists(keyReference.KeyName, new CngProvider(keyReference.Provider));
             }
             catch
@@ -149,6 +188,57 @@ namespace ArchrealmsPassport.Windows.Services
             return new RSACng(CngKey.Open(keyReference.KeyName, provider));
         }
 
+        private static PassportDeviceKeyMaterial? TryCreateWindowsHelloKey(string deviceId)
+        {
+            try
+            {
+                if (!KeyCredentialManager.IsSupportedAsync().AsTask().GetAwaiter().GetResult())
+                {
+                    return null;
+                }
+
+                var keyName = "archrealms-passport-" + deviceId;
+                var createResult = KeyCredentialManager.RequestCreateAsync(
+                    keyName,
+                    KeyCredentialCreationOption.ReplaceExisting).AsTask().GetAwaiter().GetResult();
+
+                if (createResult.Status != KeyCredentialStatus.Success || createResult.Credential == null)
+                {
+                    return null;
+                }
+
+                CryptographicBuffer.CopyToByteArray(createResult.Credential.RetrievePublicKey(), out byte[]? publicKeyBytes);
+                if (publicKeyBytes == null)
+                {
+                    return null;
+                }
+                var keyReference = new PassportDeviceKeyReference
+                {
+                    SchemaVersion = 1,
+                    ReferenceType = "windows-hello-keycredential",
+                    KeyName = keyName,
+                    Provider = "KeyCredentialManager",
+                    Algorithm = "RSA",
+                    KeySizeBits = 2048,
+                    StorageBackend = "windows-hello"
+                };
+
+                var keyReferencePath = Path.Combine(PassportEnvironment.GetKeysRoot(), deviceId + ".keyref.json");
+                File.WriteAllText(keyReferencePath, JsonSerializer.Serialize(keyReference, JsonOptions));
+
+                return new PassportDeviceKeyMaterial
+                {
+                    PublicKeyBytes = publicKeyBytes,
+                    KeyReferencePath = keyReferencePath,
+                    StorageBackend = "windows-hello"
+                };
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
         private static PassportDeviceKeyReference LoadKeyReference(string keyReferencePath)
         {
             if (string.IsNullOrWhiteSpace(keyReferencePath) || !File.Exists(keyReferencePath))
@@ -163,6 +253,47 @@ namespace ArchrealmsPassport.Windows.Services
             }
 
             return keyReference;
+        }
+
+        private static byte[] SignDataWithWindowsHello(string keyReferencePath, byte[] data)
+        {
+            var keyReference = LoadKeyReference(keyReferencePath);
+            var openResult = KeyCredentialManager.OpenAsync(keyReference.KeyName).AsTask().GetAwaiter().GetResult();
+            if (openResult.Status != KeyCredentialStatus.Success || openResult.Credential == null)
+            {
+                throw new CryptographicException("The Windows Hello credential could not be opened. Status: " + openResult.Status);
+            }
+
+            var message = CryptographicBuffer.CreateFromByteArray(data);
+            var signResult = openResult.Credential.RequestSignAsync(message).AsTask().GetAwaiter().GetResult();
+            if (signResult.Status != KeyCredentialStatus.Success)
+            {
+                throw new CryptographicException("Windows Hello signing failed. Status: " + signResult.Status);
+            }
+
+            CryptographicBuffer.CopyToByteArray(signResult.Result, out byte[]? signatureBytes);
+            if (signatureBytes == null)
+            {
+                throw new CryptographicException("Windows Hello signing returned no signature bytes.");
+            }
+            return signatureBytes;
+        }
+
+        private static byte[] ExportWindowsHelloPublicKey(string keyReferencePath)
+        {
+            var keyReference = LoadKeyReference(keyReferencePath);
+            var openResult = KeyCredentialManager.OpenAsync(keyReference.KeyName).AsTask().GetAwaiter().GetResult();
+            if (openResult.Status != KeyCredentialStatus.Success || openResult.Credential == null)
+            {
+                throw new CryptographicException("The Windows Hello credential could not be opened. Status: " + openResult.Status);
+            }
+
+            CryptographicBuffer.CopyToByteArray(openResult.Credential.RetrievePublicKey(), out byte[]? publicKeyBytes);
+            if (publicKeyBytes == null)
+            {
+                throw new CryptographicException("Windows Hello returned no public key bytes.");
+            }
+            return publicKeyBytes;
         }
 
         private static CngKey CreatePersistedKey(CngProvider provider, string keyName)
@@ -216,6 +347,19 @@ namespace ArchrealmsPassport.Windows.Services
         private static bool IsLegacyProtectedPkcs8Path(string keyReferencePath)
         {
             return keyReferencePath.EndsWith(".pkcs8.protected", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsWindowsHelloReference(string keyReferencePath)
+        {
+            try
+            {
+                var keyReference = LoadKeyReference(keyReferencePath);
+                return string.Equals(keyReference.ReferenceType, "windows-hello-keycredential", StringComparison.Ordinal);
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private static ProviderCandidate[] GetProviderCandidates()

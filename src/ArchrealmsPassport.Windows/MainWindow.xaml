@@ -117,6 +117,12 @@
                             <TextBlock FontFamily="Palatino Linotype" FontSize="15" Foreground="#4B392C" Text="Device Label" />
                             <TextBox Margin="0,6,0,12" Padding="10,7" Text="{Binding DeviceLabel, UpdateSourceTrigger=PropertyChanged}" />
 
+                            <CheckBox Margin="0,0,0,12"
+                                      FontSize="14"
+                                      Foreground="#4B392C"
+                                      IsChecked="{Binding PreferWindowsHelloCredentials}"
+                                      Content="Use Windows Hello for new device credentials when available" />
+
                             <Grid Margin="0,0,0,12">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />

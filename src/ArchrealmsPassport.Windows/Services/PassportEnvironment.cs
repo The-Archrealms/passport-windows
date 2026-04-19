@@ -85,7 +85,7 @@ namespace ArchrealmsPassport.Windows.Services
                 return string.Empty;
             }
 
-            DirectoryInfo current;
+            DirectoryInfo? current;
             try
             {
                 current = new DirectoryInfo(seed);
