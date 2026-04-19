@@ -48,11 +48,24 @@ jobs:
         shell: pwsh
         run: .\tools\release\Publish-PassportWindows.ps1 -DotnetPath (Get-Command dotnet).Source -RuntimeIdentifier win-x64 -Version "${{ steps.release_tag.outputs.tag }}"
 
+      - name: Package win-x64 MSIX
+        shell: pwsh
+        env:
+          PASSPORT_WINDOWS_MSIX_PFX_BASE64: ${{ secrets.PASSPORT_WINDOWS_MSIX_PFX_BASE64 }}
+          PASSPORT_WINDOWS_MSIX_PFX_PASSWORD: ${{ secrets.PASSPORT_WINDOWS_MSIX_PFX_PASSWORD }}
+        run: .\tools\release\Publish-PassportWindowsMsix.ps1 -Version "${{ steps.release_tag.outputs.tag }}" -Platform x64
+
       - name: Upload release bundle
         uses: actions/upload-artifact@v6
         with:
           name: passport-windows-win-x64
           path: artifacts/release/passport-windows-win-x64
+
+      - name: Upload MSIX bundle
+        uses: actions/upload-artifact@v6
+        with:
+          name: passport-windows-msix-x64
+          path: artifacts/release/passport-windows-msix/x64
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
@@ -60,6 +73,10 @@ jobs:
           tag_name: ${{ steps.release_tag.outputs.tag }}
           target_commitish: ${{ github.sha }}
           generate_release_notes: true
+          overwrite_files: true
           files: |
             artifacts/release/passport-windows-win-x64/passport-windows-win-x64.zip
             artifacts/release/passport-windows-win-x64/release-manifest.json
+            artifacts/release/passport-windows-msix/x64/passport-windows-x64.msix
+            artifacts/release/passport-windows-msix/x64/passport-windows-signing.cer
+            artifacts/release/passport-windows-msix/x64/msix-package-manifest.json

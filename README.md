@@ -20,6 +20,7 @@ This repo intentionally focuses on the Windows Passport client and its local too
 Included today:
 
 - WPF desktop app under `src/ArchrealmsPassport.Windows`
+- Windows packaging project under `src/ArchrealmsPassport.Windows.Package`
 - Passport record schema notes under `docs/`
 - JSON record templates under `registry/templates/`
 - IPFS helper scripts under `tools/ipfs/`
@@ -137,10 +138,29 @@ That produces:
 - a zipped bundle under `artifacts/release/passport-windows-win-x64/passport-windows-win-x64.zip`
 - a release manifest with file hashes under `artifacts/release/passport-windows-win-x64/release-manifest.json`
 
+Create an `MSIX` installer package:
+
+```powershell
+.\tools\release\Publish-PassportWindowsMsix.ps1 -Version v0.1.0 -Platform x64
+```
+
+That produces:
+
+- a signed `MSIX` package under `artifacts/release/passport-windows-msix/x64/passport-windows-x64.msix`
+- a public signing certificate under `artifacts/release/passport-windows-msix/x64/passport-windows-signing.cer`
+- an `MSIX` package manifest with hashes under `artifacts/release/passport-windows-msix/x64/msix-package-manifest.json`
+
+The packaging script accepts a stable signing certificate through either:
+
+- `PASSPORT_WINDOWS_MSIX_PFX_BASE64`
+- `PASSPORT_WINDOWS_MSIX_PFX_PASSWORD`
+
+If those are not provided, the script falls back to a generated self-signed test certificate. That fallback is suitable for preview and sideload testing, but a stable certificate should be configured before treating `MSIX` upgrades as production-grade.
+
 GitHub Actions includes:
 
 - `ci.yml` for build plus smoke test on pushes and pull requests
-- `release.yml` for packaging a `win-x64` release bundle and creating a GitHub Release on tag push or manual dispatch with a tag input
+- `release.yml` for packaging a `win-x64` zip bundle, packaging a signed `MSIX`, and creating a GitHub Release on tag push or manual dispatch with a tag input
 
 ## IPFS Tooling
 
@@ -186,6 +206,7 @@ passport-windows/
   docs/
   registry/templates/
   src/ArchrealmsPassport.Windows/
+  src/ArchrealmsPassport.Windows.Package/
   tools/ipfs/
   tools/passport/
   tools/registry-verifier/
