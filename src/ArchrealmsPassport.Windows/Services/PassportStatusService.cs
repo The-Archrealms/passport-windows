@@ -95,11 +95,28 @@ namespace ArchrealmsPassport.Windows.Services
 
             using (var document = JsonDocument.Parse(File.ReadAllText(verificationPath)))
             {
-                if (document.RootElement.TryGetProperty("verified", out var verifiedElement))
+                var root = document.RootElement;
+                if (root.TryGetProperty("verified", out var verifiedElement) && verifiedElement.GetBoolean())
                 {
-                    return verifiedElement.GetBoolean()
-                        ? "Latest package verified"
-                        : "Latest package verification failed";
+                    return "Latest package verified";
+                }
+
+                if (root.TryGetProperty("integrity_verified", out var integrityElement)
+                    && integrityElement.GetBoolean()
+                    && root.TryGetProperty("authorization_summary", out var authorizationSummaryElement))
+                {
+                    var authorizationSummary = authorizationSummaryElement.GetString() ?? string.Empty;
+                    if (string.Equals(authorizationSummary, "delegated-unanchored", StringComparison.Ordinal))
+                    {
+                        return "Latest package integrity verified; authorization unanchored";
+                    }
+
+                    return "Latest package integrity verified; authorization failed";
+                }
+
+                if (root.TryGetProperty("verified", out _))
+                {
+                    return "Latest package verification failed";
                 }
             }
 

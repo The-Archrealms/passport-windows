@@ -1,7 +1,8 @@
 param(
     [string]$SubmissionPath,
     [string]$PackagePath,
-    [string]$OutputPath
+    [string]$OutputPath,
+    [string]$TrustedWorkspaceRoot
 )
 
 $ErrorActionPreference = "Stop"
@@ -38,7 +39,14 @@ if (-not $OutputPath) {
 $projectPath = Join-Path $repoRoot "tools\registry-verifier\Archrealms.RegistryVerifier.csproj"
 $dotnet = (Get-Command dotnet -ErrorAction Stop).Source
 
-& $dotnet run --project $projectPath -- $packageRoot $OutputPath
+if ($TrustedWorkspaceRoot) {
+    $TrustedWorkspaceRoot = (Resolve-Path -LiteralPath $TrustedWorkspaceRoot).Path
+    & $dotnet run --project $projectPath -- $packageRoot $OutputPath $TrustedWorkspaceRoot
+}
+else {
+    & $dotnet run --project $projectPath -- $packageRoot $OutputPath
+}
+
 if ($LASTEXITCODE -ne 0) {
     throw "Registry submission verification failed."
 }

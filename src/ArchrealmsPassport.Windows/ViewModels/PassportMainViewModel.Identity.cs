@@ -25,15 +25,13 @@ namespace ArchrealmsPassport.Windows.ViewModels
             ActiveIdentityId = settings.ActiveIdentityId;
             ActiveDeviceId = settings.ActiveDeviceId;
             ActiveDeviceKeyPath = settings.ActiveDeviceKeyPath;
-            DeviceLabel = string.IsNullOrWhiteSpace(settings.DeviceLabel)
-                ? Environment.MachineName
-                : settings.DeviceLabel;
-            WorkspaceRoot = string.IsNullOrWhiteSpace(settings.WorkspaceRoot)
-                ? PassportEnvironment.GetDefaultWorkspaceRoot()
-                : settings.WorkspaceRoot;
-            IpfsRepoPath = string.IsNullOrWhiteSpace(settings.IpfsRepoPath)
-                ? PassportEnvironment.GetDefaultIpfsRepoPath()
-                : settings.IpfsRepoPath;
+            PendingDeviceId = settings.PendingDeviceId;
+            PendingDeviceKeyPath = settings.PendingDeviceKeyPath;
+            DeviceLabel = string.IsNullOrWhiteSpace(settings.DeviceLabel) ? Environment.MachineName : settings.DeviceLabel;
+            JoinRequestPath = settings.JoinRequestPath;
+            JoinApprovalPath = settings.JoinApprovalPath;
+            WorkspaceRoot = string.IsNullOrWhiteSpace(settings.WorkspaceRoot) ? PassportEnvironment.GetDefaultWorkspaceRoot() : settings.WorkspaceRoot;
+            IpfsRepoPath = string.IsNullOrWhiteSpace(settings.IpfsRepoPath) ? PassportEnvironment.GetDefaultIpfsRepoPath() : settings.IpfsRepoPath;
             StorageAllocationGb = settings.StorageAllocationGb <= 0 ? 25 : settings.StorageAllocationGb;
             ParticipateInPublicRegistry = settings.ParticipateInPublicRegistry;
             PublishCarExports = settings.PublishCarExports;
@@ -77,24 +75,41 @@ namespace ArchrealmsPassport.Windows.ViewModels
         {
             _settingsStore.Save(CreateSettingsSnapshot());
 
-            PassportProvisioningResult result;
             if (IsJoiningExistingIdentity)
             {
-                result = _recordService.AddDeviceToIdentity(
+                var joinResult = _recordService.CreateJoinRequest(
                     WorkspaceRoot,
                     ExistingIdentityId.Trim(),
-                    CitizenName,
-                    SelectedIdentityMode,
                     DeviceLabel);
+
+                if (!joinResult.Succeeded)
+                {
+                    AppendLog(joinResult.Message);
+                    return;
+                }
+
+                PendingDeviceId = joinResult.DeviceId;
+                PendingDeviceKeyPath = joinResult.PrivateKeyPath;
+                JoinRequestPath = joinResult.JoinRequestPath;
+                JoinApprovalPath = string.Empty;
+                _settingsStore.Save(CreateSettingsSnapshot());
+
+                AppendLog(joinResult.Message);
+                AppendLog("Identity ID: " + joinResult.IdentityId);
+                AppendLog("Pending device ID: " + joinResult.DeviceId);
+                AppendLog("Join request: " + joinResult.JoinRequestPath);
+                AppendLog("Join request signature: " + joinResult.RequestSignaturePath);
+                AppendLog("Candidate public key: " + joinResult.PublicKeyPath);
+                AppendLog("Protected private key: " + joinResult.PrivateKeyPath);
+                await RefreshStatusAsync();
+                return;
             }
-            else
-            {
-                result = _recordService.CreateNewIdentity(
-                    WorkspaceRoot,
-                    CitizenName,
-                    SelectedIdentityMode,
-                    DeviceLabel);
-            }
+
+            var result = _recordService.CreateNewIdentity(
+                WorkspaceRoot,
+                CitizenName,
+                SelectedIdentityMode,
+                DeviceLabel);
 
             if (!result.Succeeded)
             {
@@ -106,19 +121,71 @@ namespace ArchrealmsPassport.Windows.ViewModels
             ExistingIdentityId = result.IdentityId;
             ActiveDeviceId = result.DeviceId;
             ActiveDeviceKeyPath = result.PrivateKeyPath;
+            PendingDeviceId = string.Empty;
+            PendingDeviceKeyPath = string.Empty;
             _settingsStore.Save(CreateSettingsSnapshot());
 
             AppendLog(result.Message);
             AppendLog("Identity ID: " + result.IdentityId);
             AppendLog("Device ID: " + result.DeviceId);
-            if (!string.IsNullOrWhiteSpace(result.IdentityRecordPath))
-            {
-                AppendLog("Identity record: " + result.IdentityRecordPath);
-            }
-
+            AppendLog("Identity record: " + result.IdentityRecordPath);
             AppendLog("Device credential record: " + result.DeviceRecordPath);
             AppendLog("Public key: " + result.PublicKeyPath);
             AppendLog("Protected private key: " + result.PrivateKeyPath);
+
+            await RefreshStatusAsync();
+        }
+
+        private Task ApproveJoinRequestAsync()
+        {
+            var result = _cryptoService.ApproveJoinRequest(
+                WorkspaceRoot,
+                ActiveIdentityId,
+                ActiveDeviceId,
+                ActiveDeviceKeyPath,
+                JoinRequestPath);
+
+            if (!result.Succeeded)
+            {
+                AppendLog(result.Message);
+                return Task.CompletedTask;
+            }
+
+            JoinApprovalPath = result.ApprovalPackagePath;
+            AppendLog(result.Message);
+            AppendLog("Approval package: " + result.ApprovalPackagePath);
+            AppendLog("Authorization record: " + result.AuthorizationRecordPath);
+            AppendLog("Authorization signature: " + result.AuthorizationSignaturePath);
+            _settingsStore.Save(CreateSettingsSnapshot());
+            return Task.CompletedTask;
+        }
+
+        private async Task ImportJoinApprovalAsync()
+        {
+            var result = _cryptoService.ImportJoinApproval(
+                WorkspaceRoot,
+                JoinApprovalPath,
+                PendingDeviceId,
+                PendingDeviceKeyPath);
+
+            if (!result.Succeeded)
+            {
+                AppendLog(result.Message);
+                return;
+            }
+
+            ActiveIdentityId = result.IdentityId;
+            ExistingIdentityId = result.IdentityId;
+            ActiveDeviceId = result.DeviceId;
+            ActiveDeviceKeyPath = PendingDeviceKeyPath;
+            PendingDeviceId = string.Empty;
+            PendingDeviceKeyPath = string.Empty;
+            _settingsStore.Save(CreateSettingsSnapshot());
+
+            AppendLog(result.Message);
+            AppendLog("Identity record: " + result.IdentityRecordPath);
+            AppendLog("Device credential record: " + result.DeviceRecordPath);
+            AppendLog("Authorization record: " + result.AuthorizationRecordPath);
 
             await RefreshStatusAsync();
         }
@@ -127,10 +194,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
         {
             var bytes = new byte[24];
             RandomNumberGenerator.Fill(bytes);
-            ChallengeText = Convert.ToBase64String(bytes)
-                .TrimEnd('=')
-                .Replace('+', '-')
-                .Replace('/', '_');
+            ChallengeText = Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
             AppendLog("Generated a new Passport challenge.");
             return Task.CompletedTask;
         }

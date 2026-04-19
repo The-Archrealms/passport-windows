@@ -4,7 +4,7 @@
 
 It is a public-facing desktop app and tooling bundle for:
 
-- creating a new Passport identity or authorizing a device under an existing identity
+- creating a new Passport identity or requesting authorization under an existing identity
 - generating protected local device credentials
 - signing Passport challenges
 - preparing portable registry submission packages
@@ -48,9 +48,28 @@ The workspace contains local Passport records such as:
 
 - `records/registry/identities/`
 - `records/registry/device-credentials/`
+- `records/registry/join-requests/`
+- `records/registry/join-approvals/`
+- `records/registry/device-authorizations/`
 - `records/registry/signatures/`
 - `records/registry/submissions/`
 - `records/passport/ipfs-node.local.json`
+
+## Trust Model
+
+Adding a device to an existing Passport identity is a signed ceremony, not a local self-assertion.
+
+- the new device creates a signed join request with its own key
+- an already active device for that identity signs a device-authorization package
+- the new device imports that approval package and activates only after the authorization record verifies
+
+Registry submission verification now distinguishes:
+
+- `integrity_verified`: the package hashes and manifest signature are internally correct
+- `authorization_integrity_verified`: the delegated authorization materials are internally consistent
+- `authorization_anchored`: the approving device is present in a trusted Passport workspace or mirrored registry root
+
+Delegated devices should only be treated as fully verified when the package is checked against a trusted workspace anchor.
 
 ## Build
 
@@ -88,6 +107,14 @@ Verify a received registry submission package:
 
 ```powershell
 .\tools\passport\Verify-ArchrealmsRegistrySubmission.ps1 -SubmissionPath "<path-to-submission.json>"
+```
+
+Verify a delegated submission package against a trusted workspace root:
+
+```powershell
+.\tools\passport\Verify-ArchrealmsRegistrySubmission.ps1 `
+  -SubmissionPath "<path-to-submission.json>" `
+  -TrustedWorkspaceRoot "$env:LOCALAPPDATA\Archrealms\PassportWindows\workspace"
 ```
 
 ## Repository Layout

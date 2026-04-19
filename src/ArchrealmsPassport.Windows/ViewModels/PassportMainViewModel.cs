@@ -17,6 +17,8 @@ namespace ArchrealmsPassport.Windows.ViewModels
         private readonly AsyncRelayCommand _refreshStatusCommand;
         private readonly AsyncRelayCommand _initializeNodeCommand;
         private readonly AsyncRelayCommand _provisionIdentityCommand;
+        private readonly AsyncRelayCommand _approveJoinRequestCommand;
+        private readonly AsyncRelayCommand _importJoinApprovalCommand;
         private readonly AsyncRelayCommand _generateChallengeCommand;
         private readonly AsyncRelayCommand _signChallengeCommand;
         private readonly AsyncRelayCommand _createRegistrySubmissionCommand;
@@ -29,7 +31,11 @@ namespace ArchrealmsPassport.Windows.ViewModels
         private string _activeIdentityId = string.Empty;
         private string _activeDeviceId = string.Empty;
         private string _activeDeviceKeyPath = string.Empty;
+        private string _pendingDeviceId = string.Empty;
+        private string _pendingDeviceKeyPath = string.Empty;
         private string _deviceLabel = string.Empty;
+        private string _joinRequestPath = string.Empty;
+        private string _joinApprovalPath = string.Empty;
         private string _challengeText = string.Empty;
         private string _challengeSignatureText = "No signed challenge yet";
         private string _registrySubmissionText = "No registry submission package yet";
@@ -64,6 +70,8 @@ namespace ArchrealmsPassport.Windows.ViewModels
             _refreshStatusCommand = new AsyncRelayCommand(RefreshStatusAsync);
             _initializeNodeCommand = new AsyncRelayCommand(InitializeNodeAsync, CanRunWorkspaceAction);
             _provisionIdentityCommand = new AsyncRelayCommand(ProvisionIdentityAsync, CanProvisionIdentity);
+            _approveJoinRequestCommand = new AsyncRelayCommand(ApproveJoinRequestAsync, CanApproveJoinRequest);
+            _importJoinApprovalCommand = new AsyncRelayCommand(ImportJoinApprovalAsync, CanImportJoinApproval);
             _generateChallengeCommand = new AsyncRelayCommand(GenerateChallengeAsync);
             _signChallengeCommand = new AsyncRelayCommand(SignChallengeAsync, CanUseActiveDeviceCredential);
             _createRegistrySubmissionCommand = new AsyncRelayCommand(CreateRegistrySubmissionAsync, CanUseActiveDeviceCredential);
@@ -73,6 +81,8 @@ namespace ArchrealmsPassport.Windows.ViewModels
             RefreshStatusCommand = _refreshStatusCommand;
             InitializeNodeCommand = _initializeNodeCommand;
             ProvisionIdentityCommand = _provisionIdentityCommand;
+            ApproveJoinRequestCommand = _approveJoinRequestCommand;
+            ImportJoinApprovalCommand = _importJoinApprovalCommand;
             GenerateChallengeCommand = _generateChallengeCommand;
             SignChallengeCommand = _signChallengeCommand;
             CreateRegistrySubmissionCommand = _createRegistrySubmissionCommand;
@@ -88,6 +98,8 @@ namespace ArchrealmsPassport.Windows.ViewModels
         public ICommand RefreshStatusCommand { get; private set; }
         public ICommand InitializeNodeCommand { get; private set; }
         public ICommand ProvisionIdentityCommand { get; private set; }
+        public ICommand ApproveJoinRequestCommand { get; private set; }
+        public ICommand ImportJoinApprovalCommand { get; private set; }
         public ICommand GenerateChallengeCommand { get; private set; }
         public ICommand SignChallengeCommand { get; private set; }
         public ICommand CreateRegistrySubmissionCommand { get; private set; }

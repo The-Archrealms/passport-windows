@@ -100,12 +100,24 @@ namespace ArchrealmsPassport.Windows.ViewModels
                 return false;
             }
 
-            if (!IsJoiningExistingIdentity)
-            {
-                return true;
-            }
+            return !IsJoiningExistingIdentity || !string.IsNullOrWhiteSpace(ExistingIdentityId);
+        }
 
-            return !string.IsNullOrWhiteSpace(ExistingIdentityId);
+        private bool CanApproveJoinRequest()
+        {
+            return CanUseActiveDeviceCredential()
+                && !string.IsNullOrWhiteSpace(JoinRequestPath)
+                && (File.Exists(JoinRequestPath) || Directory.Exists(JoinRequestPath));
+        }
+
+        private bool CanImportJoinApproval()
+        {
+            return CanRunWorkspaceAction()
+                && !string.IsNullOrWhiteSpace(PendingDeviceId)
+                && !string.IsNullOrWhiteSpace(PendingDeviceKeyPath)
+                && File.Exists(PendingDeviceKeyPath)
+                && !string.IsNullOrWhiteSpace(JoinApprovalPath)
+                && (File.Exists(JoinApprovalPath) || Directory.Exists(JoinApprovalPath));
         }
 
         private bool CanUseActiveDeviceCredential()
@@ -119,17 +131,9 @@ namespace ArchrealmsPassport.Windows.ViewModels
 
         private bool CanPublishRegistrySubmission()
         {
-            if (!CanRunWorkspaceAction())
-            {
-                return false;
-            }
-
-            if (string.IsNullOrWhiteSpace(RegistrySubmissionText))
-            {
-                return false;
-            }
-
-            return File.Exists(RegistrySubmissionText);
+            return CanRunWorkspaceAction()
+                && !string.IsNullOrWhiteSpace(RegistrySubmissionText)
+                && File.Exists(RegistrySubmissionText);
         }
 
         private PassportSettings CreateSettingsSnapshot()
@@ -143,7 +147,11 @@ namespace ArchrealmsPassport.Windows.ViewModels
                 ActiveIdentityId = ActiveIdentityId,
                 ActiveDeviceId = ActiveDeviceId,
                 ActiveDeviceKeyPath = ActiveDeviceKeyPath,
+                PendingDeviceId = PendingDeviceId,
+                PendingDeviceKeyPath = PendingDeviceKeyPath,
                 DeviceLabel = DeviceLabel,
+                JoinRequestPath = JoinRequestPath,
+                JoinApprovalPath = JoinApprovalPath,
                 WorkspaceRoot = WorkspaceRoot,
                 IpfsRepoPath = IpfsRepoPath,
                 StorageAllocationGb = Math.Max(5, (int)Math.Round(StorageAllocationGb)),
@@ -185,6 +193,8 @@ namespace ArchrealmsPassport.Windows.ViewModels
             _refreshStatusCommand.RaiseCanExecuteChanged();
             _initializeNodeCommand.RaiseCanExecuteChanged();
             _provisionIdentityCommand.RaiseCanExecuteChanged();
+            _approveJoinRequestCommand.RaiseCanExecuteChanged();
+            _importJoinApprovalCommand.RaiseCanExecuteChanged();
             _generateChallengeCommand.RaiseCanExecuteChanged();
             _signChallengeCommand.RaiseCanExecuteChanged();
             _createRegistrySubmissionCommand.RaiseCanExecuteChanged();

@@ -22,130 +22,81 @@ namespace ArchrealmsPassport.Windows.Services
             string deviceLabel)
         {
             var identityId = CreateIdentityId(displayName);
-            return ProvisionIdentity(workspaceRoot, identityId, displayName, identityMode, deviceLabel, true);
-        }
 
-        public PassportProvisioningResult AddDeviceToIdentity(
-            string workspaceRoot,
-            string identityId,
-            string displayName,
-            string identityMode,
-            string deviceLabel)
-        {
-            return ProvisionIdentity(workspaceRoot, identityId, displayName, identityMode, deviceLabel, false);
-        }
-
-        private PassportProvisioningResult ProvisionIdentity(
-            string workspaceRoot,
-            string identityId,
-            string displayName,
-            string identityMode,
-            string deviceLabel,
-            bool createIdentityRecord)
-        {
             try
             {
-                if (string.IsNullOrWhiteSpace(identityId))
-                {
-                    return Failed("A Passport identity identifier is required.");
-                }
-
                 var resolvedWorkspaceRoot = PassportEnvironment.ResolveWorkspaceRoot(workspaceRoot);
                 var normalizedDisplayName = NormalizeDisplayName(displayName, identityMode, identityId);
-                var normalizedDeviceLabel = string.IsNullOrWhiteSpace(deviceLabel)
-                    ? Environment.MachineName
-                    : deviceLabel.Trim();
-
-                var registryRoot = Path.Combine(resolvedWorkspaceRoot, "records", "registry");
-                var identitiesRoot = Path.Combine(registryRoot, "identities");
-                var deviceCredentialsRoot = Path.Combine(registryRoot, "device-credentials");
-                var publicKeysRoot = Path.Combine(registryRoot, "public-keys");
-
-                Directory.CreateDirectory(registryRoot);
-                Directory.CreateDirectory(identitiesRoot);
-                Directory.CreateDirectory(deviceCredentialsRoot);
-                Directory.CreateDirectory(publicKeysRoot);
+                var normalizedDeviceLabel = NormalizeDeviceLabel(deviceLabel);
+                EnsureRegistryFolders(resolvedWorkspaceRoot);
 
                 var timestamp = DateTime.UtcNow.ToString("yyyyMMddTHHmmssZ");
                 var createdUtc = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
                 var deviceId = CreateDeviceId(normalizedDeviceLabel);
                 var deviceKeyPair = CreateDeviceKeyPair(deviceId);
+                var publicKeyPath = WritePublicKey(resolvedWorkspaceRoot, deviceId, deviceKeyPair.PublicKeyBytes);
 
-                var publicKeyPath = Path.Combine(publicKeysRoot, deviceId + ".spki.der");
-                File.WriteAllBytes(publicKeyPath, deviceKeyPair.PublicKeyBytes);
+                var identityRecordPath = Path.Combine(
+                    resolvedWorkspaceRoot,
+                    "records",
+                    "registry",
+                    "identities",
+                    timestamp + "-" + identityId + ".json");
 
-                string identityRecordPath = string.Empty;
-                if (createIdentityRecord)
-                {
-                    identityRecordPath = Path.Combine(identitiesRoot, timestamp + "-" + identityId + ".json");
-                    var identityRecord = new Dictionary<string, object?>
-                    {
-                        ["schema_version"] = 1,
-                        ["record_type"] = "passport_identity_record",
-                        ["record_id"] = timestamp + "-" + identityId,
-                        ["created_utc"] = createdUtc,
-                        ["effective_utc"] = createdUtc,
-                        ["status"] = "active",
-                        ["archrealms_identity_id"] = identityId,
-                        ["display_name"] = normalizedDisplayName,
-                        ["identity_mode"] = identityMode,
-                        ["citizenship_class"] = "citizen",
-                        ["declared_scope"] = "personal",
-                        ["public_biography"] = string.Empty,
-                        ["recovery_authority"] = new Dictionary<string, object?>
-                        {
-                            ["method"] = "device-recovery-to-be-defined",
-                            ["reference"] = deviceId
-                        },
-                        ["attestation_refs"] = Array.Empty<string>(),
-                        ["supersedes_record_id"] = string.Empty,
-                        ["summary"] = "Passport identity established through Windows Passport onboarding."
-                    };
-
-                    File.WriteAllText(identityRecordPath, JsonSerializer.Serialize(identityRecord, JsonOptions));
-                }
-
-                var deviceRecordPath = Path.Combine(deviceCredentialsRoot, timestamp + "-" + deviceId + ".json");
-                var deviceRecord = new Dictionary<string, object?>
+                var identityRecord = new Dictionary<string, object?>
                 {
                     ["schema_version"] = 1,
-                    ["record_type"] = "device_credential_record",
-                    ["record_id"] = timestamp + "-" + deviceId,
+                    ["record_type"] = "passport_identity_record",
+                    ["record_id"] = timestamp + "-" + identityId,
                     ["created_utc"] = createdUtc,
                     ["effective_utc"] = createdUtc,
                     ["status"] = "active",
                     ["archrealms_identity_id"] = identityId,
-                    ["device_id"] = deviceId,
-                    ["device_label"] = normalizedDeviceLabel,
-                    ["device_class"] = "desktop",
-                    ["client_platform"] = "windows",
-                    ["credential_origin"] = "passport-windows",
-                    ["public_key_algorithm"] = "RSA",
-                    ["public_key_format"] = "SPKI_DER",
-                    ["public_key_path"] = ToWorkspaceRelativePath(resolvedWorkspaceRoot, publicKeyPath),
-                    ["public_key_sha256"] = ComputeSha256(deviceKeyPair.PublicKeyBytes),
-                    ["authorized_scopes"] = new[]
+                    ["display_name"] = normalizedDisplayName,
+                    ["identity_mode"] = identityMode,
+                    ["citizenship_class"] = "citizen",
+                    ["declared_scope"] = "personal",
+                    ["public_biography"] = string.Empty,
+                    ["recovery_authority"] = new Dictionary<string, object?>
                     {
-                        "authenticate",
-                        "submit_registry_record",
-                        "publish_archive"
+                        ["method"] = "device-recovery-to-be-defined",
+                        ["reference"] = deviceId
                     },
-                    ["expires_utc"] = string.Empty,
-                    ["revocation_record_id"] = string.Empty,
                     ["attestation_refs"] = Array.Empty<string>(),
-                    ["summary"] = createIdentityRecord
-                        ? "Initial Passport device credential created during identity provisioning."
-                        : "Additional Passport device credential added to an existing Passport identity."
+                    ["supersedes_record_id"] = string.Empty,
+                    ["summary"] = "Passport identity established through Windows Passport onboarding."
                 };
+
+                File.WriteAllText(identityRecordPath, JsonSerializer.Serialize(identityRecord, JsonOptions));
+
+                var deviceRecordPath = Path.Combine(
+                    resolvedWorkspaceRoot,
+                    "records",
+                    "registry",
+                    "device-credentials",
+                    timestamp + "-" + deviceId + ".json");
+
+                var deviceRecord = CreateDeviceCredentialRecord(
+                    resolvedWorkspaceRoot,
+                    timestamp,
+                    createdUtc,
+                    identityId,
+                    deviceId,
+                    normalizedDeviceLabel,
+                    publicKeyPath,
+                    deviceKeyPair.PublicKeyBytes,
+                    "active",
+                    "genesis",
+                    string.Empty,
+                    string.Empty,
+                    string.Empty);
 
                 File.WriteAllText(deviceRecordPath, JsonSerializer.Serialize(deviceRecord, JsonOptions));
 
                 return new PassportProvisioningResult
                 {
                     Succeeded = true,
-                    Message = createIdentityRecord
-                        ? "Created a new Passport identity and authorized this device."
-                        : "Authorized this device under an existing Passport identity.",
+                    Message = "Created a new Passport identity and authorized this device.",
                     IdentityId = identityId,
                     DeviceId = deviceId,
                     PrivateKeyPath = deviceKeyPair.PrivateKeyPath,
@@ -156,13 +107,228 @@ namespace ArchrealmsPassport.Windows.Services
             }
             catch (Exception ex)
             {
-                return Failed("Passport provisioning failed: " + ex.Message);
+                return FailedProvisioning("Passport provisioning failed: " + ex.Message);
             }
         }
 
-        private static PassportProvisioningResult Failed(string message)
+        public PassportJoinRequestResult CreateJoinRequest(
+            string workspaceRoot,
+            string identityId,
+            string deviceLabel)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(identityId))
+                {
+                    return FailedJoinRequest("An existing Passport identity identifier is required.");
+                }
+
+                var resolvedWorkspaceRoot = PassportEnvironment.ResolveWorkspaceRoot(workspaceRoot);
+                var normalizedDeviceLabel = NormalizeDeviceLabel(deviceLabel);
+                EnsureRegistryFolders(resolvedWorkspaceRoot);
+
+                var timestamp = DateTime.UtcNow.ToString("yyyyMMddTHHmmssZ");
+                var createdUtc = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
+                var deviceId = CreateDeviceId(normalizedDeviceLabel);
+                var deviceKeyPair = CreateDeviceKeyPair(deviceId);
+                var publicKeyPath = WritePublicKey(resolvedWorkspaceRoot, deviceId, deviceKeyPair.PublicKeyBytes);
+
+                var pendingRecordPath = Path.Combine(
+                    resolvedWorkspaceRoot,
+                    "records",
+                    "registry",
+                    "device-credentials",
+                    timestamp + "-" + deviceId + ".pending.json");
+
+                var pendingRecord = CreateDeviceCredentialRecord(
+                    resolvedWorkspaceRoot,
+                    timestamp,
+                    createdUtc,
+                    identityId,
+                    deviceId,
+                    normalizedDeviceLabel,
+                    publicKeyPath,
+                    deviceKeyPair.PublicKeyBytes,
+                    "pending_authorization",
+                    "pending",
+                    string.Empty,
+                    string.Empty,
+                    string.Empty);
+
+                File.WriteAllText(pendingRecordPath, JsonSerializer.Serialize(pendingRecord, JsonOptions));
+
+                var joinRequestRoot = Path.Combine(
+                    resolvedWorkspaceRoot,
+                    "records",
+                    "registry",
+                    "join-requests",
+                    timestamp + "-" + identityId + "-" + deviceId);
+                Directory.CreateDirectory(joinRequestRoot);
+
+                var packagedPublicKeyPath = Path.Combine(joinRequestRoot, "candidate-device-public-key.spki.der");
+                File.WriteAllBytes(packagedPublicKeyPath, deviceKeyPair.PublicKeyBytes);
+
+                var requestPath = Path.Combine(joinRequestRoot, "device-join-request.json");
+                var requestRecord = new Dictionary<string, object?>
+                {
+                    ["schema_version"] = 1,
+                    ["record_type"] = "device_join_request",
+                    ["record_id"] = timestamp + "-" + deviceId,
+                    ["created_utc"] = createdUtc,
+                    ["archrealms_identity_id"] = identityId,
+                    ["device_id"] = deviceId,
+                    ["device_label"] = normalizedDeviceLabel,
+                    ["client_platform"] = "windows",
+                    ["public_key_path"] = "candidate-device-public-key.spki.der",
+                    ["public_key_sha256"] = ComputeSha256(deviceKeyPair.PublicKeyBytes),
+                    ["requested_scopes"] = new[]
+                    {
+                        "authenticate",
+                        "submit_registry_record",
+                        "publish_archive"
+                    },
+                    ["summary"] = "Join request generated by a new Passport device seeking approval from an existing authorized device."
+                };
+
+                File.WriteAllText(requestPath, JsonSerializer.Serialize(requestRecord, JsonOptions));
+
+                var requestBytes = File.ReadAllBytes(requestPath);
+                byte[] signatureBytes;
+                using (var rsa = LoadPrivateKey(deviceKeyPair.PrivateKeyPath))
+                {
+                    signatureBytes = rsa.SignData(requestBytes, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+                }
+
+                bool verified;
+                using (var rsa = RSA.Create())
+                {
+                    rsa.ImportSubjectPublicKeyInfo(deviceKeyPair.PublicKeyBytes, out _);
+                    verified = rsa.VerifyData(requestBytes, signatureBytes, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+                }
+
+                var signaturePath = Path.Combine(joinRequestRoot, "device-join-request-signature.json");
+                var signatureRecord = new Dictionary<string, object?>
+                {
+                    ["schema_version"] = 1,
+                    ["record_type"] = "device_join_request_signature",
+                    ["record_id"] = timestamp + "-" + deviceId + "-signature",
+                    ["created_utc"] = createdUtc,
+                    ["archrealms_identity_id"] = identityId,
+                    ["device_id"] = deviceId,
+                    ["request_sha256"] = ComputeSha256(requestBytes),
+                    ["signature_algorithm"] = "RSA_PKCS1_SHA256",
+                    ["signature_base64"] = Convert.ToBase64String(signatureBytes),
+                    ["public_key_path"] = "candidate-device-public-key.spki.der",
+                    ["verified_with_public_key"] = verified,
+                    ["summary"] = "Join request signed by the candidate device key."
+                };
+
+                File.WriteAllText(signaturePath, JsonSerializer.Serialize(signatureRecord, JsonOptions));
+
+                return new PassportJoinRequestResult
+                {
+                    Succeeded = true,
+                    Message = "Prepared a join request for approval by an existing authorized device.",
+                    IdentityId = identityId,
+                    DeviceId = deviceId,
+                    PrivateKeyPath = deviceKeyPair.PrivateKeyPath,
+                    PublicKeyPath = publicKeyPath,
+                    PendingDeviceRecordPath = pendingRecordPath,
+                    JoinRequestPath = requestPath,
+                    RequestSignaturePath = signaturePath
+                };
+            }
+            catch (Exception ex)
+            {
+                return FailedJoinRequest("Join request generation failed: " + ex.Message);
+            }
+        }
+
+        private static void EnsureRegistryFolders(string workspaceRoot)
+        {
+            Directory.CreateDirectory(Path.Combine(workspaceRoot, "records", "registry", "identities"));
+            Directory.CreateDirectory(Path.Combine(workspaceRoot, "records", "registry", "device-credentials"));
+            Directory.CreateDirectory(Path.Combine(workspaceRoot, "records", "registry", "public-keys"));
+            Directory.CreateDirectory(Path.Combine(workspaceRoot, "records", "registry", "join-requests"));
+            Directory.CreateDirectory(Path.Combine(workspaceRoot, "records", "registry", "join-approvals"));
+            Directory.CreateDirectory(Path.Combine(workspaceRoot, "records", "registry", "device-authorizations"));
+        }
+
+        private static Dictionary<string, object?> CreateDeviceCredentialRecord(
+            string workspaceRoot,
+            string timestamp,
+            string createdUtc,
+            string identityId,
+            string deviceId,
+            string normalizedDeviceLabel,
+            string publicKeyPath,
+            byte[] publicKeyBytes,
+            string status,
+            string authorizationMode,
+            string authorizationPackagePath,
+            string authorizationRecordPath,
+            string authorizerDeviceId)
+        {
+            return new Dictionary<string, object?>
+            {
+                ["schema_version"] = 1,
+                ["record_type"] = "device_credential_record",
+                ["record_id"] = timestamp + "-" + deviceId,
+                ["created_utc"] = createdUtc,
+                ["effective_utc"] = createdUtc,
+                ["status"] = status,
+                ["archrealms_identity_id"] = identityId,
+                ["device_id"] = deviceId,
+                ["device_label"] = normalizedDeviceLabel,
+                ["device_class"] = "desktop",
+                ["client_platform"] = "windows",
+                ["credential_origin"] = "passport-windows",
+                ["public_key_algorithm"] = "RSA",
+                ["public_key_format"] = "SPKI_DER",
+                ["public_key_path"] = ToWorkspaceRelativePath(workspaceRoot, publicKeyPath),
+                ["public_key_sha256"] = ComputeSha256(publicKeyBytes),
+                ["authorized_scopes"] = new[]
+                {
+                    "authenticate",
+                    "submit_registry_record",
+                    "publish_archive"
+                },
+                ["authorization_mode"] = authorizationMode,
+                ["authorization_package_path"] = authorizationPackagePath,
+                ["authorization_record_path"] = authorizationRecordPath,
+                ["authorizer_device_id"] = authorizerDeviceId,
+                ["expires_utc"] = string.Empty,
+                ["revocation_record_id"] = string.Empty,
+                ["attestation_refs"] = Array.Empty<string>()
+            };
+        }
+
+        private static string NormalizeDeviceLabel(string deviceLabel)
+        {
+            return string.IsNullOrWhiteSpace(deviceLabel)
+                ? Environment.MachineName
+                : deviceLabel.Trim();
+        }
+
+        private static string WritePublicKey(string workspaceRoot, string deviceId, byte[] publicKeyBytes)
+        {
+            var publicKeyPath = Path.Combine(workspaceRoot, "records", "registry", "public-keys", deviceId + ".spki.der");
+            File.WriteAllBytes(publicKeyPath, publicKeyBytes);
+            return publicKeyPath;
+        }
+
+        private static PassportProvisioningResult FailedProvisioning(string message)
         {
             return new PassportProvisioningResult
+            {
+                Succeeded = false,
+                Message = message
+            };
+        }
+
+        private static PassportJoinRequestResult FailedJoinRequest(string message)
+        {
+            return new PassportJoinRequestResult
             {
                 Succeeded = false,
                 Message = message
@@ -245,6 +411,19 @@ namespace ArchrealmsPassport.Windows.Services
 
                 return (publicKeyBytes, privateKeyPath);
             }
+        }
+
+        private static RSA LoadPrivateKey(string privateKeyPath)
+        {
+            var protectedPrivateKey = File.ReadAllBytes(privateKeyPath);
+            var privateKeyBytes = ProtectedData.Unprotect(
+                protectedPrivateKey,
+                Encoding.UTF8.GetBytes("ArchrealmsPassportWindows"),
+                DataProtectionScope.CurrentUser);
+
+            var rsa = RSA.Create();
+            rsa.ImportPkcs8PrivateKey(privateKeyBytes, out _);
+            return rsa;
         }
 
         private static string ComputeSha256(byte[] value)

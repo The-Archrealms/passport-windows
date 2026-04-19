@@ -9,7 +9,11 @@ namespace ArchrealmsPassport.Windows.Models
         public string ActiveIdentityId { get; set; } = string.Empty;
         public string ActiveDeviceId { get; set; } = string.Empty;
         public string ActiveDeviceKeyPath { get; set; } = string.Empty;
+        public string PendingDeviceId { get; set; } = string.Empty;
+        public string PendingDeviceKeyPath { get; set; } = string.Empty;
         public string DeviceLabel { get; set; } = string.Empty;
+        public string JoinRequestPath { get; set; } = string.Empty;
+        public string JoinApprovalPath { get; set; } = string.Empty;
         public string WorkspaceRoot { get; set; } = string.Empty;
         public string IpfsRepoPath { get; set; } = string.Empty;
         public int StorageAllocationGb { get; set; } = 25;

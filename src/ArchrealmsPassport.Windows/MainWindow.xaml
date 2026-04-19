@@ -94,7 +94,7 @@
                     <Border Style="{StaticResource CardStyle}">
                         <StackPanel>
                             <TextBlock FontFamily="Palatino Linotype" FontSize="24" FontWeight="SemiBold" Foreground="#3F3025" Text="Identity and Workspace" />
-                            <TextBlock Margin="0,8,0,18" Style="{StaticResource CaptionStyle}" Text="Each Passport identity may authorize many devices. Runtime records are written into a local workspace rather than into the source repository." />
+                            <TextBlock Margin="0,8,0,18" Style="{StaticResource CaptionStyle}" Text="Each Passport identity may authorize many devices, but new devices now join by signed request and approval. Runtime records are written into a local workspace rather than into the source repository." />
 
                             <TextBlock FontFamily="Palatino Linotype" FontSize="15" Foreground="#4B392C" Text="Display Name" />
                             <TextBox Margin="0,6,0,12" Padding="10,7" Text="{Binding CitizenName, UpdateSourceTrigger=PropertyChanged}" />
@@ -107,6 +107,12 @@
 
                             <TextBlock FontFamily="Palatino Linotype" FontSize="15" Foreground="#4B392C" Text="Existing Identity ID" />
                             <TextBox Margin="0,6,0,12" Padding="10,7" FontFamily="Consolas" IsEnabled="{Binding IsJoiningExistingIdentity}" Text="{Binding ExistingIdentityId, UpdateSourceTrigger=PropertyChanged}" />
+
+                            <TextBlock FontFamily="Palatino Linotype" FontSize="15" Foreground="#4B392C" Text="Join Request Path" />
+                            <TextBox Margin="0,6,0,12" Padding="10,7" FontFamily="Consolas" Text="{Binding JoinRequestPath, UpdateSourceTrigger=PropertyChanged}" />
+
+                            <TextBlock FontFamily="Palatino Linotype" FontSize="15" Foreground="#4B392C" Text="Join Approval Path" />
+                            <TextBox Margin="0,6,0,12" Padding="10,7" FontFamily="Consolas" Text="{Binding JoinApprovalPath, UpdateSourceTrigger=PropertyChanged}" />
 
                             <TextBlock FontFamily="Palatino Linotype" FontSize="15" Foreground="#4B392C" Text="Device Label" />
                             <TextBox Margin="0,6,0,12" Padding="10,7" Text="{Binding DeviceLabel, UpdateSourceTrigger=PropertyChanged}" />
@@ -126,6 +132,9 @@
                                     <TextBox Margin="0,6,0,0" Padding="10,7" FontFamily="Consolas" IsReadOnly="True" Text="{Binding ActiveDeviceId}" />
                                 </StackPanel>
                             </Grid>
+
+                            <TextBlock FontFamily="Palatino Linotype" FontSize="15" Foreground="#4B392C" Text="Pending Device ID" />
+                            <TextBox Margin="0,6,0,12" Padding="10,7" FontFamily="Consolas" IsReadOnly="True" Text="{Binding PendingDeviceId}" />
 
                             <TextBlock FontFamily="Palatino Linotype" FontSize="15" Foreground="#4B392C" Text="Passport Workspace" />
                             <TextBox Margin="0,6,0,12" Padding="10,7" FontFamily="Consolas" Text="{Binding WorkspaceRoot, UpdateSourceTrigger=PropertyChanged}" />
@@ -169,9 +178,11 @@
                     <Border Style="{StaticResource CardStyle}">
                         <StackPanel>
                             <TextBlock FontFamily="Palatino Linotype" FontSize="24" FontWeight="SemiBold" Foreground="#3F3025" Text="Actions" />
-                            <TextBlock Margin="0,8,0,18" Style="{StaticResource CaptionStyle}" Text="The Passport client provisions identities, maintains its own workspace, and calls the bundled IPFS and publication tooling shipped with this repository." />
+                            <TextBlock Margin="0,8,0,18" Style="{StaticResource CaptionStyle}" Text="The Passport client provisions identities, maintains its own workspace, and now requires a signed join approval before activating a new device under an existing identity." />
                             <WrapPanel>
                                 <Button Style="{StaticResource ActionButtonStyle}" Command="{Binding ProvisionIdentityCommand}" Content="{Binding ProvisioningButtonLabel}" />
+                                <Button Style="{StaticResource ActionButtonStyle}" Command="{Binding ApproveJoinRequestCommand}" Content="Approve Join Request" />
+                                <Button Style="{StaticResource ActionButtonStyle}" Command="{Binding ImportJoinApprovalCommand}" Content="Import Join Approval" />
                                 <Button Style="{StaticResource ActionButtonStyle}" Command="{Binding SaveSettingsCommand}" Content="Save Settings" />
                                 <Button Style="{StaticResource ActionButtonStyle}" Command="{Binding RefreshStatusCommand}" Content="Refresh Status" />
                                 <Button Style="{StaticResource ActionButtonStyle}" Command="{Binding InitializeNodeCommand}" Content="Initialize Local IPFS Node" />
