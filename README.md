@@ -9,6 +9,8 @@ It is a public-facing desktop app and tooling bundle for:
 - signing Passport challenges
 - preparing portable registry submission packages
 - publishing registry submission packages to IPFS
+- previewing canonical public files from IPFS in read-only mode
+- fetching read-only local copies of public IPFS files into the Passport workspace
 - initializing and managing a local Kubo node for Passport participation
 
 The repository is published under the [MIT License](LICENSE).
@@ -22,6 +24,7 @@ Included today:
 - WPF desktop app under `src/ArchrealmsPassport.Windows`
 - Windows packaging project under `src/ArchrealmsPassport.Windows.Package`
 - Passport record schema notes under `docs/`
+- branding notes and emblem source under `docs/branding.md`
 - JSON record templates under `registry/templates/`
 - IPFS helper scripts under `tools/ipfs/`
 - registry submission publish and verify scripts under `tools/passport/`
@@ -72,6 +75,7 @@ The workspace contains local Passport records such as:
 - `records/registry/device-authorizations/`
 - `records/registry/signatures/`
 - `records/registry/submissions/`
+- `records/ipfs-readonly/`
 - `records/passport/ipfs-node.local.json`
 
 ## Trust Model
@@ -189,6 +193,23 @@ Publish a prepared registry submission package:
 .\tools\passport\Publish-ArchrealmsRegistrySubmissionToIpfs.ps1 `
   -WorkspaceRoot "$env:LOCALAPPDATA\Archrealms\PassportWindows\workspace" `
   -SubmissionPath "<path-to-submission.json>"
+```
+
+Preview a public text file directly from IPFS:
+
+```powershell
+.\tools\passport\Read-ArchrealmsIpfsText.ps1 `
+  -Cid "<bundle-root-cid>" `
+  -RelativePath "canonical-manifest.md"
+```
+
+Fetch a read-only local copy of a public IPFS file:
+
+```powershell
+.\tools\passport\Save-ArchrealmsIpfsFileReadOnly.ps1 `
+  -Cid "<bundle-root-cid>" `
+  -RelativePath "canonical-manifest.md" `
+  -WorkspaceRoot "$env:LOCALAPPDATA\Archrealms\PassportWindows\workspace"
 ```
 
 Verify a received registry submission package:

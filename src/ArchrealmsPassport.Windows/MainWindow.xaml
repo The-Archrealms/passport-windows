@@ -5,6 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         Title="Archrealms Passport"
+        Icon="Assets/AppIcon.ico"
         Height="860"
         Width="1380"
         MinHeight="760"
@@ -43,11 +44,25 @@
                 Padding="28,24,28,18">
             <Grid>
                 <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="20" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <StackPanel>
+                <Border Width="78"
+                        Height="78"
+                        VerticalAlignment="Top"
+                        Background="#F7F1E4"
+                        CornerRadius="20"
+                        BorderBrush="#D0BF97"
+                        BorderThickness="1"
+                        Padding="10">
+                    <Image Source="Assets/OrderEmblem.png"
+                           Stretch="Uniform" />
+                </Border>
+
+                <StackPanel Grid.Column="2">
                     <TextBlock FontFamily="Palatino Linotype"
                                FontSize="34"
                                FontWeight="SemiBold"
@@ -61,7 +76,7 @@
                                Text="Windows Passport for identity onboarding, registry packaging, local IPFS stewardship, and publication of public Archrealms record bundles." />
                 </StackPanel>
 
-                <Border Grid.Column="1"
+                <Border Grid.Column="3"
                         Padding="16,10"
                         Background="#F7F1E4"
                         CornerRadius="14"
@@ -219,6 +234,38 @@
 
                             <TextBlock FontFamily="Palatino Linotype" FontSize="15" Foreground="#4B392C" Text="Latest Submission CID" />
                             <TextBox Margin="0,6,0,0" Padding="10,7" FontFamily="Consolas" IsReadOnly="True" Text="{Binding RegistrySubmissionCidText}" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource CardStyle}">
+                        <StackPanel>
+                            <TextBlock FontFamily="Palatino Linotype" FontSize="24" FontWeight="SemiBold" Foreground="#3F3025" Text="Read-Only IPFS Access" />
+                            <TextBlock Margin="0,8,0,18" Style="{StaticResource CaptionStyle}" Text="Preview canonical public files from IPFS and fetch local read-only copies into the Passport workspace without turning them into writable records." />
+
+                            <TextBlock FontFamily="Palatino Linotype" FontSize="15" Foreground="#4B392C" Text="Root CID" />
+                            <TextBox Margin="0,6,0,12" Padding="10,7" FontFamily="Consolas" Text="{Binding ReadOnlyIpfsCid, UpdateSourceTrigger=PropertyChanged}" />
+
+                            <TextBlock FontFamily="Palatino Linotype" FontSize="15" Foreground="#4B392C" Text="Relative File Path" />
+                            <TextBox Margin="0,6,0,12" Padding="10,7" FontFamily="Consolas" Text="{Binding ReadOnlyIpfsRelativePath, UpdateSourceTrigger=PropertyChanged}" />
+
+                            <WrapPanel>
+                                <Button Style="{StaticResource ActionButtonStyle}" Command="{Binding PreviewReadOnlyIpfsFileCommand}" Content="Preview Text From IPFS" />
+                                <Button Style="{StaticResource ActionButtonStyle}" Command="{Binding FetchReadOnlyIpfsFileCommand}" Content="Fetch Read-Only Copy" />
+                            </WrapPanel>
+
+                            <TextBlock FontFamily="Palatino Linotype" FontSize="15" Foreground="#4B392C" Text="Preview" />
+                            <TextBox Margin="0,6,0,12"
+                                     Padding="10,7"
+                                     Height="150"
+                                     FontFamily="Consolas"
+                                     IsReadOnly="True"
+                                     Text="{Binding ReadOnlyIpfsPreviewText}"
+                                     TextWrapping="Wrap"
+                                     AcceptsReturn="True"
+                                     VerticalScrollBarVisibility="Auto" />
+
+                            <TextBlock FontFamily="Palatino Linotype" FontSize="15" Foreground="#4B392C" Text="Last Read-Only Copy" />
+                            <TextBox Margin="0,6,0,0" Padding="10,7" FontFamily="Consolas" IsReadOnly="True" Text="{Binding ReadOnlyIpfsFetchedPathText}" TextWrapping="Wrap" />
                         </StackPanel>
                     </Border>
 

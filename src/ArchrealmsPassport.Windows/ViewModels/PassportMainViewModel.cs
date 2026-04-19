@@ -23,6 +23,8 @@ namespace ArchrealmsPassport.Windows.ViewModels
         private readonly AsyncRelayCommand _signChallengeCommand;
         private readonly AsyncRelayCommand _createRegistrySubmissionCommand;
         private readonly AsyncRelayCommand _publishRegistrySubmissionCommand;
+        private readonly AsyncRelayCommand _previewReadOnlyIpfsFileCommand;
+        private readonly AsyncRelayCommand _fetchReadOnlyIpfsFileCommand;
 
         private string _citizenName = string.Empty;
         private string _selectedProvisioningMode = "Create new Passport identity";
@@ -40,6 +42,10 @@ namespace ArchrealmsPassport.Windows.ViewModels
         private string _challengeSignatureText = "No signed challenge yet";
         private string _registrySubmissionText = "No registry submission package yet";
         private string _registrySubmissionCidText = "Not published";
+        private string _readOnlyIpfsCid = string.Empty;
+        private string _readOnlyIpfsRelativePath = string.Empty;
+        private string _readOnlyIpfsPreviewText = "No IPFS file preview yet";
+        private string _readOnlyIpfsFetchedPathText = "No read-only copy yet";
         private string _workspaceRoot = string.Empty;
         private string _ipfsRepoPath = string.Empty;
         private double _storageAllocationGb = 25;
@@ -77,6 +83,8 @@ namespace ArchrealmsPassport.Windows.ViewModels
             _signChallengeCommand = new AsyncRelayCommand(SignChallengeAsync, CanUseActiveDeviceCredential);
             _createRegistrySubmissionCommand = new AsyncRelayCommand(CreateRegistrySubmissionAsync, CanUseActiveDeviceCredential);
             _publishRegistrySubmissionCommand = new AsyncRelayCommand(PublishRegistrySubmissionAsync, CanPublishRegistrySubmission);
+            _previewReadOnlyIpfsFileCommand = new AsyncRelayCommand(PreviewReadOnlyIpfsFileAsync, CanReadOnlyAccessIpfsFile);
+            _fetchReadOnlyIpfsFileCommand = new AsyncRelayCommand(FetchReadOnlyIpfsFileAsync, CanReadOnlyAccessIpfsFile);
 
             SaveSettingsCommand = _saveSettingsCommand;
             RefreshStatusCommand = _refreshStatusCommand;
@@ -88,6 +96,8 @@ namespace ArchrealmsPassport.Windows.ViewModels
             SignChallengeCommand = _signChallengeCommand;
             CreateRegistrySubmissionCommand = _createRegistrySubmissionCommand;
             PublishRegistrySubmissionCommand = _publishRegistrySubmissionCommand;
+            PreviewReadOnlyIpfsFileCommand = _previewReadOnlyIpfsFileCommand;
+            FetchReadOnlyIpfsFileCommand = _fetchReadOnlyIpfsFileCommand;
 
             LoadSettings();
             _ = RefreshStatusAsync();
@@ -105,5 +115,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
         public ICommand SignChallengeCommand { get; private set; }
         public ICommand CreateRegistrySubmissionCommand { get; private set; }
         public ICommand PublishRegistrySubmissionCommand { get; private set; }
+        public ICommand PreviewReadOnlyIpfsFileCommand { get; private set; }
+        public ICommand FetchReadOnlyIpfsFileCommand { get; private set; }
     }
 }

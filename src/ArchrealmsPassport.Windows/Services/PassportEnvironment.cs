@@ -78,6 +78,19 @@ namespace ArchrealmsPassport.Windows.Services
                 && File.Exists(Path.Combine(root, "registry", "templates", "passport-identity-record.template.json"));
         }
 
+        public static string ResolveIpfsCliPath()
+        {
+            foreach (var candidate in GetIpfsCliCandidates())
+            {
+                if (!string.IsNullOrWhiteSpace(candidate) && File.Exists(candidate))
+                {
+                    return candidate;
+                }
+            }
+
+            return string.Empty;
+        }
+
         private static string FindToolRootFrom(string seed)
         {
             if (string.IsNullOrWhiteSpace(seed))
@@ -106,6 +119,46 @@ namespace ArchrealmsPassport.Windows.Services
             }
 
             return string.Empty;
+        }
+
+        private static string[] GetIpfsCliCandidates()
+        {
+            var path = Environment.GetEnvironmentVariable("PATH");
+            var candidates = new System.Collections.Generic.List<string>();
+
+            if (!string.IsNullOrWhiteSpace(path))
+            {
+                var segments = path.Split(new[] { Path.PathSeparator }, StringSplitOptions.RemoveEmptyEntries);
+                foreach (var rawSegment in segments)
+                {
+                    var segment = rawSegment.Trim();
+                    if (!string.IsNullOrWhiteSpace(segment))
+                    {
+                        candidates.Add(Path.Combine(segment, "ipfs.exe"));
+                    }
+                }
+            }
+
+            var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+            var programFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
+
+            if (!string.IsNullOrWhiteSpace(localAppData))
+            {
+                candidates.Add(Path.Combine(localAppData, "Programs", "IPFS Desktop", "resources", "app.asar.unpacked", "node_modules", "kubo", "kubo", "ipfs.exe"));
+            }
+
+            if (!string.IsNullOrWhiteSpace(programFiles))
+            {
+                candidates.Add(Path.Combine(programFiles, "IPFS Desktop", "resources", "app.asar.unpacked", "node_modules", "kubo", "kubo", "ipfs.exe"));
+            }
+
+            if (!string.IsNullOrWhiteSpace(programFilesX86))
+            {
+                candidates.Add(Path.Combine(programFilesX86, "IPFS Desktop", "resources", "app.asar.unpacked", "node_modules", "kubo", "kubo", "ipfs.exe"));
+            }
+
+            return candidates.ToArray();
         }
     }
 }

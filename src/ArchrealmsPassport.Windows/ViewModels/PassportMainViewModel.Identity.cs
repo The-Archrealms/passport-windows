@@ -37,6 +37,11 @@ namespace ArchrealmsPassport.Windows.ViewModels
             PreferWindowsHelloCredentials = settings.PreferWindowsHelloCredentials;
             PublishCarExports = settings.PublishCarExports;
             PreferWifiOnly = settings.PreferWifiOnly;
+            ReadOnlyIpfsCid = settings.ReadOnlyIpfsCid;
+            ReadOnlyIpfsRelativePath = settings.ReadOnlyIpfsRelativePath;
+            ReadOnlyIpfsFetchedPathText = string.IsNullOrWhiteSpace(settings.ReadOnlyIpfsFetchedPath)
+                ? "No read-only copy yet"
+                : settings.ReadOnlyIpfsFetchedPath;
         }
 
         private async Task SaveSettingsAsync()

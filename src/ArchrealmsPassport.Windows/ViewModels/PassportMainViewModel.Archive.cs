@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 using ArchrealmsPassport.Windows.Models;
 using ArchrealmsPassport.Windows.Services;
@@ -49,6 +50,143 @@ namespace ArchrealmsPassport.Windows.ViewModels
                 "tools\\passport\\Publish-ArchrealmsRegistrySubmissionToIpfs.ps1",
                 arguments,
                 "Published registry submission package to IPFS.");
+        }
+
+        private async Task PreviewReadOnlyIpfsFileAsync()
+        {
+            _settingsStore.Save(CreateSettingsSnapshot());
+
+            var arguments = new List<string>
+            {
+                "-Cid", ReadOnlyIpfsCid.Trim(),
+                "-IpfsRepoPath", IpfsRepoPath
+            };
+
+            if (!string.IsNullOrWhiteSpace(ReadOnlyIpfsRelativePath))
+            {
+                arguments.Add("-RelativePath");
+                arguments.Add(ReadOnlyIpfsRelativePath.Trim());
+            }
+
+            var result = await _scriptRunner.RunAsync(
+                _toolRoot,
+                WorkspaceRoot,
+                "tools\\passport\\Read-ArchrealmsIpfsText.ps1",
+                arguments);
+
+            if (!result.Succeeded)
+            {
+                AppendLog("Action failed: tools\\passport\\Read-ArchrealmsIpfsText.ps1");
+                AppendLog(string.IsNullOrWhiteSpace(result.Stderr) ? result.Stdout : result.Stderr);
+                return;
+            }
+
+            try
+            {
+                using var document = JsonDocument.Parse(result.Stdout);
+                var root = document.RootElement;
+                ReadOnlyIpfsPreviewText = root.TryGetProperty("preview_text", out var previewElement)
+                    ? previewElement.GetString() ?? string.Empty
+                    : result.Stdout;
+
+                var ipfsPath = root.TryGetProperty("ipfs_path", out var pathElement)
+                    ? pathElement.GetString() ?? string.Empty
+                    : string.Empty;
+
+                var sha256 = root.TryGetProperty("sha256", out var hashElement)
+                    ? hashElement.GetString() ?? string.Empty
+                    : string.Empty;
+
+                var byteCount = root.TryGetProperty("byte_count", out var countElement)
+                    ? countElement.GetInt64().ToString()
+                    : "unknown";
+
+                var truncated = root.TryGetProperty("truncated", out var truncatedElement)
+                    && truncatedElement.GetBoolean();
+
+                AppendLog("Previewed read-only IPFS file: " + ipfsPath);
+                AppendLog("Content bytes: " + byteCount);
+                if (!string.IsNullOrWhiteSpace(sha256))
+                {
+                    AppendLog("Content SHA-256: " + sha256);
+                }
+                if (truncated)
+                {
+                    AppendLog("Preview is truncated to the configured maximum byte count.");
+                }
+            }
+            catch (JsonException)
+            {
+                ReadOnlyIpfsPreviewText = result.Stdout;
+                AppendLog("Previewed read-only IPFS file.");
+            }
+
+            _settingsStore.Save(CreateSettingsSnapshot());
+        }
+
+        private async Task FetchReadOnlyIpfsFileAsync()
+        {
+            _settingsStore.Save(CreateSettingsSnapshot());
+
+            var arguments = new List<string>
+            {
+                "-Cid", ReadOnlyIpfsCid.Trim(),
+                "-WorkspaceRoot", WorkspaceRoot,
+                "-IpfsRepoPath", IpfsRepoPath
+            };
+
+            if (!string.IsNullOrWhiteSpace(ReadOnlyIpfsRelativePath))
+            {
+                arguments.Add("-RelativePath");
+                arguments.Add(ReadOnlyIpfsRelativePath.Trim());
+            }
+
+            var result = await _scriptRunner.RunAsync(
+                _toolRoot,
+                WorkspaceRoot,
+                "tools\\passport\\Save-ArchrealmsIpfsFileReadOnly.ps1",
+                arguments);
+
+            if (!result.Succeeded)
+            {
+                AppendLog("Action failed: tools\\passport\\Save-ArchrealmsIpfsFileReadOnly.ps1");
+                AppendLog(string.IsNullOrWhiteSpace(result.Stderr) ? result.Stdout : result.Stderr);
+                return;
+            }
+
+            try
+            {
+                using var document = JsonDocument.Parse(result.Stdout);
+                var root = document.RootElement;
+                var destinationPath = root.TryGetProperty("destination_path", out var destinationElement)
+                    ? destinationElement.GetString() ?? string.Empty
+                    : string.Empty;
+
+                ReadOnlyIpfsFetchedPathText = string.IsNullOrWhiteSpace(destinationPath)
+                    ? "No read-only copy yet"
+                    : destinationPath;
+
+                var metadataPath = root.TryGetProperty("metadata_path", out var metadataElement)
+                    ? metadataElement.GetString() ?? string.Empty
+                    : string.Empty;
+
+                var ipfsPath = root.TryGetProperty("ipfs_path", out var pathElement)
+                    ? pathElement.GetString() ?? string.Empty
+                    : string.Empty;
+
+                AppendLog("Fetched read-only IPFS file: " + ipfsPath);
+                AppendLog("Read-only copy: " + ReadOnlyIpfsFetchedPathText);
+                if (!string.IsNullOrWhiteSpace(metadataPath))
+                {
+                    AppendLog("Metadata: " + metadataPath);
+                }
+            }
+            catch (JsonException)
+            {
+                AppendLog("Fetched read-only IPFS file.");
+            }
+
+            _settingsStore.Save(CreateSettingsSnapshot());
         }
 
         private async Task RunScriptAsync(string scriptRelativePath, IReadOnlyList<string> arguments, string successMessage)
@@ -136,6 +274,12 @@ namespace ArchrealmsPassport.Windows.ViewModels
                 && File.Exists(RegistrySubmissionText);
         }
 
+        private bool CanReadOnlyAccessIpfsFile()
+        {
+            return CanRunWorkspaceAction()
+                && !string.IsNullOrWhiteSpace(ReadOnlyIpfsCid);
+        }
+
         private PassportSettings CreateSettingsSnapshot()
         {
             return new PassportSettings
@@ -158,7 +302,12 @@ namespace ArchrealmsPassport.Windows.ViewModels
                 ParticipateInPublicRegistry = ParticipateInPublicRegistry,
                 PreferWindowsHelloCredentials = PreferWindowsHelloCredentials,
                 PublishCarExports = PublishCarExports,
-                PreferWifiOnly = PreferWifiOnly
+                PreferWifiOnly = PreferWifiOnly,
+                ReadOnlyIpfsCid = ReadOnlyIpfsCid,
+                ReadOnlyIpfsRelativePath = ReadOnlyIpfsRelativePath,
+                ReadOnlyIpfsFetchedPath = string.Equals(ReadOnlyIpfsFetchedPathText, "No read-only copy yet", System.StringComparison.Ordinal)
+                    ? string.Empty
+                    : ReadOnlyIpfsFetchedPathText
             };
         }
 
@@ -200,6 +349,8 @@ namespace ArchrealmsPassport.Windows.ViewModels
             _signChallengeCommand.RaiseCanExecuteChanged();
             _createRegistrySubmissionCommand.RaiseCanExecuteChanged();
             _publishRegistrySubmissionCommand.RaiseCanExecuteChanged();
+            _previewReadOnlyIpfsFileCommand.RaiseCanExecuteChanged();
+            _fetchReadOnlyIpfsFileCommand.RaiseCanExecuteChanged();
         }
     }
 }

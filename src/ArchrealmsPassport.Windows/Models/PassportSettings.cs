@@ -21,5 +21,8 @@ namespace ArchrealmsPassport.Windows.Models
         public bool PreferWindowsHelloCredentials { get; set; }
         public bool PublishCarExports { get; set; } = true;
         public bool PreferWifiOnly { get; set; }
+        public string ReadOnlyIpfsCid { get; set; } = string.Empty;
+        public string ReadOnlyIpfsRelativePath { get; set; } = string.Empty;
+        public string ReadOnlyIpfsFetchedPath { get; set; } = string.Empty;
     }
 }

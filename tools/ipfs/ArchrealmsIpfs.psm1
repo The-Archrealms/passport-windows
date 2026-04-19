@@ -40,11 +40,124 @@ function Get-ArchrealmsResolvedIpfsRepoPath {
 
 function Resolve-ArchrealmsIpfsCli {
     $command = Get-Command ipfs -ErrorAction SilentlyContinue
-    if (-not $command) {
-        throw "The ipfs CLI is not installed or not on PATH."
+    if ($command) {
+        return $command.Source
     }
 
-    return $command.Source
+    $candidates = @(
+        (Join-Path $env:LOCALAPPDATA "Programs\IPFS Desktop\resources\app.asar.unpacked\node_modules\kubo\kubo\ipfs.exe"),
+        (Join-Path $env:ProgramFiles "IPFS Desktop\resources\app.asar.unpacked\node_modules\kubo\kubo\ipfs.exe"),
+        (Join-Path ${env:ProgramFiles(x86)} "IPFS Desktop\resources\app.asar.unpacked\node_modules\kubo\kubo\ipfs.exe")
+    ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+
+    foreach ($candidate in $candidates) {
+        if (Test-Path -LiteralPath $candidate) {
+            return (Resolve-Path -LiteralPath $candidate).Path
+        }
+    }
+
+    throw "The ipfs CLI is not installed, not on PATH, and no IPFS Desktop Kubo binary was found."
+}
+
+function ConvertTo-ArchrealmsCliArgumentString {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string[]]$Arguments
+    )
+
+    return ($Arguments | ForEach-Object {
+            if ($_ -match '[\s"]') {
+                '"' + ($_ -replace '"', '\"') + '"'
+            }
+            else {
+                $_
+            }
+        }) -join " "
+}
+
+function Get-ArchrealmsIpfsPathSpec {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Cid,
+        [string]$RelativePath
+    )
+
+    $trimmedCid = $Cid.Trim()
+    if ([string]::IsNullOrWhiteSpace($trimmedCid)) {
+        throw "A non-empty CID is required."
+    }
+
+    $pathSpec = "/ipfs/$trimmedCid"
+    if (-not [string]::IsNullOrWhiteSpace($RelativePath)) {
+        $normalizedRelativePath = $RelativePath.Replace("\", "/").TrimStart("/")
+        if (-not [string]::IsNullOrWhiteSpace($normalizedRelativePath)) {
+            $pathSpec += "/" + $normalizedRelativePath
+        }
+    }
+
+    return $pathSpec
+}
+
+function Get-ArchrealmsIpfsCidForPath {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$TargetPath,
+        [string]$IpfsRepoPath,
+        [switch]$OnlyHash
+    )
+
+    $resolvedTargetPath = (Resolve-Path -LiteralPath $TargetPath).Path
+    $arguments = @("add", "-Q", "--cid-version=1", "--hash=sha2-256")
+    if ($OnlyHash) {
+        $arguments += "--only-hash"
+    }
+
+    if ((Get-Item -LiteralPath $resolvedTargetPath).PSIsContainer) {
+        $arguments += "-r"
+    }
+
+    $arguments += $resolvedTargetPath
+    return (Invoke-ArchrealmsIpfsTextCommand -Arguments $arguments -IpfsRepoPath $IpfsRepoPath | Select-Object -Last 1).Trim()
+}
+
+function Read-ArchrealmsIpfsBytes {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Cid,
+        [string]$RelativePath,
+        [string]$IpfsRepoPath
+    )
+
+    $cli = Resolve-ArchrealmsIpfsCli
+    $resolvedRepoPath = Get-ArchrealmsResolvedIpfsRepoPath -IpfsRepoPath $IpfsRepoPath
+    $pathSpec = Get-ArchrealmsIpfsPathSpec -Cid $Cid -RelativePath $RelativePath
+
+    $processStartInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $processStartInfo.FileName = $cli
+    $processStartInfo.Arguments = ConvertTo-ArchrealmsCliArgumentString -Arguments @("cat", $pathSpec)
+    $processStartInfo.UseShellExecute = $false
+    $processStartInfo.RedirectStandardOutput = $true
+    $processStartInfo.RedirectStandardError = $true
+    $processStartInfo.EnvironmentVariables["IPFS_PATH"] = $resolvedRepoPath
+
+    $process = New-Object System.Diagnostics.Process
+    $process.StartInfo = $processStartInfo
+    $null = $process.Start()
+
+    $memoryStream = New-Object System.IO.MemoryStream
+    try {
+        $process.StandardOutput.BaseStream.CopyTo($memoryStream)
+        $process.WaitForExit()
+        $stderr = $process.StandardError.ReadToEnd()
+        if ($process.ExitCode -ne 0) {
+            throw "ipfs cat $pathSpec failed.`n$stderr"
+        }
+    }
+    finally {
+        $process.Dispose()
+    }
+
+    return $memoryStream.ToArray()
 }
 
 function Invoke-ArchrealmsIpfsTextCommand {
@@ -278,6 +391,9 @@ Export-ModuleMember -Function `
     Get-ArchrealmsDefaultIpfsRepoPath, `
     Get-ArchrealmsResolvedIpfsRepoPath, `
     Resolve-ArchrealmsIpfsCli, `
+    Get-ArchrealmsIpfsPathSpec, `
+    Get-ArchrealmsIpfsCidForPath, `
+    Read-ArchrealmsIpfsBytes, `
     Invoke-ArchrealmsIpfsTextCommand, `
     Test-ArchrealmsIpfsRepo, `
     Get-ArchrealmsPathStats, `

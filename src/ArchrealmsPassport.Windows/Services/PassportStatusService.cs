@@ -18,7 +18,7 @@ namespace ArchrealmsPassport.Windows.Services
             {
                 WorkspaceRoot = resolvedWorkspaceRoot,
                 WorkspaceReady = Directory.Exists(resolvedWorkspaceRoot),
-                IpfsCliDetected = ResolveExecutableOnPath("ipfs.exe") != null,
+                IpfsCliDetected = !string.IsNullOrWhiteSpace(PassportEnvironment.ResolveIpfsCliPath()),
                 IpfsRepoPath = resolvedIpfsRepo,
                 IpfsNodePrepared = TryReadNodeRecord(resolvedWorkspaceRoot, out var peerId),
                 NodePeerId = peerId,
@@ -145,28 +145,6 @@ namespace ArchrealmsPassport.Windows.Services
             }
 
             return "Not published";
-        }
-
-        private static string? ResolveExecutableOnPath(string executableName)
-        {
-            var path = Environment.GetEnvironmentVariable("PATH");
-            if (string.IsNullOrWhiteSpace(path))
-            {
-                return null;
-            }
-
-            var segments = path.Split(new[] { Path.PathSeparator }, StringSplitOptions.RemoveEmptyEntries);
-            foreach (var rawSegment in segments)
-            {
-                var segment = rawSegment.Trim();
-                var candidate = Path.Combine(segment, executableName);
-                if (File.Exists(candidate))
-                {
-                    return candidate;
-                }
-            }
-
-            return null;
         }
     }
 }
