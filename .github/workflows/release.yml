@@ -2,9 +2,17 @@ name: release
 
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to publish, for example v0.1.0
+        required: true
+        type: string
   push:
     tags:
       - "v*"
+
+permissions:
+  contents: write
 
 jobs:
   package:
@@ -19,12 +27,39 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
+      - name: Resolve release tag
+        id: release_tag
+        shell: pwsh
+        run: |
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            $tag = "${{ inputs.tag }}"
+          }
+          else {
+            $tag = "${{ github.ref_name }}"
+          }
+
+          if (-not $tag) {
+            throw "Release tag could not be resolved."
+          }
+
+          "tag=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
       - name: Package win-x64 release
         shell: pwsh
-        run: .\tools\release\Publish-PassportWindows.ps1 -DotnetPath (Get-Command dotnet).Source -RuntimeIdentifier win-x64 -Version $env:GITHUB_REF_NAME
+        run: .\tools\release\Publish-PassportWindows.ps1 -DotnetPath (Get-Command dotnet).Source -RuntimeIdentifier win-x64 -Version "${{ steps.release_tag.outputs.tag }}"
 
       - name: Upload release bundle
         uses: actions/upload-artifact@v4
         with:
           name: passport-windows-win-x64
           path: artifacts/release/passport-windows-win-x64
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release_tag.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          generate_release_notes: true
+          files: |
+            artifacts/release/passport-windows-win-x64/passport-windows-win-x64.zip
+            artifacts/release/passport-windows-win-x64/release-manifest.json

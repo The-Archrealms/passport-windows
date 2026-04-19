@@ -140,7 +140,7 @@ That produces:
 GitHub Actions includes:
 
 - `ci.yml` for build plus smoke test on pushes and pull requests
-- `release.yml` for packaging a `win-x64` release bundle on tag push or manual dispatch
+- `release.yml` for packaging a `win-x64` release bundle and creating a GitHub Release on tag push or manual dispatch with a tag input
 
 ## IPFS Tooling
 
