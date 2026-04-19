@@ -1,0 +1,38 @@
+name: ci
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  build-and-smoke:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Build app
+        shell: pwsh
+        run: dotnet build .\src\ArchrealmsPassport.Windows\ArchrealmsPassport.Windows.csproj /m:1 /nr:false /p:UseSharedCompilation=false
+
+      - name: Build verifier
+        shell: pwsh
+        run: dotnet build .\tools\registry-verifier\Archrealms.RegistryVerifier.csproj
+
+      - name: Run smoke test
+        shell: pwsh
+        run: .\tools\passport\Invoke-ArchrealmsPassportSmokeTest.ps1 -DotnetPath (Get-Command dotnet).Source -OutputPath .\artifacts\passport-smoke-report.json
+
+      - name: Upload smoke report
+        uses: actions/upload-artifact@v4
+        with:
+          name: passport-smoke-report
+          path: artifacts/passport-smoke-report.json

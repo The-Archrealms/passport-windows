@@ -1,0 +1,30 @@
+name: release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  package:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Package win-x64 release
+        shell: pwsh
+        run: .\tools\release\Publish-PassportWindows.ps1 -DotnetPath (Get-Command dotnet).Source -RuntimeIdentifier win-x64 -Version $env:GITHUB_REF_NAME
+
+      - name: Upload release bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: passport-windows-win-x64
+          path: artifacts/release/passport-windows-win-x64

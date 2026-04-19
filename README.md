@@ -11,6 +11,8 @@ It is a public-facing desktop app and tooling bundle for:
 - publishing registry submission packages to IPFS
 - initializing and managing a local Kubo node for Passport participation
 
+The repository is published under the [MIT License](LICENSE).
+
 ## Current Scope
 
 This repo intentionally focuses on the Windows Passport client and its local tooling.
@@ -104,6 +106,41 @@ dotnet build .\tools\registry-verifier\Archrealms.RegistryVerifier.csproj
 ```
 
 The project file copies the local `tools/` and `registry/templates/` folders into the app output so the desktop client can use the bundled scripts.
+
+## Smoke Test
+
+Run the end-to-end local smoke test:
+
+```powershell
+.\tools\passport\Invoke-ArchrealmsPassportSmokeTest.ps1
+```
+
+That script exercises:
+
+- creation of a new identity
+- delegated join request and approval
+- anchored and unanchored verification of the resulting submission package
+
+It writes a JSON report to a temporary directory by default, or to a custom path if `-OutputPath` is supplied.
+
+## Release Packaging
+
+Create a packaged Windows release bundle:
+
+```powershell
+.\tools\release\Publish-PassportWindows.ps1 -RuntimeIdentifier win-x64
+```
+
+That produces:
+
+- a published application directory under `artifacts/release/passport-windows-win-x64/publish`
+- a zipped bundle under `artifacts/release/passport-windows-win-x64/passport-windows-win-x64.zip`
+- a release manifest with file hashes under `artifacts/release/passport-windows-win-x64/release-manifest.json`
+
+GitHub Actions includes:
+
+- `ci.yml` for build plus smoke test on pushes and pull requests
+- `release.yml` for packaging a `win-x64` release bundle on tag push or manual dispatch
 
 ## IPFS Tooling
 

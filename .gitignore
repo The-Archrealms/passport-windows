@@ -9,8 +9,10 @@ tools/**/bin/
 tools/**/obj/
 
 records/
+artifacts/
 *.car
 ipfs-publication.json
 verification-report.json
+passport-smoke-report.json
 
 *.pkcs8.protected
