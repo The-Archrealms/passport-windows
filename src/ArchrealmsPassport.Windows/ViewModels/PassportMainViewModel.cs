@@ -52,7 +52,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
         private string _joinApprovalPath = string.Empty;
         private string _challengeText = string.Empty;
         private string _challengeSignatureText = "No signed challenge yet";
-        private string _registrySubmissionText = "No registry submission package yet";
+        private string _registrySubmissionText = "No registration package yet";
         private string _registrySubmissionCidText = "Not published";
         private string _readOnlyIpfsCid = string.Empty;
         private string _readOnlyIpfsRelativePath = string.Empty;
@@ -124,7 +124,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
             _importJoinApprovalCommand = new AsyncRelayCommand(ImportJoinApprovalAsync, CanImportJoinApproval);
             _generateChallengeCommand = new AsyncRelayCommand(GenerateChallengeAsync);
             _signChallengeCommand = new AsyncRelayCommand(SignChallengeAsync, CanUseActiveDeviceCredential);
-            _createRegistrySubmissionCommand = new AsyncRelayCommand(CreateRegistrySubmissionAsync, CanUseActiveDeviceCredential);
+            _createRegistrySubmissionCommand = new AsyncRelayCommand(RegisterWithArchrealmsAsync, CanRegisterWithArchrealms);
             _publishRegistrySubmissionCommand = new AsyncRelayCommand(PublishRegistrySubmissionAsync, CanPublishRegistrySubmission);
             _previewReadOnlyIpfsFileCommand = new AsyncRelayCommand(PreviewReadOnlyIpfsFileAsync, CanReadOnlyAccessIpfsFile);
             _fetchReadOnlyIpfsFileCommand = new AsyncRelayCommand(FetchReadOnlyIpfsFileAsync, CanReadOnlyAccessIpfsFile);

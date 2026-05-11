@@ -146,12 +146,12 @@ namespace ArchrealmsPassport.Windows.ViewModels
             {
                 if (IsPublishedRegistrySubmission())
                 {
-                    return "Published: " + ShortenIdentifier(RegistrySubmissionCidText);
+                    return "Registered: " + ShortenIdentifier(RegistrySubmissionCidText);
                 }
 
                 return HasRegistrySubmissionPackage()
-                    ? "Package ready"
-                    : "No package";
+                    ? "Ready to publish"
+                    : "Not registered";
             }
         }
 
@@ -169,9 +169,9 @@ namespace ArchrealmsPassport.Windows.ViewModels
                     return "Enable Storage";
                 }
 
-                if (!HasRegistrySubmissionPackage())
+                if (!IsPublishedRegistrySubmission())
                 {
-                    return "Prepare Registry Package";
+                    return "Register with Archrealms";
                 }
 
                 return "Refresh Status";

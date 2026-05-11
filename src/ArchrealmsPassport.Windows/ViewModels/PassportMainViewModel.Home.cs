@@ -20,9 +20,9 @@ namespace ArchrealmsPassport.Windows.ViewModels
                 return;
             }
 
-            if (!HasRegistrySubmissionPackage() && CanUseActiveDeviceCredential())
+            if (!IsPublishedRegistrySubmission() && CanRegisterWithArchrealms())
             {
-                await CreateRegistrySubmissionAsync();
+                await RegisterWithArchrealmsAsync();
                 return;
             }
 
@@ -41,12 +41,40 @@ namespace ArchrealmsPassport.Windows.ViewModels
                 return CanRunWorkspaceAction();
             }
 
-            if (!HasRegistrySubmissionPackage())
+            if (!IsPublishedRegistrySubmission())
             {
-                return CanUseActiveDeviceCredential();
+                return CanRegisterWithArchrealms();
             }
 
             return true;
+        }
+
+        private async Task RegisterWithArchrealmsAsync()
+        {
+            if (!HasRegistrySubmissionPackage() && !TryCreateRegistrySubmission())
+            {
+                return;
+            }
+
+            if (!CanPublishRegistrySubmission())
+            {
+                AppendLog("Registration package is ready, but the local node must be enabled before it can be published.");
+                return;
+            }
+
+            await PublishRegistrySubmissionAsync();
+        }
+
+        private bool CanRegisterWithArchrealms()
+        {
+            if (IsPublishedRegistrySubmission() || !HasActiveNode())
+            {
+                return false;
+            }
+
+            return HasRegistrySubmissionPackage()
+                ? CanPublishRegistrySubmission()
+                : CanUseActiveDeviceCredential();
         }
 
         private bool HasActivePassport()
@@ -63,6 +91,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
         {
             return !string.IsNullOrWhiteSpace(RegistrySubmissionText)
                 && !string.Equals(RegistrySubmissionText, "No registry submission package yet", StringComparison.Ordinal)
+                && !string.Equals(RegistrySubmissionText, "No registration package yet", StringComparison.Ordinal)
                 && File.Exists(RegistrySubmissionText);
         }
 

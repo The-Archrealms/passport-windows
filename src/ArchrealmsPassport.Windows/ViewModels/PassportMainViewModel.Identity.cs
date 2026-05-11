@@ -301,6 +301,12 @@ namespace ArchrealmsPassport.Windows.ViewModels
 
         private Task CreateRegistrySubmissionAsync()
         {
+            TryCreateRegistrySubmission();
+            return Task.CompletedTask;
+        }
+
+        private bool TryCreateRegistrySubmission()
+        {
             var result = _cryptoService.CreateRegistrySubmission(
                 WorkspaceRoot,
                 ActiveIdentityId,
@@ -310,7 +316,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
             if (!result.Succeeded)
             {
                 AppendLog(result.Message);
-                return Task.CompletedTask;
+                return false;
             }
 
             RegistrySubmissionText = result.SubmissionPath;
@@ -320,7 +326,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
             AppendLog("Manifest: " + result.ManifestPath);
             AppendLog("Manifest signature: " + result.SignaturePath);
             AppendLog("Verified with public key: " + result.VerifiedWithPublicKey);
-            return Task.CompletedTask;
+            return true;
         }
     }
 }
