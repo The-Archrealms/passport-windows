@@ -222,9 +222,9 @@
                                         <ColumnDefinition Width="80" />
                                     </Grid.ColumnDefinitions>
                                     <Slider AutomationProperties.AutomationId="StorageAllocationSlider"
-                                            Minimum="5"
+                                            Minimum="1"
                                             Maximum="500"
-                                            TickFrequency="5"
+                                            TickFrequency="1"
                                             IsSnapToTickEnabled="True"
                                             Value="{Binding StorageAllocationGb, UpdateSourceTrigger=PropertyChanged}" />
                                     <TextBlock Grid.Column="1"
@@ -349,9 +349,9 @@
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="90" />
                                     </Grid.ColumnDefinitions>
-                                    <Slider Minimum="5"
+                                    <Slider Minimum="1"
                                             Maximum="500"
-                                            TickFrequency="5"
+                                            TickFrequency="1"
                                             IsSnapToTickEnabled="True"
                                             Value="{Binding StorageAllocationGb, UpdateSourceTrigger=PropertyChanged}" />
                                     <TextBlock Grid.Column="1"

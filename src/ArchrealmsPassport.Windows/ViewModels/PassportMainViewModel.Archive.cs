@@ -570,7 +570,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
                 WorkspaceRoot = WorkspaceRoot,
                 IpfsRepoPath = IpfsRepoPath,
                 IpfsCliPathOverride = IpfsCliPathOverride,
-                StorageAllocationGb = Math.Max(5, (int)Math.Round(StorageAllocationGb)),
+                StorageAllocationGb = Math.Max(1, (int)Math.Round(StorageAllocationGb)),
                 NodeParticipationMode = NodeParticipationMode,
                 NodeCachePolicy = NodeCachePolicy,
                 ParticipateInPublicRegistry = ParticipateInPublicRegistry,

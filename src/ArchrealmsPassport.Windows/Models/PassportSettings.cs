@@ -17,7 +17,7 @@ namespace ArchrealmsPassport.Windows.Models
         public string WorkspaceRoot { get; set; } = string.Empty;
         public string IpfsRepoPath { get; set; } = string.Empty;
         public string IpfsCliPathOverride { get; set; } = string.Empty;
-        public int StorageAllocationGb { get; set; } = 25;
+        public int StorageAllocationGb { get; set; } = 1;
         public string NodeParticipationMode { get; set; } = "Public archive contributor";
         public string NodeCachePolicy { get; set; } = "Balanced pinned archive";
         public bool ParticipateInPublicRegistry { get; set; } = true;

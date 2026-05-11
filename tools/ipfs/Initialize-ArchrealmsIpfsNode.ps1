@@ -5,7 +5,7 @@ param(
     [string]$ApiMultiaddr = "/ip4/127.0.0.1/tcp/5001",
     [string]$GatewayMultiaddr = "/ip4/127.0.0.1/tcp/8080",
     [int]$SwarmPort = 4001,
-    [string]$StorageMax = "10GB",
+    [string]$StorageMax = "1GB",
     [int]$StorageGCWatermark = 85,
     [string]$ProvideStrategy = "pinned",
     [string]$ParticipationMode = "Public archive contributor",

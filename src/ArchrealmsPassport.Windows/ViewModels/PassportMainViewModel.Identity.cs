@@ -31,7 +31,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
             WorkspaceRoot = string.IsNullOrWhiteSpace(settings.WorkspaceRoot) ? PassportEnvironment.GetDefaultWorkspaceRoot() : settings.WorkspaceRoot;
             IpfsRepoPath = string.IsNullOrWhiteSpace(settings.IpfsRepoPath) ? PassportEnvironment.GetDefaultIpfsRepoPath() : settings.IpfsRepoPath;
             IpfsCliPathOverride = settings.IpfsCliPathOverride;
-            StorageAllocationGb = settings.StorageAllocationGb <= 0 ? 25 : settings.StorageAllocationGb;
+            StorageAllocationGb = settings.StorageAllocationGb <= 0 ? 1 : settings.StorageAllocationGb;
             NodeParticipationMode = settings.ParticipateInPublicRegistry
                 ? settings.NodeParticipationMode
                 : "Read-only cache";

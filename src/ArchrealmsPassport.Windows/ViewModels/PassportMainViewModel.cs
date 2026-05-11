@@ -76,7 +76,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
         private string _workspaceRoot = string.Empty;
         private string _ipfsRepoPath = string.Empty;
         private string _ipfsCliPathOverride = string.Empty;
-        private double _storageAllocationGb = 25;
+        private double _storageAllocationGb = 1;
         private string _nodeParticipationMode = "Public archive contributor";
         private string _nodeCachePolicy = "Balanced pinned archive";
         private bool _participateInPublicRegistry = true;
