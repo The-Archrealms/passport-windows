@@ -27,6 +27,10 @@ jobs:
         shell: pwsh
         run: dotnet build .\tools\registry-verifier\Archrealms.RegistryVerifier.csproj
 
+      - name: Run unit and service tests
+        shell: pwsh
+        run: dotnet test .\tests\ArchrealmsPassport.Windows.Tests\ArchrealmsPassport.Windows.Tests.csproj -c Release /m:1 /nr:false /p:UseSharedCompilation=false
+
       - name: Run smoke test
         shell: pwsh
         run: .\tools\passport\Invoke-ArchrealmsPassportSmokeTest.ps1 -DotnetPath (Get-Command dotnet).Source -OutputPath .\artifacts\passport-smoke-report.json

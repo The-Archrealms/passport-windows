@@ -1,101 +1,255 @@
 param(
-    [string]$OutputRoot
+    [string]$PackageAssetRoot,
+    [string]$DesktopAssetRoot
 )
 
 $ErrorActionPreference = "Stop"
 
 Add-Type -AssemblyName System.Drawing
 
-if (-not $OutputRoot) {
-    $OutputRoot = Join-Path (Resolve-Path (Join-Path $PSScriptRoot "..\..\src\ArchrealmsPassport.Windows.Package")).Path "Assets"
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+
+public static class PassportWindowsNativeMethods
+{
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    public static extern bool DestroyIcon(IntPtr handle);
+}
+"@
+
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+
+if (-not $PackageAssetRoot) {
+    $PackageAssetRoot = Join-Path $repoRoot "src\ArchrealmsPassport.Windows.Package\Assets"
 }
 
-New-Item -ItemType Directory -Force $OutputRoot | Out-Null
+if (-not $DesktopAssetRoot) {
+    $DesktopAssetRoot = Join-Path $repoRoot "src\ArchrealmsPassport.Windows\Assets"
+}
 
-$background = [System.Drawing.Color]::FromArgb(11, 19, 43)
-$accent = [System.Drawing.Color]::FromArgb(243, 244, 246)
-$banner = [System.Drawing.Color]::FromArgb(59, 130, 246)
+New-Item -ItemType Directory -Force $PackageAssetRoot | Out-Null
+New-Item -ItemType Directory -Force $DesktopAssetRoot | Out-Null
 
-function New-PassportLogo {
+$midnightBlue = [System.Drawing.Color]::FromArgb(21, 37, 59)
+$archGold = [System.Drawing.Color]::FromArgb(200, 160, 74)
+$parchment = [System.Drawing.Color]::FromArgb(244, 233, 210)
+$warmParchment = [System.Drawing.Color]::FromArgb(255, 249, 241)
+$transparent = [System.Drawing.Color]::FromArgb(0, 0, 0, 0)
+
+function New-Font {
     param(
-        [string]$Path,
-        [int]$Width,
-        [int]$Height,
-        [bool]$Wide
+        [string]$Family,
+        [float]$Size,
+        [System.Drawing.FontStyle]$Style = [System.Drawing.FontStyle]::Regular
     )
 
-    $bitmap = New-Object System.Drawing.Bitmap $Width, $Height
+    return [System.Drawing.Font]::new($Family, $Size, $Style, [System.Drawing.GraphicsUnit]::Pixel)
+}
+
+function New-Canvas {
+    param(
+        [int]$Width,
+        [int]$Height
+    )
+
+    return New-Object System.Drawing.Bitmap $Width, $Height, ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+}
+
+function Draw-OrderEmblem {
+    param(
+        [System.Drawing.Graphics]$Graphics,
+        [double]$CenterX,
+        [double]$CenterY,
+        [double]$Diameter,
+        [bool]$DrawField = $true,
+        [double]$FieldScale = 1.0
+    )
+
+    $fieldDiameter = $Diameter * $FieldScale
+    $fieldRadius = $fieldDiameter / 2.0
+    $fieldX = $CenterX - $fieldRadius
+    $fieldY = $CenterY - $fieldRadius
+
+    if ($DrawField) {
+        $fieldBrush = New-Object System.Drawing.SolidBrush $midnightBlue
+        $Graphics.FillEllipse($fieldBrush, $fieldX, $fieldY, $fieldDiameter, $fieldDiameter)
+        $fieldBrush.Dispose()
+    }
+
+    $ringPen = New-Object System.Drawing.Pen $archGold, ([float][Math]::Max($Diameter * 0.08, 2.0))
+    $ringPen.Alignment = [System.Drawing.Drawing2D.PenAlignment]::Center
+    $Graphics.DrawEllipse($ringPen,
+        $CenterX - ($Diameter * 0.43),
+        $CenterY - ($Diameter * 0.43),
+        $Diameter * 0.86,
+        $Diameter * 0.86)
+    $ringPen.Dispose()
+
+    $archPen = New-Object System.Drawing.Pen $archGold, ([float][Math]::Max($Diameter * 0.085, 2.0))
+    $archPen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
+    $archPen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
+    $archPen.LineJoin = [System.Drawing.Drawing2D.LineJoin]::Round
+
+    $innerArchPen = New-Object System.Drawing.Pen $archGold, ([float][Math]::Max($Diameter * 0.038, 1.0))
+    $innerArchPen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
+    $innerArchPen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
+    $innerArchPen.LineJoin = [System.Drawing.Drawing2D.LineJoin]::Round
+
+    $leftBaseX = $CenterX - ($Diameter * 0.18)
+    $rightBaseX = $CenterX + ($Diameter * 0.18)
+    $outerBaseY = $CenterY + ($Diameter * 0.25)
+    $outerTopY = $CenterY - ($Diameter * 0.18)
+    $outerArcRect = New-Object System.Drawing.RectangleF(
+        [float]($CenterX - ($Diameter * 0.18)),
+        [float]($CenterY - ($Diameter * 0.54)),
+        [float]($Diameter * 0.36),
+        [float]($Diameter * 0.72))
+    $Graphics.DrawLine($archPen, [float]$leftBaseX, [float]$outerBaseY, [float]$leftBaseX, [float]$outerTopY)
+    $Graphics.DrawLine($archPen, [float]$rightBaseX, [float]$outerBaseY, [float]$rightBaseX, [float]$outerTopY)
+    $Graphics.DrawArc($archPen, $outerArcRect, 180, 180)
+
+    $innerLeftBaseX = $CenterX - ($Diameter * 0.095)
+    $innerRightBaseX = $CenterX + ($Diameter * 0.095)
+    $innerBaseY = $CenterY + ($Diameter * 0.25)
+    $innerTopY = $CenterY - ($Diameter * 0.08)
+    $innerArcRect = New-Object System.Drawing.RectangleF(
+        [float]($CenterX - ($Diameter * 0.095)),
+        [float]($CenterY - ($Diameter * 0.35)),
+        [float]($Diameter * 0.19),
+        [float]($Diameter * 0.54))
+    $Graphics.DrawLine($innerArchPen, [float]$innerLeftBaseX, [float]$innerBaseY, [float]$innerLeftBaseX, [float]$innerTopY)
+    $Graphics.DrawLine($innerArchPen, [float]$innerRightBaseX, [float]$innerBaseY, [float]$innerRightBaseX, [float]$innerTopY)
+    $Graphics.DrawArc($innerArchPen, $innerArcRect, 180, 180)
+
+    $archPen.Dispose()
+    $innerArchPen.Dispose()
+
+    $starBrush = New-Object System.Drawing.SolidBrush $parchment
+    $starPath = New-Object System.Drawing.Drawing2D.GraphicsPath
+    $starRadius = $Diameter * 0.22
+    $armWidth = $Diameter * 0.045
+    $starPath.StartFigure()
+    $starPath.AddPolygon(@(
+        [System.Drawing.PointF]::new([float]$CenterX, [float]($CenterY - $starRadius)),
+        [System.Drawing.PointF]::new([float]($CenterX + $armWidth), [float]($CenterY - $armWidth)),
+        [System.Drawing.PointF]::new([float]($CenterX + $starRadius), [float]$CenterY),
+        [System.Drawing.PointF]::new([float]($CenterX + $armWidth), [float]($CenterY + $armWidth)),
+        [System.Drawing.PointF]::new([float]$CenterX, [float]($CenterY + $starRadius)),
+        [System.Drawing.PointF]::new([float]($CenterX - $armWidth), [float]($CenterY + $armWidth)),
+        [System.Drawing.PointF]::new([float]($CenterX - $starRadius), [float]$CenterY),
+        [System.Drawing.PointF]::new([float]($CenterX - $armWidth), [float]($CenterY - $armWidth))
+    ))
+    $Graphics.FillPath($starBrush, $starPath)
+    $starPath.Dispose()
+    $starBrush.Dispose()
+}
+
+function New-OrderBitmap {
+    param(
+        [int]$Width,
+        [int]$Height,
+        [bool]$Wide,
+        [bool]$TransparentBackground = $false
+    )
+
+    $bitmap = New-Canvas -Width $Width -Height $Height
     $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
 
     try {
         $graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::HighQuality
         $graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
-        $graphics.Clear($background)
-
-        $bannerHeight = [Math]::Max([int]($Height * 0.18), 8)
-        $bannerRect = New-Object System.Drawing.Rectangle(0, 0, $Width, $bannerHeight)
-        $bannerBrush = New-Object System.Drawing.SolidBrush $banner
-        $graphics.FillRectangle($bannerBrush, $bannerRect)
-        $bannerBrush.Dispose()
-
-        $inset = [Math]::Max([int]($Width * 0.14), 6)
-        $shieldWidth = if ($Wide) { [Math]::Min([int]($Height * 0.7), [int]($Width * 0.28)) } else { [Math]::Min([int]($Width * 0.62), [int]($Height * 0.62)) }
-        $shieldHeight = [Math]::Min([int]($Height * 0.58), [int]($Width * 0.72))
-        $shieldX = if ($Wide) { $inset } else { [int](($Width - $shieldWidth) / 2) }
-        $shieldY = if ($Wide) { [Math]::Max([int](($Height - $shieldHeight) / 2), $bannerHeight + 4) } else { [int](($Height - $shieldHeight) / 2) }
-        $radius = [Math]::Max([int]($shieldWidth * 0.16), 6)
-
-        $shieldPath = New-Object System.Drawing.Drawing2D.GraphicsPath
-        $shieldPath.AddArc($shieldX, $shieldY, $radius, $radius, 180, 90)
-        $shieldPath.AddArc($shieldX + $shieldWidth - $radius, $shieldY, $radius, $radius, 270, 90)
-        $shieldPath.AddArc($shieldX + $shieldWidth - $radius, $shieldY + $shieldHeight - $radius, $radius, $radius, 0, 90)
-        $shieldPath.AddArc($shieldX, $shieldY + $shieldHeight - $radius, $radius, $radius, 90, 90)
-        $shieldPath.CloseFigure()
-
-        $shieldBrush = New-Object System.Drawing.SolidBrush $accent
-        $graphics.FillPath($shieldBrush, $shieldPath)
-        $shieldBrush.Dispose()
-
-        $monogramFontSize = if ($Wide) { [Math]::Max([int]($shieldHeight * 0.28), 12) } else { [Math]::Max([int]($shieldWidth * 0.24), 10) }
-        $monogramFont = [System.Drawing.Font]::new("Segoe UI", $monogramFontSize, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
-        $monogramBrush = New-Object System.Drawing.SolidBrush $background
-        $text = "AR"
-        $textSize = $graphics.MeasureString($text, $monogramFont)
-        $textX = [int]($shieldX + (($shieldWidth - $textSize.Width) / 2))
-        $textY = [int]($shieldY + (($shieldHeight - $textSize.Height) / 2))
-        $graphics.DrawString($text, $monogramFont, $monogramBrush, $textX, $textY)
-        $monogramBrush.Dispose()
-        $monogramFont.Dispose()
+        $graphics.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
+        $graphics.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::AntiAliasGridFit
+        $graphics.Clear($(if ($TransparentBackground) { $transparent } else { $midnightBlue }))
 
         if ($Wide) {
-            $titleFontSize = [Math]::Max([int]($Height * 0.18), 14)
-            $titleFont = [System.Drawing.Font]::new("Segoe UI", $titleFontSize, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
-            $titleBrush = New-Object System.Drawing.SolidBrush $accent
-            $subtitleFont = [System.Drawing.Font]::new("Segoe UI", [Math]::Max([int]($Height * 0.1), 10), [System.Drawing.FontStyle]::Regular, [System.Drawing.GraphicsUnit]::Pixel)
-            $subtitleBrush = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(204, $accent))
+            $margin = [Math]::Max([int]($Height * 0.12), 14)
+            $emblemSize = [Math]::Min([int]($Height * 0.72), [int]($Width * 0.27))
+            $emblemCenterX = $margin + ($emblemSize / 2.0)
+            $emblemCenterY = $Height / 2.0
+            Draw-OrderEmblem -Graphics $graphics -CenterX $emblemCenterX -CenterY $emblemCenterY -Diameter $emblemSize -DrawField $true
 
-            $titleX = $shieldX + $shieldWidth + $inset
-            $titleY = [Math]::Max([int]($Height * 0.27), $bannerHeight + 6)
-            $graphics.DrawString("Passport", $titleFont, $titleBrush, $titleX, $titleY)
-            $graphics.DrawString("Archrealms", $subtitleFont, $subtitleBrush, $titleX, $titleY + $titleFont.Height - 4)
+            $titleX = [int]($margin + $emblemSize + ($Width * 0.06))
+            $titleY = [int]($Height * 0.26)
+            $titleFont = New-Font -Family "Segoe UI" -Size ([float][Math]::Max($Height * 0.17, 14)) -Style ([System.Drawing.FontStyle]::Bold)
+            $subtitleFont = New-Font -Family "Segoe UI" -Size ([float][Math]::Max($Height * 0.078, 10))
+            $titleBrush = New-Object System.Drawing.SolidBrush $parchment
+            $subtitleBrush = New-Object System.Drawing.SolidBrush $warmParchment
 
-            $subtitleBrush.Dispose()
-            $subtitleFont.Dispose()
+            $graphics.DrawString("Archrealms Passport", $titleFont, $titleBrush, $titleX, $titleY)
+            $graphics.DrawString("The Order of the Archrealms", $subtitleFont, $subtitleBrush, $titleX, ($titleY + $titleFont.Height - 2))
+
             $titleBrush.Dispose()
+            $subtitleBrush.Dispose()
             $titleFont.Dispose()
+            $subtitleFont.Dispose()
+        }
+        else {
+            $diameter = [Math]::Min($Width, $Height) * $(if ($TransparentBackground) { 0.9 } else { 0.78 })
+            Draw-OrderEmblem -Graphics $graphics -CenterX ($Width / 2.0) -CenterY ($Height / 2.0) -Diameter $diameter -DrawField $true
         }
 
-        $bitmap.Save($Path, [System.Drawing.Imaging.ImageFormat]::Png)
+        return $bitmap
     }
     finally {
         $graphics.Dispose()
-        $bitmap.Dispose()
     }
 }
 
-New-PassportLogo -Path (Join-Path $OutputRoot "StoreLogo.png") -Width 50 -Height 50 -Wide:$false
-New-PassportLogo -Path (Join-Path $OutputRoot "Square44x44Logo.png") -Width 44 -Height 44 -Wide:$false
-New-PassportLogo -Path (Join-Path $OutputRoot "Square71x71Logo.png") -Width 71 -Height 71 -Wide:$false
-New-PassportLogo -Path (Join-Path $OutputRoot "Square150x150Logo.png") -Width 150 -Height 150 -Wide:$false
-New-PassportLogo -Path (Join-Path $OutputRoot "Wide310x150Logo.png") -Width 310 -Height 150 -Wide:$true
-New-PassportLogo -Path (Join-Path $OutputRoot "SplashScreen.png") -Width 620 -Height 300 -Wide:$true
+function Save-Bitmap {
+    param(
+        [System.Drawing.Bitmap]$Bitmap,
+        [string]$Path
+    )
+
+    try {
+        $Bitmap.Save($Path, [System.Drawing.Imaging.ImageFormat]::Png)
+    }
+    finally {
+        $Bitmap.Dispose()
+    }
+}
+
+function Save-IconFromBitmap {
+    param(
+        [System.Drawing.Bitmap]$Bitmap,
+        [string]$Path
+    )
+
+    $handle = [IntPtr]::Zero
+    $icon = $null
+
+    try {
+        $handle = $Bitmap.GetHicon()
+        $icon = [System.Drawing.Icon]::FromHandle($handle)
+        $stream = [System.IO.File]::Open($Path, [System.IO.FileMode]::Create, [System.IO.FileAccess]::Write)
+        try {
+            $icon.Save($stream)
+        }
+        finally {
+            $stream.Dispose()
+        }
+    }
+    finally {
+        if ($icon) {
+            $icon.Dispose()
+        }
+
+        if ($handle -ne [IntPtr]::Zero) {
+            [PassportWindowsNativeMethods]::DestroyIcon($handle) | Out-Null
+        }
+
+        $Bitmap.Dispose()
+    }
+}
+
+Save-Bitmap -Bitmap (New-OrderBitmap -Width 50 -Height 50 -Wide:$false) -Path (Join-Path $PackageAssetRoot "StoreLogo.png")
+Save-Bitmap -Bitmap (New-OrderBitmap -Width 44 -Height 44 -Wide:$false) -Path (Join-Path $PackageAssetRoot "Square44x44Logo.png")
+Save-Bitmap -Bitmap (New-OrderBitmap -Width 71 -Height 71 -Wide:$false) -Path (Join-Path $PackageAssetRoot "Square71x71Logo.png")
+Save-Bitmap -Bitmap (New-OrderBitmap -Width 150 -Height 150 -Wide:$false) -Path (Join-Path $PackageAssetRoot "Square150x150Logo.png")
+Save-Bitmap -Bitmap (New-OrderBitmap -Width 310 -Height 150 -Wide:$true) -Path (Join-Path $PackageAssetRoot "Wide310x150Logo.png")
+Save-Bitmap -Bitmap (New-OrderBitmap -Width 620 -Height 300 -Wide:$true) -Path (Join-Path $PackageAssetRoot "SplashScreen.png")
+
+Save-Bitmap -Bitmap (New-OrderBitmap -Width 256 -Height 256 -Wide:$false) -Path (Join-Path $DesktopAssetRoot "OrderEmblem.png")
+Save-IconFromBitmap -Bitmap (New-OrderBitmap -Width 256 -Height 256 -Wide:$false) -Path (Join-Path $DesktopAssetRoot "AppIcon.ico")

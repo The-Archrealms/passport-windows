@@ -1,10 +1,20 @@
 param(
     [string]$Version,
+    [ValidateSet("Sideload", "Store")]
+    [string]$Channel = "Sideload",
     [ValidateSet("x64", "x86", "arm64")]
     [string]$Platform = "x64",
     [string]$Configuration = "Release",
     [string]$OutputRoot,
     [string]$DotnetPath,
+    [string]$IpfsCliPath,
+    [string]$KuboVersion = "v0.41.0",
+    [string]$PackageIdentityName,
+    [string]$PackagePublisher,
+    [string]$PublisherDisplayName,
+    [string]$PackageDisplayName,
+    [string]$PackageDescription,
+    [string]$PackageFileName,
     [string]$MakeAppxPath,
     [string]$SignToolPath,
     [string]$TimestampUrl,
@@ -12,10 +22,12 @@ param(
     [string]$CertificatePassword,
     [string]$CertificatePfxBase64,
     [bool]$SelfContained = $true,
+    [switch]$SkipIpfsRuntimeBootstrap,
     [switch]$SkipSignatureVerification
 )
 
 $ErrorActionPreference = "Stop"
+Import-Module (Join-Path $PSScriptRoot "PassportWindowsRelease.psm1") -Force -DisableNameChecking
 
 function Resolve-DotnetPath {
     param(
@@ -65,6 +77,86 @@ function Resolve-WindowsSdkTool {
     }
 
     return $candidate
+}
+
+function Import-CertificateIntoCurrentUserStore {
+    param(
+        [System.Security.Cryptography.X509Certificates.X509Certificate2]$Certificate,
+        [string]$Path,
+        [string]$StoreName
+    )
+
+    $storeNameValue = [System.Enum]::Parse(
+        [System.Security.Cryptography.X509Certificates.StoreName],
+        $StoreName)
+    $store = [System.Security.Cryptography.X509Certificates.X509Store]::new(
+        $storeNameValue,
+        [System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser)
+    $added = $false
+
+    try {
+        $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadOnly)
+        $existing = $store.Certificates.Find(
+            [System.Security.Cryptography.X509Certificates.X509FindType]::FindByThumbprint,
+            $Certificate.Thumbprint,
+            $false)
+    }
+    finally {
+        $store.Close()
+    }
+
+    if ($existing.Count -eq 0) {
+        Invoke-CertutilAddStore -StoreName $StoreName -Path $Path
+        $added = $true
+    }
+
+    return [pscustomobject]@{
+        Store = "Cert:\CurrentUser\$StoreName"
+        Thumbprint = $Certificate.Thumbprint
+        Added = $added
+    }
+}
+
+function Invoke-CertutilAddStore {
+    param(
+        [string]$StoreName,
+        [string]$Path
+    )
+
+    $escapedStoreName = $StoreName.Replace('"', '\"')
+    $escapedPath = $Path.Replace('"', '\"')
+    $processInfo = [System.Diagnostics.ProcessStartInfo]::new()
+    $processInfo.FileName = "certutil.exe"
+    $processInfo.Arguments = "-user -addstore -f `"$escapedStoreName`" `"$escapedPath`""
+    $processInfo.UseShellExecute = $false
+    $processInfo.RedirectStandardInput = $true
+    $processInfo.RedirectStandardOutput = $true
+    $processInfo.RedirectStandardError = $true
+    $processInfo.CreateNoWindow = $true
+
+    $process = [System.Diagnostics.Process]::new()
+    $process.StartInfo = $processInfo
+    $null = $process.Start()
+    $process.StandardInput.WriteLine("Y")
+    $process.StandardInput.WriteLine("Y")
+    $process.StandardInput.WriteLine("Y")
+    $process.StandardInput.Close()
+
+    if (-not $process.WaitForExit(30000)) {
+        try {
+            $process.Kill()
+        }
+        catch {
+        }
+
+        throw "Timed out importing signing certificate into CurrentUser\$StoreName."
+    }
+
+    $stdout = $process.StandardOutput.ReadToEnd()
+    $stderr = $process.StandardError.ReadToEnd()
+    if ($process.ExitCode -ne 0) {
+        throw ("Failed to import signing certificate into CurrentUser\$StoreName. " + $stdout + " " + $stderr).Trim()
+    }
 }
 
 function ConvertTo-AppxVersion {
@@ -128,6 +220,64 @@ function Get-Sha256 {
     return (Get-FileHash -Algorithm SHA256 -LiteralPath $Path).Hash.ToLowerInvariant()
 }
 
+function Resolve-IpfsCliSourcePath {
+    param(
+        [string]$PreferredPath
+    )
+
+    if (-not $PreferredPath -and $env:ARCHREALMS_IPFS_CLI) {
+        $PreferredPath = $env:ARCHREALMS_IPFS_CLI
+    }
+
+    if ($PreferredPath) {
+        if (-not (Test-Path -LiteralPath $PreferredPath)) {
+            throw "The requested IPFS CLI path does not exist: $PreferredPath"
+        }
+
+        return (Resolve-Path -LiteralPath $PreferredPath).Path
+    }
+
+    $command = Get-Command ipfs -ErrorAction SilentlyContinue
+    if ($command) {
+        return $command.Source
+    }
+
+    $candidates = @(
+        (Join-Path $env:LOCALAPPDATA "Programs\\IPFS Desktop\\resources\\app.asar.unpacked\\node_modules\\kubo\\kubo\\ipfs.exe"),
+        (Join-Path $env:ProgramFiles "IPFS Desktop\\resources\\app.asar.unpacked\\node_modules\\kubo\\kubo\\ipfs.exe"),
+        (Join-Path ${env:ProgramFiles(x86)} "IPFS Desktop\\resources\\app.asar.unpacked\\node_modules\\kubo\\kubo\\ipfs.exe")
+    ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+
+    foreach ($candidate in $candidates) {
+        if (Test-Path -LiteralPath $candidate) {
+            return (Resolve-Path -LiteralPath $candidate).Path
+        }
+    }
+
+    return ""
+}
+
+function Stage-BundledIpfsRuntime {
+    param(
+        [string]$PublishDir,
+        [string]$PreferredPath,
+        [string]$Platform,
+        [string]$RuntimeIdentifier,
+        [string]$KuboVersion,
+        [string]$DownloadRoot,
+        [switch]$DownloadIfMissing
+    )
+
+    return Stage-PassportWindowsBundledIpfsRuntime `
+        -PublishDir $PublishDir `
+        -PreferredPath $PreferredPath `
+        -Platform $Platform `
+        -RuntimeIdentifier $RuntimeIdentifier `
+        -KuboVersion $KuboVersion `
+        -DownloadRoot $DownloadRoot `
+        -DownloadIfMissing:$DownloadIfMissing
+}
+
 function Copy-DirectoryContents {
     param(
         [string]$Source,
@@ -138,13 +288,88 @@ function Copy-DirectoryContents {
     Copy-Item -Path (Join-Path $Source "*") -Destination $Destination -Recurse -Force
 }
 
+function Get-ChannelSlug {
+    param(
+        [string]$Channel
+    )
+
+    return $Channel.ToLowerInvariant()
+}
+
+function Get-ChannelEnvironmentValue {
+    param(
+        [string]$Channel,
+        [string]$Name
+    )
+
+    $channelPrefix = if ([string]::Equals($Channel, "Store", [System.StringComparison]::Ordinal)) {
+        "PASSPORT_WINDOWS_STORE_"
+    }
+    else {
+        "PASSPORT_WINDOWS_SIDELOAD_"
+    }
+
+    $channelValue = [System.Environment]::GetEnvironmentVariable($channelPrefix + $Name)
+    if (-not [string]::IsNullOrWhiteSpace($channelValue)) {
+        return $channelValue
+    }
+
+    return [System.Environment]::GetEnvironmentVariable("PASSPORT_WINDOWS_MSIX_" + $Name)
+}
+
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $appProject = Join-Path $repoRoot "src\ArchrealmsPassport.Windows\ArchrealmsPassport.Windows.csproj"
 $packageManifestTemplate = Join-Path $repoRoot "src\ArchrealmsPassport.Windows.Package\Package.appxmanifest"
 $assetsRoot = Join-Path $repoRoot "src\ArchrealmsPassport.Windows.Package\Assets"
 $assetScript = Join-Path $repoRoot "tools\release\New-PassportWindowsMsixAssets.ps1"
-$packagePublisher = "CN=The Archrealms"
-$packageIdentityName = "TheArchrealms.PassportWindows"
+$channelSlug = Get-ChannelSlug -Channel $Channel
+if (-not $PackageIdentityName) {
+    $PackageIdentityName = Get-ChannelEnvironmentValue -Channel $Channel -Name "PACKAGE_IDENTITY"
+}
+if (-not $PackagePublisher) {
+    $PackagePublisher = Get-ChannelEnvironmentValue -Channel $Channel -Name "PUBLISHER"
+}
+if (-not $PublisherDisplayName) {
+    $PublisherDisplayName = Get-ChannelEnvironmentValue -Channel $Channel -Name "PUBLISHER_DISPLAY_NAME"
+}
+if (-not $PackageDisplayName) {
+    $PackageDisplayName = Get-ChannelEnvironmentValue -Channel $Channel -Name "DISPLAY_NAME"
+}
+if (-not $PackageDescription) {
+    $PackageDescription = Get-ChannelEnvironmentValue -Channel $Channel -Name "DESCRIPTION"
+}
+
+if (-not $PackageIdentityName) {
+    $PackageIdentityName = if ([string]::Equals($Channel, "Store", [System.StringComparison]::Ordinal)) {
+        "TheArchrealms.PassportWindows"
+    }
+    else {
+        "TheArchrealms.PassportWindows.Sideload"
+    }
+}
+if (-not $PackagePublisher) {
+    $PackagePublisher = "CN=The Archrealms"
+}
+if (-not $PublisherDisplayName) {
+    $PublisherDisplayName = "The Archrealms"
+}
+if (-not $PackageDisplayName) {
+    $PackageDisplayName = if ([string]::Equals($Channel, "Store", [System.StringComparison]::Ordinal)) {
+        "Archrealms Passport"
+    }
+    else {
+        "Archrealms Passport Sideload"
+    }
+}
+if (-not $PackageDescription) {
+    $PackageDescription = if ([string]::Equals($Channel, "Store", [System.StringComparison]::Ordinal)) {
+        "Windows Passport client for the Archrealms."
+    }
+    else {
+        "Sideload build of the Windows Passport client for the Archrealms."
+    }
+}
+
 $packageVersion = ConvertTo-AppxVersion -RawVersion $Version
 $assemblyVersion = ConvertTo-AssemblyVersion -RawVersion $Version
 $runtimeIdentifier = "win-" + $Platform
@@ -153,8 +378,9 @@ $makeAppx = Resolve-WindowsSdkTool -PreferredPath $MakeAppxPath -ToolName "makea
 $signTool = Resolve-WindowsSdkTool -PreferredPath $SignToolPath -ToolName "signtool.exe"
 
 if (-not $OutputRoot) {
-    $OutputRoot = Join-Path $repoRoot "artifacts\release\passport-windows-msix"
+    $OutputRoot = Join-Path $repoRoot ("artifacts\release\passport-windows-msix-" + $channelSlug)
 }
+$OutputRoot = [System.IO.Path]::GetFullPath($OutputRoot)
 
 if (-not $TimestampUrl -and $env:PASSPORT_WINDOWS_MSIX_TIMESTAMP_URL) {
     $TimestampUrl = $env:PASSPORT_WINDOWS_MSIX_TIMESTAMP_URL
@@ -177,7 +403,10 @@ $artifactRoot = Join-Path $OutputRoot $Platform
 $publishRoot = Join-Path $artifactRoot "publish"
 $layoutRoot = Join-Path $artifactRoot "layout"
 $certificateRoot = Join-Path $artifactRoot "certificate"
-$packageOutput = Join-Path $artifactRoot ("passport-windows-" + $Platform + ".msix")
+if (-not $PackageFileName) {
+    $PackageFileName = "passport-windows-" + $channelSlug + "-" + $Platform + ".msix"
+}
+$packageOutput = Join-Path $artifactRoot $PackageFileName
 $releaseManifestPath = Join-Path $artifactRoot "msix-package-manifest.json"
 $layoutManifestPath = Join-Path $layoutRoot "AppxManifest.xml"
 $appProjectXml = [xml](Get-Content -LiteralPath $appProject -Raw)
@@ -218,7 +447,7 @@ else {
     $securePassword = ConvertTo-SecureString -String $certificatePasswordValue -AsPlainText -Force
     $generatedCertificate = New-SelfSignedCertificate `
         -Type Custom `
-        -Subject $packagePublisher `
+        -Subject $PackagePublisher `
         -CertStoreLocation "Cert:\CurrentUser\My" `
         -KeyAlgorithm RSA `
         -KeyLength 4096 `
@@ -233,7 +462,8 @@ else {
     Export-Certificate -Cert $generatedCertificate -FilePath $certificateCer | Out-Null
 }
 
-if (-not (Test-Path -LiteralPath $certificateCer)) {
+$shouldExportCertificateCer = $CertificatePfxPath -or $CertificatePfxBase64 -or -not (Test-Path -LiteralPath $certificateCer)
+if ($shouldExportCertificateCer) {
     $collection = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2Collection
     if ($certificatePasswordValue) {
         $collection.Import($certificatePfx, $certificatePasswordValue, [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::Exportable)
@@ -246,7 +476,19 @@ if (-not (Test-Path -LiteralPath $certificateCer)) {
         throw "No certificate was found in the supplied PFX."
     }
 
-    [System.IO.File]::WriteAllBytes($certificateCer, $collection[0].Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Cert))
+    $exportCertificate = $null
+    foreach ($candidate in $collection) {
+        if ($candidate.HasPrivateKey) {
+            $exportCertificate = $candidate
+            break
+        }
+    }
+
+    if (-not $exportCertificate) {
+        $exportCertificate = $collection[0]
+    }
+
+    [System.IO.File]::WriteAllBytes($certificateCer, $exportCertificate.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Cert))
 }
 
 $signingCertificate = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2 $certificateCer
@@ -270,6 +512,15 @@ try {
         throw "Application publish failed."
     }
 
+    $bundledIpfsRuntime = Stage-BundledIpfsRuntime `
+        -PublishDir $publishRoot `
+        -PreferredPath $IpfsCliPath `
+        -Platform $Platform `
+        -RuntimeIdentifier $runtimeIdentifier `
+        -KuboVersion $KuboVersion `
+        -DownloadRoot (Join-Path $OutputRoot "kubo-cache") `
+        -DownloadIfMissing:(!$SkipIpfsRuntimeBootstrap.IsPresent)
+
     Copy-DirectoryContents -Source $publishRoot -Destination $layoutRoot
     Copy-DirectoryContents -Source $assetsRoot -Destination (Join-Path $layoutRoot "Assets")
 
@@ -286,8 +537,35 @@ try {
         throw "Package manifest application element was not found."
     }
 
+    $identityNode.Name = $PackageIdentityName
+    $identityNode.Publisher = $PackagePublisher
     $identityNode.Version = $packageVersion
+
+    $propertiesNode = $manifestXml.SelectSingleNode("/appx:Package/appx:Properties", $namespaceManager)
+    if ($propertiesNode) {
+        $displayNameNode = $propertiesNode.SelectSingleNode("appx:DisplayName", $namespaceManager)
+        if ($displayNameNode) {
+            $displayNameNode.InnerText = $PackageDisplayName
+        }
+
+        $publisherDisplayNameNode = $propertiesNode.SelectSingleNode("appx:PublisherDisplayName", $namespaceManager)
+        if ($publisherDisplayNameNode) {
+            $publisherDisplayNameNode.InnerText = $PublisherDisplayName
+        }
+
+        $descriptionNode = $propertiesNode.SelectSingleNode("appx:Description", $namespaceManager)
+        if ($descriptionNode) {
+            $descriptionNode.InnerText = $PackageDescription
+        }
+    }
+
     $applicationNode.Executable = $applicationExecutable
+    $visualElementsNode = $applicationNode.SelectSingleNode("uap:VisualElements", $namespaceManager)
+    if ($visualElementsNode) {
+        $visualElementsNode.DisplayName = $PackageDisplayName
+        $visualElementsNode.Description = $PackageDescription
+    }
+
     $manifestXml.Save($layoutManifestPath)
 
     if (Test-Path -LiteralPath $packageOutput) {
@@ -314,9 +592,9 @@ try {
     }
 
     if (-not $SkipSignatureVerification) {
-        $trustedPeopleImport = Import-Certificate -FilePath $certificateCer -CertStoreLocation "Cert:\CurrentUser\TrustedPeople"
+        $trustedPeopleImport = Import-CertificateIntoCurrentUserStore -Certificate $signingCertificate -Path $certificateCer -StoreName "TrustedPeople"
         if ($signingCertificate.Subject -eq $signingCertificate.Issuer) {
-            $trustedRootImport = Import-Certificate -FilePath $certificateCer -CertStoreLocation "Cert:\CurrentUser\Root"
+            $trustedRootImport = Import-CertificateIntoCurrentUserStore -Certificate $signingCertificate -Path $certificateCer -StoreName "Root"
         }
 
         & $signTool verify /pa $packageOutput
@@ -328,7 +606,9 @@ try {
 finally {
     if ($trustedPeopleImport) {
         try {
-            Remove-Item -LiteralPath ("Cert:\CurrentUser\TrustedPeople\" + $trustedPeopleImport.Thumbprint) -Force
+            if (-not $trustedPeopleImport.PSObject.Properties["Added"] -or $trustedPeopleImport.Added) {
+                Remove-Item -LiteralPath ($trustedPeopleImport.Store + "\" + $trustedPeopleImport.Thumbprint) -Force
+            }
         }
         catch {
         }
@@ -336,7 +616,9 @@ finally {
 
     if ($trustedRootImport) {
         try {
-            Remove-Item -LiteralPath ("Cert:\CurrentUser\Root\" + $trustedRootImport.Thumbprint) -Force
+            if (-not $trustedRootImport.PSObject.Properties["Added"] -or $trustedRootImport.Added) {
+                Remove-Item -LiteralPath ($trustedRootImport.Store + "\" + $trustedRootImport.Thumbprint) -Force
+            }
         }
         catch {
         }
@@ -358,17 +640,45 @@ try {
 catch {
 }
 
+$layoutFiles = Get-ChildItem -File -Recurse $layoutRoot | Sort-Object FullName | ForEach-Object {
+    $hash = Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName
+    [pscustomobject]@{
+        path = $_.FullName.Substring($layoutRoot.Length).TrimStart('\').Replace('\', '/')
+        size_bytes = $_.Length
+        sha256 = $hash.Hash.ToLowerInvariant()
+    }
+}
+
 $releaseManifest = [pscustomobject]@{
     created_utc = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
+    channel = $Channel
+    channel_slug = $channelSlug
     package_tag = $Version
     package_version = $packageVersion
-    package_identity = $packageIdentityName
-    publisher = $packagePublisher
+    package_identity = $PackageIdentityName
+    publisher = $PackagePublisher
+    publisher_display_name = $PublisherDisplayName
+    package_display_name = $PackageDisplayName
+    package_description = $PackageDescription
     platform = $Platform
     runtime_identifier = $runtimeIdentifier
     configuration = $Configuration
     self_contained = $SelfContained
     dotnet = $dotnet
+    publish_dir = $publishRoot
+    layout_dir = $layoutRoot
+    ipfs_runtime_bootstrap_skipped = $SkipIpfsRuntimeBootstrap.IsPresent
+    kubo_version = $KuboVersion
+    bundled_ipfs_cli_included = ($null -ne $bundledIpfsRuntime)
+    bundled_ipfs_cli_source_type = if ($bundledIpfsRuntime) { $bundledIpfsRuntime.source_type } else { "" }
+    bundled_ipfs_cli_source_path = if ($bundledIpfsRuntime) { $bundledIpfsRuntime.source_path } else { "" }
+    bundled_ipfs_cli_publish_path = if ($bundledIpfsRuntime) { $bundledIpfsRuntime.bundled_path } else { "" }
+    bundled_ipfs_cli_version = if ($bundledIpfsRuntime) { $bundledIpfsRuntime.ipfs_cli_version } else { "" }
+    bundled_ipfs_download_url = if ($bundledIpfsRuntime) { $bundledIpfsRuntime.download_url } else { "" }
+    bundled_ipfs_dist_json_url = if ($bundledIpfsRuntime) { $bundledIpfsRuntime.dist_json_url } else { "" }
+    bundled_ipfs_archive_path = if ($bundledIpfsRuntime) { $bundledIpfsRuntime.archive_path } else { "" }
+    bundled_ipfs_archive_sha512 = if ($bundledIpfsRuntime) { $bundledIpfsRuntime.archive_sha512 } else { "" }
+    bundled_ipfs_license_files = if ($bundledIpfsRuntime) { $bundledIpfsRuntime.license_files } else { @() }
     makeappx = $makeAppx
     signtool = $signTool
     package_path = $packageOutput
@@ -379,6 +689,8 @@ $releaseManifest = [pscustomobject]@{
     signature_verification_skipped = $SkipSignatureVerification.IsPresent
     appx_manifest_path = $layoutManifestPath
     git_commit = $gitCommit
+    file_count = @($layoutFiles).Count
+    files = $layoutFiles
 }
 
 $releaseManifest | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $releaseManifestPath -Encoding UTF8

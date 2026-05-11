@@ -44,16 +44,56 @@ jobs:
 
           "tag=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
+      - name: Run unit and service tests
+        shell: pwsh
+        run: dotnet test .\tests\ArchrealmsPassport.Windows.Tests\ArchrealmsPassport.Windows.Tests.csproj -c Release /m:1 /nr:false /p:UseSharedCompilation=false
+
       - name: Package win-x64 release
         shell: pwsh
         run: .\tools\release\Publish-PassportWindows.ps1 -DotnetPath (Get-Command dotnet).Source -RuntimeIdentifier win-x64 -Version "${{ steps.release_tag.outputs.tag }}"
 
-      - name: Package win-x64 MSIX
+      - name: Validate win-x64 release
+        shell: pwsh
+        run: .\tools\release\Test-PassportWindowsReleaseArtifact.ps1 -ManifestPath .\artifacts\release\passport-windows-win-x64\release-manifest.json -RequireBundledIpfs
+
+      - name: Validate win-x64 installed artifact
+        shell: pwsh
+        run: .\tools\release\Invoke-PassportWindowsInstalledArtifactValidation.ps1 -ManifestPath .\artifacts\release\passport-windows-win-x64\release-manifest.json -OutputPath .\artifacts\release\passport-windows-win-x64\installed-validation-report.json
+
+      - name: Package win-x64 sideload MSIX
         shell: pwsh
         env:
           PASSPORT_WINDOWS_MSIX_PFX_BASE64: ${{ secrets.PASSPORT_WINDOWS_MSIX_PFX_BASE64 }}
           PASSPORT_WINDOWS_MSIX_PFX_PASSWORD: ${{ secrets.PASSPORT_WINDOWS_MSIX_PFX_PASSWORD }}
-        run: .\tools\release\Publish-PassportWindowsMsix.ps1 -Version "${{ steps.release_tag.outputs.tag }}" -Platform x64 -SkipSignatureVerification
+        run: .\tools\release\Publish-PassportWindowsMsix.ps1 -Channel Sideload -Version "${{ steps.release_tag.outputs.tag }}" -Platform x64 -SkipSignatureVerification
+
+      - name: Validate win-x64 sideload MSIX
+        shell: pwsh
+        run: .\tools\release\Test-PassportWindowsReleaseArtifact.ps1 -ManifestPath .\artifacts\release\passport-windows-msix-sideload\x64\msix-package-manifest.json -RequireBundledIpfs
+
+      - name: Validate win-x64 sideload MSIX installed artifact
+        shell: pwsh
+        run: .\tools\release\Invoke-PassportWindowsInstalledArtifactValidation.ps1 -ManifestPath .\artifacts\release\passport-windows-msix-sideload\x64\msix-package-manifest.json -OutputPath .\artifacts\release\passport-windows-msix-sideload\x64\installed-validation-report.json
+
+      - name: Validate win-x64 sideload MSIX install
+        shell: pwsh
+        run: .\tools\release\Invoke-PassportWindowsMsixInstallValidation.ps1 -ManifestPath .\artifacts\release\passport-windows-msix-sideload\x64\msix-package-manifest.json -OutputPath .\artifacts\release\passport-windows-msix-sideload\x64\msix-install-validation-report.json -SkipLaunch -UninstallAfter -RemoveImportedCertificates
+
+      - name: Package win-x64 Store MSIX candidate
+        shell: pwsh
+        env:
+          PASSPORT_WINDOWS_STORE_PACKAGE_IDENTITY: ${{ vars.PASSPORT_WINDOWS_STORE_PACKAGE_IDENTITY }}
+          PASSPORT_WINDOWS_STORE_PUBLISHER: ${{ vars.PASSPORT_WINDOWS_STORE_PUBLISHER }}
+          PASSPORT_WINDOWS_STORE_PUBLISHER_DISPLAY_NAME: ${{ vars.PASSPORT_WINDOWS_STORE_PUBLISHER_DISPLAY_NAME }}
+        run: .\tools\release\Publish-PassportWindowsMsix.ps1 -Channel Store -Version "${{ steps.release_tag.outputs.tag }}" -Platform x64 -SkipSignatureVerification
+
+      - name: Validate win-x64 Store MSIX candidate
+        shell: pwsh
+        run: .\tools\release\Test-PassportWindowsReleaseArtifact.ps1 -ManifestPath .\artifacts\release\passport-windows-msix-store\x64\msix-package-manifest.json -RequireBundledIpfs
+
+      - name: Validate win-x64 Store MSIX candidate installed artifact
+        shell: pwsh
+        run: .\tools\release\Invoke-PassportWindowsInstalledArtifactValidation.ps1 -ManifestPath .\artifacts\release\passport-windows-msix-store\x64\msix-package-manifest.json -OutputPath .\artifacts\release\passport-windows-msix-store\x64\installed-validation-report.json
 
       - name: Upload release bundle
         uses: actions/upload-artifact@v6
@@ -61,11 +101,17 @@ jobs:
           name: passport-windows-win-x64
           path: artifacts/release/passport-windows-win-x64
 
-      - name: Upload MSIX bundle
+      - name: Upload sideload MSIX bundle
         uses: actions/upload-artifact@v6
         with:
-          name: passport-windows-msix-x64
-          path: artifacts/release/passport-windows-msix/x64
+          name: passport-windows-msix-sideload-x64
+          path: artifacts/release/passport-windows-msix-sideload/x64
+
+      - name: Upload Store MSIX candidate
+        uses: actions/upload-artifact@v6
+        with:
+          name: passport-windows-msix-store-x64
+          path: artifacts/release/passport-windows-msix-store/x64
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
@@ -77,6 +123,9 @@ jobs:
           files: |
             artifacts/release/passport-windows-win-x64/passport-windows-win-x64.zip
             artifacts/release/passport-windows-win-x64/release-manifest.json
-            artifacts/release/passport-windows-msix/x64/passport-windows-x64.msix
-            artifacts/release/passport-windows-msix/x64/passport-windows-signing.cer
-            artifacts/release/passport-windows-msix/x64/msix-package-manifest.json
+            artifacts/release/passport-windows-win-x64/installed-validation-report.json
+            artifacts/release/passport-windows-msix-sideload/x64/passport-windows-sideload-x64.msix
+            artifacts/release/passport-windows-msix-sideload/x64/passport-windows-signing.cer
+            artifacts/release/passport-windows-msix-sideload/x64/msix-package-manifest.json
+            artifacts/release/passport-windows-msix-sideload/x64/installed-validation-report.json
+            artifacts/release/passport-windows-msix-sideload/x64/msix-install-validation-report.json
