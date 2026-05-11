@@ -2,65 +2,49 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Threading.Tasks;
 using ArchrealmsPassport.Windows.Models;
 
 namespace ArchrealmsPassport.Windows.Services
 {
     public sealed class PassportStatusService
     {
-        public ArchiveStatusSnapshot GetSnapshot(string workspaceRoot, string ipfsRepoPath)
+        private readonly LocalNodeService _localNodeService;
+
+        public PassportStatusService(LocalNodeService localNodeService)
+        {
+            _localNodeService = localNodeService;
+        }
+
+        public async Task<ArchiveStatusSnapshot> GetSnapshotAsync(string workspaceRoot, string ipfsRepoPath, string toolRoot, string ipfsCliPathOverride)
         {
             var resolvedWorkspaceRoot = PassportEnvironment.ResolveWorkspaceRoot(workspaceRoot);
-            var resolvedIpfsRepo = ResolveIpfsRepoPath(ipfsRepoPath);
+            var health = await _localNodeService.GetHealthAsync(resolvedWorkspaceRoot, ipfsRepoPath, toolRoot, ipfsCliPathOverride).ConfigureAwait(false);
             var latestSubmissionPath = FindLatestSubmissionPath(resolvedWorkspaceRoot);
 
             return new ArchiveStatusSnapshot
             {
                 WorkspaceRoot = resolvedWorkspaceRoot,
                 WorkspaceReady = Directory.Exists(resolvedWorkspaceRoot),
-                IpfsCliDetected = !string.IsNullOrWhiteSpace(PassportEnvironment.ResolveIpfsCliPath()),
-                IpfsRepoPath = resolvedIpfsRepo,
-                IpfsNodePrepared = TryReadNodeRecord(resolvedWorkspaceRoot, out var peerId),
-                NodePeerId = peerId,
+                IpfsCliDetected = health.IpfsCliDetected,
+                IpfsCliPath = health.IpfsCliPath,
+                IpfsCliSource = health.IpfsCliSource,
+                IpfsRepoPath = health.IpfsRepoPath,
+                IpfsNodePrepared = health.NodeRecordPresent || health.RepoInitialized,
+                NodePeerId = health.PeerId,
+                NodeHealthSummary = health.Summary,
+                NodeApiEndpoint = health.ApiEndpoint,
+                NodeApiReachable = health.ApiReachable,
+                NodeIpfsVersion = string.IsNullOrWhiteSpace(health.ApiVersion) ? health.IpfsVersion : health.ApiVersion,
+                NodeStorageMax = health.StorageMax,
+                NodeStorageGcWatermark = health.StorageGcWatermark,
+                NodeParticipationMode = health.ParticipationMode,
+                NodeCachePolicy = health.CachePolicy,
+                NodeProvideStrategy = health.ProvideStrategy,
                 VerificationSummary = ReadVerificationSummary(latestSubmissionPath),
                 LatestSubmissionPath = latestSubmissionPath,
                 RegistrySubmissionCid = ReadLatestRegistrySubmissionCid(latestSubmissionPath)
             };
-        }
-
-        public string ResolveIpfsRepoPath(string ipfsRepoPath)
-        {
-            if (!string.IsNullOrWhiteSpace(ipfsRepoPath))
-            {
-                return Path.GetFullPath(ipfsRepoPath);
-            }
-
-            return PassportEnvironment.GetDefaultIpfsRepoPath();
-        }
-
-        private static bool TryReadNodeRecord(string workspaceRoot, out string peerId)
-        {
-            peerId = "Node not initialized";
-
-            var nodePath = Path.Combine(workspaceRoot, "records", "passport", "ipfs-node.local.json");
-            if (!File.Exists(nodePath))
-            {
-                return false;
-            }
-
-            using (var document = JsonDocument.Parse(File.ReadAllText(nodePath)))
-            {
-                if (document.RootElement.TryGetProperty("peer_id", out var peerIdElement))
-                {
-                    peerId = peerIdElement.GetString() ?? peerId;
-                }
-                else
-                {
-                    peerId = "Node record present";
-                }
-            }
-
-            return true;
         }
 
         private static string FindLatestSubmissionPath(string workspaceRoot)

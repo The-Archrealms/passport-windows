@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "record_type": "retrieval_observation_record",
+  "record_id": "<record-id>",
+  "created_utc": "<YYYY-MM-DDTHH:MM:SSZ>",
+  "effective_utc": "<YYYY-MM-DDTHH:MM:SSZ>",
+  "status": "submitted",
+  "archrealms_identity_id": "<identity-id>",
+  "device_id": "<device-id>",
+  "node_id": "<node-id>",
+  "service_class": "retrieval_service",
+  "content_ref": {
+    "cid": "<cid>",
+    "manifest_sha256": "<sha256>",
+    "relative_path": ""
+  },
+  "request": {
+    "request_id": "<request-id>",
+    "requested_utc": "<YYYY-MM-DDTHH:MM:SSZ>",
+    "requester_ref": "<requester-ref-or-empty>"
+  },
+  "delivery": {
+    "delivered_utc": "<YYYY-MM-DDTHH:MM:SSZ>",
+    "delivered_bytes": 0,
+    "delivery_result": "delivered",
+    "latency_milliseconds": 0
+  },
+  "metering_claim": {
+    "claimed_retrieval_bytes": 0
+  },
+  "signature": {
+    "signature_algorithm": "<algorithm>",
+    "signing_device_record_id": "<device-record-id>",
+    "signature_path": "<relative-signature-path>",
+    "signed_payload_sha256": "<sha256>"
+  },
+  "summary": "<short-summary>"
+}

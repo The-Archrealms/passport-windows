@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "record_type": "passport_metering_admission_record",
+  "record_id": "20260427T000000Z-example-package-admission",
+  "created_utc": "2026-04-27T00:00:00Z",
+  "effective_utc": "2026-04-27T00:00:00Z",
+  "status": "admitted",
+  "admission_scope": "metering_report_package",
+  "archrealms_identity_id": "identity-example",
+  "device_id": "device-example",
+  "package_id": "example-metering-package",
+  "package_root": "records/passport/metering/packages/example-metering-package",
+  "manifest_path": "records/passport/metering/packages/example-metering-package/manifest.json",
+  "manifest_sha256": "",
+  "package_verification_report_path": "records/passport/metering/packages/example-metering-package/metering-package-verification-report.json",
+  "package_verification_report_sha256": "",
+  "source_metering_report_path": "records/passport/metering/packages/example-metering-package/package/metering-report.json",
+  "source_metering_report_sha256": "",
+  "source_metering_report_id": "authoritative-metering-report-example",
+  "package_verification": {
+    "verified": true,
+    "document_hashes_valid": true,
+    "accepted_proof_count": 0,
+    "rejected_proof_count": 0
+  },
+  "admitted_metering": {
+    "accepted_proof_count": 0,
+    "rejected_proof_count": 0,
+    "verified_replicated_byte_seconds": 0
+  },
+  "settlement_status": "not_settled",
+  "settlement_record_id": "",
+  "signature": {
+    "signature_algorithm": "RSA_PKCS1_SHA256",
+    "signing_device_record_id": "device-example",
+    "signed_payload_path": "records/passport/metering/admissions/example/metering-admission.payload.json",
+    "signature_path": "records/passport/metering/admissions/example/metering-admission.sig",
+    "signed_payload_sha256": ""
+  },
+  "summary": "Signed metering admission record. This admits verified evidence for registrar review only; it is not settlement."
+}

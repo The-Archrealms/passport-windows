@@ -15,6 +15,7 @@ namespace ArchrealmsPassport.Windows.Services
             string workingDirectory,
             string scriptRelativePath,
             IReadOnlyList<string> arguments,
+            string ipfsCliPath = "",
             CancellationToken cancellationToken = default(CancellationToken))
         {
             var scriptPath = Path.Combine(toolRoot, scriptRelativePath);
@@ -38,6 +39,11 @@ namespace ArchrealmsPassport.Windows.Services
             processStartInfo.ArgumentList.Add("Bypass");
             processStartInfo.ArgumentList.Add("-File");
             processStartInfo.ArgumentList.Add(scriptPath);
+
+            if (!string.IsNullOrWhiteSpace(ipfsCliPath))
+            {
+                processStartInfo.Environment["ARCHREALMS_IPFS_CLI"] = ipfsCliPath;
+            }
 
             foreach (var argument in arguments)
             {

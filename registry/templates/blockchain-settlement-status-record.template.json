@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "record_type": "blockchain_settlement_status_record",
+  "record_id": "20260430T000000Z-example-blockchain-settlement-status",
+  "created_utc": "2026-04-30T00:00:00Z",
+  "effective_utc": "2026-04-30T00:00:00Z",
+  "status": "read_only",
+  "archrealms_identity_id": "identity-example",
+  "node_id": "node-example",
+  "settlement_batch_id": "settlement-batch-example",
+  "settlement_epoch_id": "settlement-epoch-example",
+  "source_settlement_batch_record_id": "20260430T000000Z-example-blockchain-settlement-batch",
+  "chain_status": {
+    "settlement_rail": "blockchain",
+    "chain_id": "",
+    "settlement_contract": "",
+    "settlement_tx_hash": "",
+    "settlement_block_height": 0,
+    "settlement_finality_status": "not_submitted",
+    "finality_confirmations_required": 0,
+    "finality_confirmations_observed": 0
+  },
+  "participant_settlement": {
+    "settlement_role": "operator",
+    "service_class": "stewarded_archive_storage",
+    "metering_units": 0,
+    "settlement_units": 0,
+    "asset_or_credit_id": "",
+    "destination_account": "",
+    "settlement_status": "not_final"
+  },
+  "superseded_by_record_id": "",
+  "summary": "Read-only Passport blockchain settlement status. This record displays settlement finality; it does not custody assets or create wallet functionality."
+}

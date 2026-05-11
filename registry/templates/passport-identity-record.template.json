@@ -7,7 +7,7 @@
   "status": "active",
   "archrealms_identity_id": "<identity-id>",
   "display_name": "<display-name>",
-  "identity_mode": "pseudonymous",
+  "identity_mode": "named",
   "citizenship_class": "citizen",
   "declared_scope": "personal",
   "public_biography": "",

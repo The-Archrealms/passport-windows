@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "record_type": "passport_metering_dispute_record",
+  "record_id": "20260427T000000Z-example-metering-dispute",
+  "created_utc": "2026-04-27T00:00:00Z",
+  "effective_utc": "2026-04-27T00:00:00Z",
+  "status": "opened",
+  "opened_by_role": "registrar",
+  "opened_by_id": "registrar-example",
+  "admission_record_id": "20260427T000000Z-example-package-admission",
+  "package_id": "example-metering-package",
+  "dispute_scope": "proof_count_or_service_units",
+  "challenged_records": [
+    {
+      "record_type": "storage_epoch_proof_record",
+      "record_id": "storage-proof-example",
+      "record_path": "records/passport/metering/proofs/example/storage-epoch-proof.json",
+      "challenge_reason": "assignment_mismatch"
+    }
+  ],
+  "requested_remedy": "exclude_or_correct_challenged_units",
+  "evidence_refs": [],
+  "response_due_utc": "2026-04-28T00:00:00Z",
+  "disposition": {
+    "status": "opened",
+    "resolved_utc": "",
+    "resolution_record_id": "",
+    "summary": ""
+  },
+  "settlement_status": "not_settled",
+  "summary": "Dispute record for admitted metering evidence. This does not create payment, token, redemption, or settlement."
+}

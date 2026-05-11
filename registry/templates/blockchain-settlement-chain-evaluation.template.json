@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "record_type": "blockchain_settlement_chain_evaluation",
+  "record_id": "20260430T000000Z-example-chain-evaluation",
+  "created_utc": "2026-04-30T00:00:00Z",
+  "status": "draft",
+  "candidate_chain": {
+    "chain_name": "",
+    "chain_id": "",
+    "network_type": "mainnet_or_l2_or_appchain_or_private",
+    "settlement_rail": "blockchain",
+    "native_asset": "",
+    "candidate_settlement_asset_or_credit": ""
+  },
+  "finality": {
+    "finality_model": "",
+    "confirmations_required": 0,
+    "expected_time_to_finality_seconds": 0,
+    "reorg_or_reversal_risk": "",
+    "finality_rule_summary": ""
+  },
+  "cost_and_throughput": {
+    "average_batch_transaction_cost_estimate": "",
+    "cost_volatility_risk": "",
+    "expected_epoch_batch_capacity": "",
+    "throughput_notes": ""
+  },
+  "contract_capability": {
+    "supports_evidence_root_commitment": false,
+    "supports_handoff_id_deduplication": false,
+    "supports_participant_outputs": false,
+    "supports_correction_batches": false,
+    "supports_pause_controls": false,
+    "supports_events_or_indexable_records": false,
+    "upgradeability_model": ""
+  },
+  "passport_read_only_access": {
+    "public_rpc_available": false,
+    "indexer_available": false,
+    "passport_can_verify_finality_without_custody": false,
+    "read_path_notes": ""
+  },
+  "custody_and_authority": {
+    "multisig_or_threshold_signing_available": false,
+    "registrar_treasury_separation_supported": false,
+    "key_rotation_supported": false,
+    "emergency_pause_supported": false,
+    "custody_notes": ""
+  },
+  "legal_tax_treasury_review": {
+    "legal_review_status": "not_started",
+    "tax_review_status": "not_started",
+    "treasury_review_status": "not_started",
+    "governance_review_status": "not_started",
+    "known_blockers": []
+  },
+  "operational_risk": {
+    "rpc_provider_risk": "",
+    "indexer_provider_risk": "",
+    "bridge_or_dependency_risk": "",
+    "migration_plan_required": true,
+    "continuity_notes": ""
+  },
+  "decision": {
+    "recommendation": "undecided",
+    "required_conditions": [],
+    "rejection_reasons": [],
+    "reviewer": "",
+    "reviewed_utc": ""
+  },
+  "release_gate_assessment": {
+    "finality_documented": false,
+    "contract_capability_complete": false,
+    "passport_read_only_access_ready": false,
+    "custody_controls_ready": false,
+    "legal_tax_treasury_governance_approved": false,
+    "no_known_blockers": true,
+    "release_gate_satisfied": false
+  },
+  "summary": "Chain selection evaluation template for Passport blockchain settlement release gate."
+}

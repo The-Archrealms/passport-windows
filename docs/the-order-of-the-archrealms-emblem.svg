@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">The Order of the Archrealms Emblem</title>
+  <desc id="desc">A round emblem with a midnight blue field, gold ring and arch, and a parchment star.</desc>
+  <circle cx="256" cy="256" r="224" fill="#15253B"/>
+  <circle cx="256" cy="256" r="194" fill="none" stroke="#C8A04A" stroke-width="18"/>
+  <path d="M184 326V250C184 194 216 160 256 148C296 160 328 194 328 250V326" fill="none" stroke="#C8A04A" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M218 326V256C218 221 235 196 256 188C277 196 294 221 294 256V326" fill="none" stroke="#C8A04A" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M256 204L272 254L322 270L272 286L256 336L240 286L190 270L240 254Z" fill="#F4E9D2"/>
+</svg>

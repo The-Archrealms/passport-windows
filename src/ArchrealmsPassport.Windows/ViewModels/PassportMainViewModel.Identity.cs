@@ -18,9 +18,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
             SelectedProvisioningMode = string.IsNullOrWhiteSpace(settings.SelectedProvisioningMode)
                 ? "Create new Passport identity"
                 : settings.SelectedProvisioningMode;
-            SelectedIdentityMode = string.IsNullOrWhiteSpace(settings.SelectedIdentityMode)
-                ? "pseudonymous"
-                : settings.SelectedIdentityMode;
+            SelectedIdentityMode = "named";
             ExistingIdentityId = settings.ExistingIdentityId;
             ActiveIdentityId = settings.ActiveIdentityId;
             ActiveDeviceId = settings.ActiveDeviceId;
@@ -32,9 +30,14 @@ namespace ArchrealmsPassport.Windows.ViewModels
             JoinApprovalPath = settings.JoinApprovalPath;
             WorkspaceRoot = string.IsNullOrWhiteSpace(settings.WorkspaceRoot) ? PassportEnvironment.GetDefaultWorkspaceRoot() : settings.WorkspaceRoot;
             IpfsRepoPath = string.IsNullOrWhiteSpace(settings.IpfsRepoPath) ? PassportEnvironment.GetDefaultIpfsRepoPath() : settings.IpfsRepoPath;
+            IpfsCliPathOverride = settings.IpfsCliPathOverride;
             StorageAllocationGb = settings.StorageAllocationGb <= 0 ? 25 : settings.StorageAllocationGb;
-            ParticipateInPublicRegistry = settings.ParticipateInPublicRegistry;
+            NodeParticipationMode = settings.ParticipateInPublicRegistry
+                ? settings.NodeParticipationMode
+                : "Read-only cache";
+            NodeCachePolicy = settings.NodeCachePolicy;
             PreferWindowsHelloCredentials = settings.PreferWindowsHelloCredentials;
+            BootstrapLocalNodeOnOnboarding = settings.BootstrapLocalNodeOnOnboarding;
             PublishCarExports = settings.PublishCarExports;
             PreferWifiOnly = settings.PreferWifiOnly;
             ReadOnlyIpfsCid = settings.ReadOnlyIpfsCid;
@@ -53,7 +56,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
 
         private async Task RefreshStatusAsync()
         {
-            var snapshot = _statusService.GetSnapshot(WorkspaceRoot, IpfsRepoPath);
+            var snapshot = await _statusService.GetSnapshotAsync(WorkspaceRoot, IpfsRepoPath, _toolRoot, IpfsCliPathOverride);
 
             await Application.Current.Dispatcher.InvokeAsync(delegate
             {
@@ -64,8 +67,26 @@ namespace ArchrealmsPassport.Windows.ViewModels
                 }
 
                 WorkspaceStateText = snapshot.WorkspaceReady ? snapshot.WorkspaceRoot : "Workspace unavailable";
-                IpfsStateText = snapshot.IpfsCliDetected ? "ipfs.exe detected on PATH" : "ipfs.exe not detected";
-                NodeStateText = snapshot.IpfsNodePrepared ? snapshot.NodePeerId : "Node not initialized";
+                IpfsStateText = snapshot.IpfsCliSource;
+                ResolvedIpfsCliPathText = snapshot.IpfsCliDetected ? snapshot.IpfsCliPath : "No runtime resolved";
+                _activeNodeId = snapshot.IpfsNodePrepared ? snapshot.NodePeerId : string.Empty;
+                var nodeState = string.IsNullOrWhiteSpace(snapshot.NodeHealthSummary)
+                    ? "Node not initialized"
+                    : snapshot.NodeHealthSummary;
+                if (!string.IsNullOrWhiteSpace(snapshot.NodeStorageMax))
+                {
+                    nodeState += "; storage " + snapshot.NodeStorageMax;
+                }
+                if (!string.IsNullOrWhiteSpace(snapshot.NodeParticipationMode))
+                {
+                    nodeState += "; " + snapshot.NodeParticipationMode;
+                }
+                if (!string.IsNullOrWhiteSpace(snapshot.NodeCachePolicy))
+                {
+                    nodeState += "; " + snapshot.NodeCachePolicy;
+                }
+
+                NodeStateText = nodeState;
                 VerificationStateText = snapshot.VerificationSummary;
                 RegistrySubmissionCidText = snapshot.RegistrySubmissionCid;
 
@@ -143,6 +164,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
             AppendLog("Device key reference: " + result.PrivateKeyPath);
             AppendLog("Key storage: " + PassportDeviceKeyStore.DescribeReference(result.PrivateKeyPath));
 
+            await BootstrapLocalNodeForOnboardingAsync();
             await RefreshStatusAsync();
         }
 
@@ -197,7 +219,53 @@ namespace ArchrealmsPassport.Windows.ViewModels
             AppendLog("Device credential record: " + result.DeviceRecordPath);
             AppendLog("Authorization record: " + result.AuthorizationRecordPath);
 
+            await BootstrapLocalNodeForOnboardingAsync();
             await RefreshStatusAsync();
+        }
+
+        private async Task BootstrapLocalNodeForOnboardingAsync()
+        {
+            if (!BootstrapLocalNodeOnOnboarding)
+            {
+                AppendLog("Local node onboarding bootstrap skipped by settings.");
+                return;
+            }
+
+            if (!CanRunWorkspaceAction())
+            {
+                AppendLog("Local node onboarding bootstrap skipped because local tooling is not ready.");
+                return;
+            }
+
+            var initializeResult = await _localNodeService.InitializeAsync(
+                _toolRoot,
+                WorkspaceRoot,
+                IpfsRepoPath,
+                StorageAllocationGb,
+                NodeParticipationMode,
+                NodeCachePolicy,
+                GetStorageGcWatermark(),
+                GetNodeProvideStrategy(),
+                IpfsCliPathOverride);
+
+            AppendLocalNodeResult(initializeResult, "Initialized local node during Passport onboarding.");
+            if (!initializeResult.Succeeded)
+            {
+                AppendLog("Passport identity activation remains complete; node bootstrap can be retried from Initialize Local IPFS Node after runtime setup.");
+                return;
+            }
+
+            var startResult = await _localNodeService.StartAsync(
+                _toolRoot,
+                WorkspaceRoot,
+                IpfsRepoPath,
+                IpfsCliPathOverride);
+
+            AppendLocalNodeResult(startResult, "Started local node during Passport onboarding.");
+            if (!startResult.Succeeded)
+            {
+                AppendLog("Passport identity activation remains complete; node start can be retried from Start Local Node.");
+            }
         }
 
         private Task GenerateChallengeAsync()

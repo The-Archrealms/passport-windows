@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "record_type": "passport_metering_audit_challenge_record",
+  "record_id": "20260427T000000Z-example-audit-challenge",
+  "created_utc": "2026-04-27T00:00:00Z",
+  "effective_utc": "2026-04-27T00:00:00Z",
+  "status": "audit_pending",
+  "registrar_id": "registrar-example",
+  "admission_record_id": "20260427T000000Z-example-package-admission",
+  "package_id": "example-metering-package",
+  "challenge_scope": "sampled_storage_epoch_proofs",
+  "challenge_reason": "routine_sample",
+  "challenge_seed_sha256": "",
+  "sample_policy": {
+    "policy_version": "metering-admission-policy-2026-04-27",
+    "minimum_sample_count": 1,
+    "sampling_method": "deterministic_seeded_sample"
+  },
+  "challenged_records": [
+    {
+      "record_type": "storage_epoch_proof_record",
+      "record_id": "storage-proof-example",
+      "record_path": "records/passport/metering/proofs/example/storage-epoch-proof.json",
+      "requested_evidence": "payload_signature_and_source_assignment"
+    }
+  ],
+  "response_due_utc": "2026-04-28T00:00:00Z",
+  "audit_result": {
+    "result_status": "pending",
+    "accepted_record_count": 0,
+    "rejected_record_count": 0,
+    "result_record_id": ""
+  },
+  "settlement_status": "not_settled",
+  "summary": "Audit challenge for an admitted metering package. This is review evidence only and does not settle value."
+}

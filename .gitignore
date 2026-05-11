@@ -5,6 +5,8 @@
 
 src/**/bin/
 src/**/obj/
+tests/**/bin/
+tests/**/obj/
 tools/**/bin/
 tools/**/obj/
 
@@ -16,3 +18,5 @@ verification-report.json
 passport-smoke-report.json
 
 *.pkcs8.protected
+*.pfx
+*.p12

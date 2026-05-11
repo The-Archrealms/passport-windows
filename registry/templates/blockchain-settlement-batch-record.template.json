@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "record_type": "blockchain_settlement_batch_record",
+  "record_id": "20260430T000000Z-example-blockchain-settlement-batch",
+  "created_utc": "2026-04-30T00:00:00Z",
+  "effective_utc": "2026-04-30T00:00:00Z",
+  "status": "not_submitted",
+  "settlement_batch_id": "settlement-batch-example",
+  "settlement_epoch_id": "settlement-epoch-example",
+  "policy_version": "blockchain-settlement-interface-2026-04-30",
+  "registrar_id": "registrar-example",
+  "target_settlement_layer": {
+    "settlement_rail": "blockchain",
+    "chain_id": "",
+    "settlement_contract": "",
+    "settlement_method": "",
+    "finality_rule": ""
+  },
+  "source_handoff_record_ids": [
+    "20260427T000000Z-example-settlement-handoff"
+  ],
+  "evidence_root_sha256": "",
+  "split_rule_id": "",
+  "asset_or_credit_id": "",
+  "participant_outputs": [
+    {
+      "archrealms_identity_id": "identity-example",
+      "node_id": "node-example",
+      "settlement_role": "operator",
+      "service_class": "stewarded_archive_storage",
+      "metering_units": 0,
+      "settlement_units": 0,
+      "destination_account": "",
+      "settlement_status": "not_submitted"
+    }
+  ],
+  "chain_submission": {
+    "settlement_tx_hash": "",
+    "settlement_block_height": 0,
+    "settlement_finality_status": "not_submitted",
+    "finality_confirmations_required": 0,
+    "finality_confirmations_observed": 0,
+    "submitted_utc": "",
+    "finalized_utc": ""
+  },
+  "correction_record_ids": [],
+  "dispute_record_ids": [],
+  "summary": "Blockchain settlement batch input. This is not final until the settlement chain finality rule is satisfied."
+}

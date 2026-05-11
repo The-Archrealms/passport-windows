@@ -1,5 +1,6 @@
 using System;
 using System.Threading.Tasks;
+using System.Windows;
 using System.Windows.Input;
 
 namespace ArchrealmsPassport.Windows.Commands
@@ -35,7 +36,7 @@ namespace ArchrealmsPassport.Windows.Commands
 
             try
             {
-                await _executeAsync().ConfigureAwait(false);
+                await _executeAsync();
             }
             finally
             {
@@ -46,7 +47,20 @@ namespace ArchrealmsPassport.Windows.Commands
 
         public void RaiseCanExecuteChanged()
         {
-            CanExecuteChanged?.Invoke(this, EventArgs.Empty);
+            var handler = CanExecuteChanged;
+            if (handler == null)
+            {
+                return;
+            }
+
+            var dispatcher = Application.Current?.Dispatcher;
+            if (dispatcher != null && !dispatcher.CheckAccess())
+            {
+                dispatcher.BeginInvoke(new Action(delegate { handler(this, EventArgs.Empty); }));
+                return;
+            }
+
+            handler(this, EventArgs.Empty);
         }
     }
 }

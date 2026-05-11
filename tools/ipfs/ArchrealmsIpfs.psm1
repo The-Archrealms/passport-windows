@@ -18,6 +18,56 @@ function Write-ArchrealmsUtf8Json {
     [System.IO.File]::WriteAllText($Path, $json + [Environment]::NewLine, [System.Text.UTF8Encoding]::new($false))
 }
 
+function Set-ArchrealmsJsonProperty {
+    param(
+        [Parameter(Mandatory = $true)]
+        $InputObject,
+        [Parameter(Mandatory = $true)]
+        [string]$Name,
+        [Parameter(Mandatory = $true)]
+        $Value
+    )
+
+    $property = $InputObject.PSObject.Properties[$Name]
+    if ($property) {
+        $property.Value = $Value
+        return
+    }
+
+    Add-Member -InputObject $InputObject -MemberType NoteProperty -Name $Name -Value $Value
+}
+
+function Remove-ArchrealmsJsonProperty {
+    param(
+        [Parameter(Mandatory = $true)]
+        $InputObject,
+        [Parameter(Mandatory = $true)]
+        [string]$Name
+    )
+
+    if ($InputObject.PSObject.Properties[$Name]) {
+        $InputObject.PSObject.Properties.Remove($Name)
+    }
+}
+
+function Get-ArchrealmsJsonObjectProperty {
+    param(
+        [Parameter(Mandatory = $true)]
+        $InputObject,
+        [Parameter(Mandatory = $true)]
+        [string]$Name
+    )
+
+    $property = $InputObject.PSObject.Properties[$Name]
+    if ($property -and $property.Value) {
+        return $property.Value
+    }
+
+    $value = [pscustomobject]@{}
+    Set-ArchrealmsJsonProperty -InputObject $InputObject -Name $Name -Value $value
+    return $value
+}
+
 function Get-ArchrealmsDefaultIpfsRepoPath {
     return Join-Path $HOME ".archrealms\ipfs\kubo"
 }
@@ -39,6 +89,27 @@ function Get-ArchrealmsResolvedIpfsRepoPath {
 }
 
 function Resolve-ArchrealmsIpfsCli {
+    if (-not [string]::IsNullOrWhiteSpace($env:ARCHREALMS_IPFS_CLI)) {
+        $preferredPath = [System.IO.Path]::GetFullPath($env:ARCHREALMS_IPFS_CLI)
+        if (Test-Path -LiteralPath $preferredPath) {
+            return $preferredPath
+        }
+    }
+
+    $bundledRuntimeRoot = Join-Path $PSScriptRoot "runtime"
+    if (Test-Path -LiteralPath $bundledRuntimeRoot) {
+        $bundledRootCandidate = Join-Path $bundledRuntimeRoot "ipfs.exe"
+        if (Test-Path -LiteralPath $bundledRootCandidate) {
+            return (Resolve-Path -LiteralPath $bundledRootCandidate).Path
+        }
+
+        $bundledNestedCandidate = Get-ChildItem -LiteralPath $bundledRuntimeRoot -Recurse -File -Filter "ipfs.exe" -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+        if ($bundledNestedCandidate) {
+            return $bundledNestedCandidate.FullName
+        }
+    }
+
     $command = Get-Command ipfs -ErrorAction SilentlyContinue
     if ($command) {
         return $command.Source
@@ -290,10 +361,31 @@ function Initialize-ArchrealmsIpfsRepo {
         [string]$ApiMultiaddr = "/ip4/127.0.0.1/tcp/5001",
         [string]$GatewayMultiaddr = "/ip4/127.0.0.1/tcp/8080",
         [int]$SwarmPort = 4001,
-        [string]$StorageMax = "10GB"
+        [string]$StorageMax = "10GB",
+        [int]$StorageGCWatermark = 85,
+        [string]$ProvideStrategy = "pinned",
+        [string]$ParticipationMode = "Public archive contributor",
+        [string]$CachePolicy = "Balanced pinned archive"
     )
 
     $resolvedRepoPath = Get-ArchrealmsResolvedIpfsRepoPath -IpfsRepoPath $IpfsRepoPath
+    if ($StorageGCWatermark -lt 1) {
+        $StorageGCWatermark = 1
+    }
+    elseif ($StorageGCWatermark -gt 99) {
+        $StorageGCWatermark = 99
+    }
+
+    if (-not $ProvideStrategy) {
+        $ProvideStrategy = "pinned"
+    }
+    if (-not $ParticipationMode) {
+        $ParticipationMode = "Public archive contributor"
+    }
+    if (-not $CachePolicy) {
+        $CachePolicy = "Balanced pinned archive"
+    }
+
     New-Item -ItemType Directory -Force -Path $resolvedRepoPath | Out-Null
 
     if (-not (Test-ArchrealmsIpfsRepo -IpfsRepoPath $resolvedRepoPath)) {
@@ -305,14 +397,27 @@ function Initialize-ArchrealmsIpfsRepo {
         "/ip4/0.0.0.0/udp/$SwarmPort/quic-v1",
         "/ip6/::/tcp/$SwarmPort",
         "/ip6/::/udp/$SwarmPort/quic-v1"
-    ) | ConvertTo-Json -Compress
+    )
 
-    Invoke-ArchrealmsIpfsTextCommand -Arguments @("config", "Addresses.API", $ApiMultiaddr) -IpfsRepoPath $resolvedRepoPath | Out-Null
-    Invoke-ArchrealmsIpfsTextCommand -Arguments @("config", "Addresses.Gateway", $GatewayMultiaddr) -IpfsRepoPath $resolvedRepoPath | Out-Null
-    Invoke-ArchrealmsIpfsTextCommand -Arguments @("config", "--json", "Addresses.Swarm", $swarmAddresses) -IpfsRepoPath $resolvedRepoPath | Out-Null
-    Invoke-ArchrealmsIpfsTextCommand -Arguments @("config", "Datastore.StorageMax", $StorageMax) -IpfsRepoPath $resolvedRepoPath | Out-Null
-    Invoke-ArchrealmsIpfsTextCommand -Arguments @("config", "Datastore.StorageGCWatermark", "85") -IpfsRepoPath $resolvedRepoPath | Out-Null
-    Invoke-ArchrealmsIpfsTextCommand -Arguments @("config", "Reprovider.Strategy", "pinned") -IpfsRepoPath $resolvedRepoPath | Out-Null
+    $configPath = Join-Path $resolvedRepoPath "config"
+    $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
+    $addresses = Get-ArchrealmsJsonObjectProperty -InputObject $config -Name "Addresses"
+    $datastore = Get-ArchrealmsJsonObjectProperty -InputObject $config -Name "Datastore"
+    $provide = Get-ArchrealmsJsonObjectProperty -InputObject $config -Name "Provide"
+    $plugins = Get-ArchrealmsJsonObjectProperty -InputObject $config -Name "Plugins"
+    $pluginMap = Get-ArchrealmsJsonObjectProperty -InputObject $plugins -Name "Plugins"
+    $telemetryPlugin = Get-ArchrealmsJsonObjectProperty -InputObject $pluginMap -Name "telemetry"
+    $telemetryConfig = Get-ArchrealmsJsonObjectProperty -InputObject $telemetryPlugin -Name "Config"
+    Remove-ArchrealmsJsonProperty -InputObject $config -Name "Reprovider"
+
+    Set-ArchrealmsJsonProperty -InputObject $addresses -Name "API" -Value $ApiMultiaddr
+    Set-ArchrealmsJsonProperty -InputObject $addresses -Name "Gateway" -Value $GatewayMultiaddr
+    Set-ArchrealmsJsonProperty -InputObject $addresses -Name "Swarm" -Value $swarmAddresses
+    Set-ArchrealmsJsonProperty -InputObject $datastore -Name "StorageMax" -Value $StorageMax
+    Set-ArchrealmsJsonProperty -InputObject $datastore -Name "StorageGCWatermark" -Value $StorageGCWatermark
+    Set-ArchrealmsJsonProperty -InputObject $provide -Name "Strategy" -Value $ProvideStrategy
+    Set-ArchrealmsJsonProperty -InputObject $telemetryConfig -Name "Mode" -Value "off"
+    Write-ArchrealmsUtf8Json -Path $configPath -InputObject $config
 
     $version = (Invoke-ArchrealmsIpfsTextCommand -Arguments @("version", "--number") -IpfsRepoPath $resolvedRepoPath | Select-Object -Last 1).Trim()
     $peerId = Get-ArchrealmsIpfsNodeIdentity -IpfsRepoPath $resolvedRepoPath
@@ -326,7 +431,11 @@ function Initialize-ArchrealmsIpfsRepo {
         gateway_multiaddr = $GatewayMultiaddr
         swarm_port = $SwarmPort
         storage_max = $StorageMax
-        reprovider_strategy = "pinned"
+        storage_gc_watermark = $StorageGCWatermark
+        provide_strategy = $ProvideStrategy
+        participation_mode = $ParticipationMode
+        cache_policy = $CachePolicy
+        telemetry_mode = "off"
     }
 }
 

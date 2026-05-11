@@ -6,6 +6,10 @@ param(
     [string]$GatewayMultiaddr = "/ip4/127.0.0.1/tcp/8080",
     [int]$SwarmPort = 4001,
     [string]$StorageMax = "10GB",
+    [int]$StorageGCWatermark = 85,
+    [string]$ProvideStrategy = "pinned",
+    [string]$ParticipationMode = "Public archive contributor",
+    [string]$CachePolicy = "Balanced pinned archive",
     [switch]$DryRun
 )
 
@@ -36,6 +40,10 @@ if ($DryRun) {
         gateway_multiaddr = $GatewayMultiaddr
         swarm_port = $SwarmPort
         storage_max = $StorageMax
+        storage_gc_watermark = $StorageGCWatermark
+        provide_strategy = $ProvideStrategy
+        participation_mode = $ParticipationMode
+        cache_policy = $CachePolicy
     }
 }
 else {
@@ -44,7 +52,11 @@ else {
         -ApiMultiaddr $ApiMultiaddr `
         -GatewayMultiaddr $GatewayMultiaddr `
         -SwarmPort $SwarmPort `
-        -StorageMax $StorageMax
+        -StorageMax $StorageMax `
+        -StorageGCWatermark $StorageGCWatermark `
+        -ProvideStrategy $ProvideStrategy `
+        -ParticipationMode $ParticipationMode `
+        -CachePolicy $CachePolicy
 }
 
 Write-ArchrealmsUtf8Json -Path $RecordPath -InputObject $record
@@ -57,4 +69,5 @@ if (-not $DryRun) {
     Write-Host "  Peer Id   : $($record.peer_id)"
     Write-Host "  API       : $($record.api_multiaddr)"
     Write-Host "  Gateway   : $($record.gateway_multiaddr)"
+    Write-Host "  Profile   : $($record.participation_mode); $($record.cache_policy)"
 }

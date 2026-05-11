@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "record_type": "repair_participation_record",
+  "record_id": "<record-id>",
+  "created_utc": "<YYYY-MM-DDTHH:MM:SSZ>",
+  "effective_utc": "<YYYY-MM-DDTHH:MM:SSZ>",
+  "status": "submitted",
+  "archrealms_identity_id": "<identity-id>",
+  "device_id": "<device-id>",
+  "node_id": "<node-id>",
+  "repair_id": "<repair-id>",
+  "service_class": "repair_service",
+  "content_ref": {
+    "cid": "<cid>",
+    "manifest_sha256": "<sha256>",
+    "relative_path": ""
+  },
+  "repair_trigger": {
+    "trigger_record_id": "<trigger-record-id>",
+    "health_state_before": "under_replicated",
+    "replication_target": 0,
+    "fresh_replica_count_before": 0
+  },
+  "repair_action": {
+    "action_type": "replica_restore",
+    "started_utc": "<YYYY-MM-DDTHH:MM:SSZ>",
+    "completed_utc": "<YYYY-MM-DDTHH:MM:SSZ>",
+    "repaired_bytes": 0,
+    "result": "completed"
+  },
+  "metering_claim": {
+    "claimed_repair_bytes": 0
+  },
+  "signature": {
+    "signature_algorithm": "<algorithm>",
+    "signing_device_record_id": "<device-record-id>",
+    "signature_path": "<relative-signature-path>",
+    "signed_payload_sha256": "<sha256>"
+  },
+  "summary": "<short-summary>"
+}

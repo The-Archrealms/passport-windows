@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "record_type": "node_capacity_snapshot_record",
+  "record_id": "<record-id>",
+  "created_utc": "<YYYY-MM-DDTHH:MM:SSZ>",
+  "effective_utc": "<YYYY-MM-DDTHH:MM:SSZ>",
+  "status": "active",
+  "archrealms_identity_id": "<identity-id>",
+  "device_id": "<device-id>",
+  "node_id": "<node-id>",
+  "client_platform": "windows",
+  "passport_client": "passport-windows",
+  "storage_mode": "read_only",
+  "storage_limit_bytes": 0,
+  "local_repo_path_hash": "<sha256-or-empty>",
+  "ipfs_peer_id": "<ipfs-peer-id-or-empty>",
+  "participation_scopes": [
+    "public_archive_read",
+    "submission_publication"
+  ],
+  "measurement_epoch": {
+    "epoch_id": "<epoch-id>",
+    "starts_utc": "<YYYY-MM-DDTHH:MM:SSZ>",
+    "ends_utc": "<YYYY-MM-DDTHH:MM:SSZ>"
+  },
+  "observed_capacity": {
+    "available_bytes": 0,
+    "allocated_bytes": 0,
+    "pinned_bytes": 0
+  },
+  "signature": {
+    "signature_algorithm": "<algorithm>",
+    "signing_device_record_id": "<device-record-id>",
+    "signature_path": "<relative-signature-path>",
+    "signed_payload_sha256": "<sha256>"
+  },
+  "summary": "<short-summary>"
+}

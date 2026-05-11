@@ -4,7 +4,7 @@ namespace ArchrealmsPassport.Windows.Models
     {
         public string CitizenName { get; set; } = string.Empty;
         public string SelectedProvisioningMode { get; set; } = "Create new Passport identity";
-        public string SelectedIdentityMode { get; set; } = "pseudonymous";
+        public string SelectedIdentityMode { get; set; } = "named";
         public string ExistingIdentityId { get; set; } = string.Empty;
         public string ActiveIdentityId { get; set; } = string.Empty;
         public string ActiveDeviceId { get; set; } = string.Empty;
@@ -16,9 +16,13 @@ namespace ArchrealmsPassport.Windows.Models
         public string JoinApprovalPath { get; set; } = string.Empty;
         public string WorkspaceRoot { get; set; } = string.Empty;
         public string IpfsRepoPath { get; set; } = string.Empty;
+        public string IpfsCliPathOverride { get; set; } = string.Empty;
         public int StorageAllocationGb { get; set; } = 25;
+        public string NodeParticipationMode { get; set; } = "Public archive contributor";
+        public string NodeCachePolicy { get; set; } = "Balanced pinned archive";
         public bool ParticipateInPublicRegistry { get; set; } = true;
         public bool PreferWindowsHelloCredentials { get; set; }
+        public bool BootstrapLocalNodeOnOnboarding { get; set; } = true;
         public bool PublishCarExports { get; set; } = true;
         public bool PreferWifiOnly { get; set; }
         public string ReadOnlyIpfsCid { get; set; } = string.Empty;

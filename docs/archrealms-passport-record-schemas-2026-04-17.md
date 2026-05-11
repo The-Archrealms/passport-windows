@@ -59,7 +59,7 @@ Recommended fields:
 
 Notes:
 
-- `identity_mode` should normally be one of `named`, `pseudonymous`, `anonymous`, or `ceremonial`
+- `identity_mode` may preserve advanced registry semantics such as `named`, `pseudonymous`, `anonymous`, or `ceremonial`, but the Windows Passport app should default normal first-run identities to `named` and not ask ordinary users to choose among these modes
 - the Passport identity record does not prove civil identity merely by existing
 - the same person may hold many Passport identity records
 

@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "record_type": "passport_metering_correction_record",
+  "record_id": "20260427T000000Z-example-metering-correction",
+  "created_utc": "2026-04-27T00:00:00Z",
+  "effective_utc": "2026-04-27T00:00:00Z",
+  "status": "corrected",
+  "registrar_id": "registrar-example",
+  "admission_record_id": "20260427T000000Z-example-package-admission",
+  "package_id": "example-metering-package",
+  "correction_reason": "measurement_error",
+  "supersedes_record_ids": [
+    "20260427T000000Z-example-package-admission"
+  ],
+  "affected_records": [
+    {
+      "record_type": "storage_epoch_proof_record",
+      "record_id": "storage-proof-example",
+      "record_path": "records/passport/metering/proofs/example/storage-epoch-proof.json"
+    }
+  ],
+  "prior_metering": {
+    "accepted_proof_count": 1,
+    "rejected_proof_count": 0,
+    "verified_replicated_byte_seconds": 0
+  },
+  "corrected_metering": {
+    "accepted_proof_count": 0,
+    "rejected_proof_count": 1,
+    "verified_replicated_byte_seconds": 0
+  },
+  "dispute_record_id": "",
+  "audit_challenge_record_id": "",
+  "settlement_status": "not_settled",
+  "summary": "Correction record that supersedes admitted metering totals by reference. This is not settlement."
+}

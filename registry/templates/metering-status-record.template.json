@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "record_type": "metering_status_record",
+  "record_id": "<record-id>",
+  "created_utc": "<YYYY-MM-DDTHH:MM:SSZ>",
+  "effective_utc": "<YYYY-MM-DDTHH:MM:SSZ>",
+  "status": "reported",
+  "archrealms_identity_id": "<identity-id>",
+  "device_id": "<device-id>",
+  "node_id": "<node-id>",
+  "measurement_epoch": {
+    "epoch_id": "<epoch-id>",
+    "starts_utc": "<YYYY-MM-DDTHH:MM:SSZ>",
+    "ends_utc": "<YYYY-MM-DDTHH:MM:SSZ>"
+  },
+  "source": {
+    "metering_authority": "<authority-id-or-label>",
+    "source_record_id": "<source-record-id>",
+    "source_manifest_sha256": "<sha256>"
+  },
+  "verified_service": {
+    "submitted_proof_count": 0,
+    "accepted_proof_count": 0,
+    "rejected_proof_count": 0,
+    "verified_replicated_byte_seconds": 0,
+    "verified_retrieval_bytes": 0,
+    "verified_repair_bytes": 0
+  },
+  "reliability": {
+    "proof_success_rate": 0.0,
+    "retrieval_success_rate": 0.0,
+    "node_availability_score": 0.0
+  },
+  "settlement_preview": {
+    "settlement_status": "not_settled",
+    "settlement_record_id": ""
+  },
+  "summary": "<short-summary>"
+}

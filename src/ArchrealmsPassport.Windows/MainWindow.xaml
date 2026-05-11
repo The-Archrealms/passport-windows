@@ -6,335 +6,632 @@
         mc:Ignorable="d"
         Title="Archrealms Passport"
         Icon="Assets/AppIcon.ico"
-        Height="860"
-        Width="1380"
-        MinHeight="760"
-        MinWidth="1100"
-        Background="#F4EEE1">
+        Height="820"
+        Width="1180"
+        MinHeight="720"
+        MinWidth="980"
+        AutomationProperties.AutomationId="ArchrealmsPassportMainWindow"
+        Background="#F3F1EA">
     <Window.Resources>
         <Style x:Key="CardStyle" TargetType="Border">
-            <Setter Property="CornerRadius" Value="18" />
+            <Setter Property="CornerRadius" Value="8" />
             <Setter Property="Padding" Value="20" />
             <Setter Property="Margin" Value="0,0,0,18" />
-            <Setter Property="Background" Value="#FFF9F1" />
-            <Setter Property="BorderBrush" Value="#D7C6A0" />
+            <Setter Property="Background" Value="#FFFFFF" />
+            <Setter Property="BorderBrush" Value="#D8D2C6" />
             <Setter Property="BorderThickness" Value="1" />
         </Style>
+        <Style x:Key="SectionTitleStyle" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="Segoe UI" />
+            <Setter Property="FontSize" Value="22" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="#1F2F2A" />
+        </Style>
+        <Style x:Key="FieldLabelStyle" TargetType="TextBlock">
+            <Setter Property="Margin" Value="0,12,0,5" />
+            <Setter Property="FontFamily" Value="Segoe UI" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="#45524D" />
+        </Style>
+        <Style x:Key="CaptionStyle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#5D6763" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+        <Style x:Key="StatusLabelStyle" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="Segoe UI" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="#51645E" />
+            <Setter Property="VerticalAlignment" Value="Top" />
+        </Style>
+        <Style x:Key="StatusValueStyle" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="Consolas" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Foreground" Value="#1D2C27" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+        <Style x:Key="InputTextBoxStyle" TargetType="TextBox">
+            <Setter Property="Padding" Value="10,7" />
+            <Setter Property="FontFamily" Value="Segoe UI" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Background" Value="#FBFAF7" />
+            <Setter Property="BorderBrush" Value="#C9C2B6" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+        <Style x:Key="CodeTextBoxStyle" TargetType="TextBox" BasedOn="{StaticResource InputTextBoxStyle}">
+            <Setter Property="FontFamily" Value="Consolas" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
         <Style x:Key="ActionButtonStyle" TargetType="Button">
-            <Setter Property="Margin" Value="0,0,12,12" />
-            <Setter Property="Padding" Value="16,10" />
-            <Setter Property="Foreground" Value="#FFF7ED" />
-            <Setter Property="Background" Value="#70513B" />
-            <Setter Property="BorderBrush" Value="#5D4331" />
+            <Setter Property="MinHeight" Value="36" />
+            <Setter Property="Margin" Value="0,0,10,10" />
+            <Setter Property="Padding" Value="16,8" />
+            <Setter Property="Foreground" Value="#FFFFFF" />
+            <Setter Property="Background" Value="#315C4B" />
+            <Setter Property="BorderBrush" Value="#254438" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="FontWeight" Value="SemiBold" />
         </Style>
-        <Style x:Key="CaptionStyle" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="#6A604F" />
-            <Setter Property="FontSize" Value="12" />
-            <Setter Property="TextWrapping" Value="Wrap" />
+        <Style x:Key="SecondaryButtonStyle" TargetType="Button" BasedOn="{StaticResource ActionButtonStyle}">
+            <Setter Property="Foreground" Value="#20302A" />
+            <Setter Property="Background" Value="#E7ECE8" />
+            <Setter Property="BorderBrush" Value="#B9C6BE" />
         </Style>
     </Window.Resources>
 
     <DockPanel LastChildFill="True">
         <Border DockPanel.Dock="Top"
-                Background="#E7DBC0"
-                BorderBrush="#C9B286"
+                Background="#233B32"
+                BorderBrush="#17271F"
                 BorderThickness="0,0,0,1"
-                Padding="28,24,28,18">
+                Padding="24,18">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="20" />
+                    <ColumnDefinition Width="18" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <Border Width="78"
-                        Height="78"
-                        VerticalAlignment="Top"
-                        Background="#F7F1E4"
-                        CornerRadius="20"
-                        BorderBrush="#D0BF97"
+                <Border Width="58"
+                        Height="58"
+                        Background="#FFFFFF"
+                        CornerRadius="8"
+                        BorderBrush="#C9D3CD"
                         BorderThickness="1"
-                        Padding="10">
-                    <Image Source="Assets/OrderEmblem.png"
-                           Stretch="Uniform" />
+                        Padding="8">
+                    <Image Source="Assets/OrderEmblem.png" Stretch="Uniform" />
                 </Border>
 
-                <StackPanel Grid.Column="2">
-                    <TextBlock FontFamily="Palatino Linotype"
-                               FontSize="34"
+                <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                    <TextBlock FontFamily="Segoe UI"
+                               FontSize="28"
                                FontWeight="SemiBold"
-                               Foreground="#423124"
+                               Foreground="#FFFFFF"
                                Text="Archrealms Passport" />
-                    <TextBlock Margin="0,8,0,0"
-                               FontFamily="Palatino Linotype"
-                               FontSize="15"
-                               Foreground="#5C4A38"
-                               TextWrapping="Wrap"
-                               Text="Windows Passport for identity onboarding, registry packaging, local IPFS stewardship, and publication of public Archrealms record bundles." />
+                    <TextBlock Margin="0,4,0,0"
+                               FontSize="13"
+                               Foreground="#C9D9D2"
+                               Text="Passport, storage, node, and registry readiness." />
                 </StackPanel>
 
-                <Border Grid.Column="3"
-                        Padding="16,10"
-                        Background="#F7F1E4"
-                        CornerRadius="14"
-                        BorderBrush="#D0BF97"
-                        BorderThickness="1">
-                    <StackPanel>
-                        <TextBlock FontFamily="Palatino Linotype"
-                                   FontSize="12"
-                                   Foreground="#715B46"
-                                   Text="Current State" />
-                        <TextBlock Margin="0,2,0,0"
-                                   FontFamily="Consolas"
-                                   FontSize="13"
-                                   Foreground="#3D2E23"
-                                   Text="{Binding VerificationStateText}" />
-                    </StackPanel>
-                </Border>
+                <StackPanel Grid.Column="3" MinWidth="220" VerticalAlignment="Center">
+                    <TextBlock FontSize="12" Foreground="#AFC8BE" Text="Latest Package" />
+                    <TextBlock Margin="0,3,0,0"
+                               FontFamily="Consolas"
+                               FontSize="13"
+                               Foreground="#FFFFFF"
+                               TextWrapping="Wrap"
+                               Text="{Binding VerificationStateText}" />
+                </StackPanel>
             </Grid>
         </Border>
 
-        <ScrollViewer VerticalScrollBarVisibility="Auto">
-            <Grid Margin="28">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="2*" />
-                    <ColumnDefinition Width="24" />
-                    <ColumnDefinition Width="1.45*" />
-                </Grid.ColumnDefinitions>
+        <TabControl AutomationProperties.AutomationId="MainNavigationTabs"
+                    Margin="24"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Padding="0">
+            <TabItem Header="Home">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <Grid Margin="0,18,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="1.15*" />
+                            <ColumnDefinition Width="24" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
 
-                <StackPanel Grid.Column="0">
-                    <Border Style="{StaticResource CardStyle}">
-                        <StackPanel>
-                            <TextBlock FontFamily="Palatino Linotype" FontSize="24" FontWeight="SemiBold" Foreground="#3F3025" Text="Identity and Workspace" />
-                            <TextBlock Margin="0,8,0,18" Style="{StaticResource CaptionStyle}" Text="Each Passport identity may authorize many devices, but new devices now join by signed request and approval. Runtime records are written into a local workspace rather than into the source repository." />
+                        <Border Style="{StaticResource CardStyle}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Home" />
 
-                            <TextBlock FontFamily="Palatino Linotype" FontSize="15" Foreground="#4B392C" Text="Display Name" />
-                            <TextBox Margin="0,6,0,12" Padding="10,7" Text="{Binding CitizenName, UpdateSourceTrigger=PropertyChanged}" />
+                                <Grid Margin="0,18,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="130" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="12" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="12" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="12" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
 
-                            <TextBlock FontFamily="Palatino Linotype" FontSize="15" Foreground="#4B392C" Text="Provisioning Mode" />
-                            <ComboBox Margin="0,6,0,12" Padding="8,5" ItemsSource="{Binding ProvisioningModes}" SelectedItem="{Binding SelectedProvisioningMode, UpdateSourceTrigger=PropertyChanged}" />
+                                    <TextBlock Grid.Row="0" Style="{StaticResource StatusLabelStyle}" Text="Passport" />
+                                    <TextBlock Grid.Row="0" Grid.Column="1" AutomationProperties.AutomationId="HomePassportStatusText" Style="{StaticResource StatusValueStyle}" Text="{Binding PassportSummaryText}" />
 
-                            <TextBlock FontFamily="Palatino Linotype" FontSize="15" Foreground="#4B392C" Text="Identity Mode" />
-                            <ComboBox Margin="0,6,0,12" Padding="8,5" ItemsSource="{Binding IdentityModes}" SelectedItem="{Binding SelectedIdentityMode, UpdateSourceTrigger=PropertyChanged}" />
+                                    <TextBlock Grid.Row="2" Style="{StaticResource StatusLabelStyle}" Text="Storage" />
+                                    <TextBlock Grid.Row="2" Grid.Column="1" AutomationProperties.AutomationId="HomeStorageStatusText" Style="{StaticResource StatusValueStyle}" Text="{Binding StorageSummaryText}" />
 
-                            <TextBlock FontFamily="Palatino Linotype" FontSize="15" Foreground="#4B392C" Text="Existing Identity ID" />
-                            <TextBox Margin="0,6,0,12" Padding="10,7" FontFamily="Consolas" IsEnabled="{Binding IsJoiningExistingIdentity}" Text="{Binding ExistingIdentityId, UpdateSourceTrigger=PropertyChanged}" />
+                                    <TextBlock Grid.Row="4" Style="{StaticResource StatusLabelStyle}" Text="Local Node" />
+                                    <TextBlock Grid.Row="4" Grid.Column="1" AutomationProperties.AutomationId="HomeNodeStatusText" Style="{StaticResource StatusValueStyle}" Text="{Binding LocalNodeSummaryText}" />
 
-                            <TextBlock FontFamily="Palatino Linotype" FontSize="15" Foreground="#4B392C" Text="Join Request Path" />
-                            <TextBox Margin="0,6,0,12" Padding="10,7" FontFamily="Consolas" Text="{Binding JoinRequestPath, UpdateSourceTrigger=PropertyChanged}" />
+                                    <TextBlock Grid.Row="6" Style="{StaticResource StatusLabelStyle}" Text="Registry" />
+                                    <TextBlock Grid.Row="6" Grid.Column="1" AutomationProperties.AutomationId="HomeRegistryStatusText" Style="{StaticResource StatusValueStyle}" Text="{Binding RegistryPackageSummaryText}" />
+                                </Grid>
 
-                            <TextBlock FontFamily="Palatino Linotype" FontSize="15" Foreground="#4B392C" Text="Join Approval Path" />
-                            <TextBox Margin="0,6,0,12" Padding="10,7" FontFamily="Consolas" Text="{Binding JoinApprovalPath, UpdateSourceTrigger=PropertyChanged}" />
+                                <Button AutomationProperties.AutomationId="PrimaryActionButton"
+                                        Margin="0,22,0,12"
+                                        HorizontalAlignment="Stretch"
+                                        Style="{StaticResource ActionButtonStyle}"
+                                        Command="{Binding PrimaryActionCommand}"
+                                        Content="{Binding PrimaryActionLabel}" />
 
-                            <TextBlock FontFamily="Palatino Linotype" FontSize="15" Foreground="#4B392C" Text="Device Label" />
-                            <TextBox Margin="0,6,0,12" Padding="10,7" Text="{Binding DeviceLabel, UpdateSourceTrigger=PropertyChanged}" />
+                                <WrapPanel>
+                                    <Button Style="{StaticResource SecondaryButtonStyle}" Command="{Binding RefreshStatusCommand}" Content="Refresh" />
+                                    <Button Style="{StaticResource SecondaryButtonStyle}" Command="{Binding SaveSettingsCommand}" Content="Save" />
+                                </WrapPanel>
+                            </StackPanel>
+                        </Border>
 
-                            <CheckBox Margin="0,0,0,12"
-                                      FontSize="14"
-                                      Foreground="#4B392C"
-                                      IsChecked="{Binding PreferWindowsHelloCredentials}"
-                                      Content="Use Windows Hello for new device credentials when available" />
+                        <Border Grid.Column="2" Style="{StaticResource CardStyle}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Setup" />
 
-                            <Grid Margin="0,0,0,12">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="12" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0">
-                                    <TextBlock FontFamily="Palatino Linotype" FontSize="15" Foreground="#4B392C" Text="Active Identity ID" />
-                                    <TextBox Margin="0,6,0,0" Padding="10,7" FontFamily="Consolas" IsReadOnly="True" Text="{Binding ActiveIdentityId}" />
-                                </StackPanel>
-                                <StackPanel Grid.Column="2">
-                                    <TextBlock FontFamily="Palatino Linotype" FontSize="15" Foreground="#4B392C" Text="Active Device ID" />
-                                    <TextBox Margin="0,6,0,0" Padding="10,7" FontFamily="Consolas" IsReadOnly="True" Text="{Binding ActiveDeviceId}" />
-                                </StackPanel>
-                            </Grid>
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Display Name" />
+                                <TextBox AutomationProperties.AutomationId="DisplayNameTextBox"
+                                         Style="{StaticResource InputTextBoxStyle}"
+                                         Text="{Binding CitizenName, UpdateSourceTrigger=PropertyChanged}" />
 
-                            <TextBlock FontFamily="Palatino Linotype" FontSize="15" Foreground="#4B392C" Text="Pending Device ID" />
-                            <TextBox Margin="0,6,0,12" Padding="10,7" FontFamily="Consolas" IsReadOnly="True" Text="{Binding PendingDeviceId}" />
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Device Label" />
+                                <TextBox Style="{StaticResource InputTextBoxStyle}" Text="{Binding DeviceLabel, UpdateSourceTrigger=PropertyChanged}" />
 
-                            <TextBlock FontFamily="Palatino Linotype" FontSize="15" Foreground="#4B392C" Text="Passport Workspace" />
-                            <TextBox Margin="0,6,0,12" Padding="10,7" FontFamily="Consolas" Text="{Binding WorkspaceRoot, UpdateSourceTrigger=PropertyChanged}" />
+                                <CheckBox Margin="0,16,0,0"
+                                          FontSize="13"
+                                          Foreground="#34413C"
+                                          IsChecked="{Binding PreferWindowsHelloCredentials}"
+                                          Content="Use Windows Hello" />
 
-                            <TextBlock FontFamily="Palatino Linotype" FontSize="15" Foreground="#4B392C" Text="IPFS Repo Path" />
-                            <TextBox Margin="0,6,0,0" Padding="10,7" FontFamily="Consolas" Text="{Binding IpfsRepoPath, UpdateSourceTrigger=PropertyChanged}" />
-                        </StackPanel>
-                    </Border>
+                                <CheckBox Margin="0,10,0,0"
+                                          FontSize="13"
+                                          Foreground="#34413C"
+                                          IsChecked="{Binding ParticipateInPublicRegistry}"
+                                          Content="Contribute storage" />
 
-                    <Border Style="{StaticResource CardStyle}">
-                        <StackPanel>
-                            <TextBlock FontFamily="Palatino Linotype" FontSize="24" FontWeight="SemiBold" Foreground="#3F3025" Text="Archive Participation" />
-                            <TextBlock Margin="0,8,0,18" Style="{StaticResource CaptionStyle}" Text="This machine can contribute storage for public Archrealms records and publish Passport registry submission bundles through a local Kubo node." />
+                                <Grid Margin="0,16,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="80" />
+                                    </Grid.ColumnDefinitions>
+                                    <Slider AutomationProperties.AutomationId="StorageAllocationSlider"
+                                            Minimum="5"
+                                            Maximum="500"
+                                            TickFrequency="5"
+                                            IsSnapToTickEnabled="True"
+                                            Value="{Binding StorageAllocationGb, UpdateSourceTrigger=PropertyChanged}" />
+                                    <TextBlock Grid.Column="1"
+                                               Margin="12,0,0,0"
+                                               HorizontalAlignment="Right"
+                                               VerticalAlignment="Center"
+                                               FontFamily="Consolas"
+                                               FontSize="13"
+                                               Foreground="#26332E"
+                                               Text="{Binding StorageAllocationLabel}" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
 
-                            <Grid Margin="0,0,0,12">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="84" />
-                                </Grid.ColumnDefinitions>
-                                <Slider Margin="0,6,18,0"
-                                        Minimum="5"
-                                        Maximum="500"
-                                        TickFrequency="5"
-                                        IsSnapToTickEnabled="True"
-                                        Value="{Binding StorageAllocationGb, UpdateSourceTrigger=PropertyChanged}" />
-                                <Border Grid.Column="1" Background="#F1E6D1" BorderBrush="#CFBE99" BorderThickness="1" CornerRadius="10" Padding="8,6">
-                                    <TextBlock HorizontalAlignment="Center" FontFamily="Consolas" FontSize="14" Foreground="#4B392C" Text="{Binding StorageAllocationLabel}" />
-                                </Border>
-                            </Grid>
+                    </Grid>
+                </ScrollViewer>
+            </TabItem>
 
-                            <WrapPanel>
-                                <CheckBox Margin="0,0,18,10" FontSize="14" Foreground="#4B392C" IsChecked="{Binding ParticipateInPublicRegistry}" Content="Participate in the public registry" />
-                                <CheckBox Margin="0,0,18,10" FontSize="14" Foreground="#4B392C" IsChecked="{Binding PublishCarExports}" Content="Emit CAR archives on publication" />
-                                <CheckBox Margin="0,0,18,10" FontSize="14" Foreground="#4B392C" IsChecked="{Binding PreferWifiOnly}" Content="Prefer unmetered or Wi-Fi network use" />
-                            </WrapPanel>
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
+            <TabItem Header="Passport">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <Grid Margin="0,18,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="1.08*" />
+                            <ColumnDefinition Width="24" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
 
-                <StackPanel Grid.Column="2">
-                    <Border Style="{StaticResource CardStyle}">
-                        <StackPanel>
-                            <TextBlock FontFamily="Palatino Linotype" FontSize="24" FontWeight="SemiBold" Foreground="#3F3025" Text="Actions" />
-                            <TextBlock Margin="0,8,0,18" Style="{StaticResource CaptionStyle}" Text="The Passport client provisions identities, maintains its own workspace, and now requires a signed join approval before activating a new device under an existing identity." />
-                            <WrapPanel>
-                                <Button Style="{StaticResource ActionButtonStyle}" Command="{Binding ProvisionIdentityCommand}" Content="{Binding ProvisioningButtonLabel}" />
-                                <Button Style="{StaticResource ActionButtonStyle}" Command="{Binding ApproveJoinRequestCommand}" Content="Approve Join Request" />
-                                <Button Style="{StaticResource ActionButtonStyle}" Command="{Binding ImportJoinApprovalCommand}" Content="Import Join Approval" />
-                                <Button Style="{StaticResource ActionButtonStyle}" Command="{Binding SaveSettingsCommand}" Content="Save Settings" />
-                                <Button Style="{StaticResource ActionButtonStyle}" Command="{Binding RefreshStatusCommand}" Content="Refresh Status" />
-                                <Button Style="{StaticResource ActionButtonStyle}" Command="{Binding InitializeNodeCommand}" Content="Initialize Local IPFS Node" />
-                            </WrapPanel>
-                        </StackPanel>
-                    </Border>
+                        <Border Style="{StaticResource CardStyle}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Passport" />
 
-                    <Border Style="{StaticResource CardStyle}">
-                        <StackPanel>
-                            <TextBlock FontFamily="Palatino Linotype" FontSize="24" FontWeight="SemiBold" Foreground="#3F3025" Text="Passport Signing" />
-                            <TextBlock Margin="0,8,0,18" Style="{StaticResource CaptionStyle}" Text="Use the active device credential to sign a challenge or prepare a portable registry submission package for the current Passport identity." />
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Display Name" />
+                                <TextBox Style="{StaticResource InputTextBoxStyle}" Text="{Binding CitizenName, UpdateSourceTrigger=PropertyChanged}" />
 
-                            <TextBlock FontFamily="Palatino Linotype" FontSize="15" Foreground="#4B392C" Text="Challenge" />
-                            <TextBox Margin="0,6,0,12" Padding="10,7" FontFamily="Consolas" Text="{Binding ChallengeText, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Provisioning Mode" />
+                                <ComboBox AutomationProperties.AutomationId="ProvisioningModeComboBox"
+                                          Padding="8,5"
+                                          ItemsSource="{Binding ProvisioningModes}"
+                                          SelectedItem="{Binding SelectedProvisioningMode, UpdateSourceTrigger=PropertyChanged}" />
 
-                            <WrapPanel>
-                                <Button Style="{StaticResource ActionButtonStyle}" Command="{Binding GenerateChallengeCommand}" Content="Generate Challenge" />
-                                <Button Style="{StaticResource ActionButtonStyle}" Command="{Binding SignChallengeCommand}" Content="Sign Challenge" />
-                                <Button Style="{StaticResource ActionButtonStyle}" Command="{Binding CreateRegistrySubmissionCommand}" Content="Prepare Registry Submission" />
-                                <Button Style="{StaticResource ActionButtonStyle}" Command="{Binding PublishRegistrySubmissionCommand}" Content="Publish Submission To IPFS" />
-                            </WrapPanel>
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Existing Identity ID" />
+                                <TextBox Style="{StaticResource CodeTextBoxStyle}" IsEnabled="{Binding IsJoiningExistingIdentity}" Text="{Binding ExistingIdentityId, UpdateSourceTrigger=PropertyChanged}" />
 
-                            <TextBlock FontFamily="Palatino Linotype" FontSize="15" Foreground="#4B392C" Text="Challenge Signature Record" />
-                            <TextBox Margin="0,6,0,12" Padding="10,7" FontFamily="Consolas" IsReadOnly="True" Text="{Binding ChallengeSignatureText}" TextWrapping="Wrap" />
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Device Label" />
+                                <TextBox Style="{StaticResource InputTextBoxStyle}" Text="{Binding DeviceLabel, UpdateSourceTrigger=PropertyChanged}" />
 
-                            <TextBlock FontFamily="Palatino Linotype" FontSize="15" Foreground="#4B392C" Text="Registry Submission Package" />
-                            <TextBox Margin="0,6,0,12" Padding="10,7" FontFamily="Consolas" IsReadOnly="True" Text="{Binding RegistrySubmissionText}" TextWrapping="Wrap" />
+                                <CheckBox Margin="0,16,0,0" FontSize="13" Foreground="#34413C" IsChecked="{Binding PreferWindowsHelloCredentials}" Content="Use Windows Hello" />
+                                <CheckBox Margin="0,10,0,0" FontSize="13" Foreground="#34413C" IsChecked="{Binding BootstrapLocalNodeOnOnboarding}" Content="Enable storage during onboarding" />
 
-                            <TextBlock FontFamily="Palatino Linotype" FontSize="15" Foreground="#4B392C" Text="Latest Submission CID" />
-                            <TextBox Margin="0,6,0,0" Padding="10,7" FontFamily="Consolas" IsReadOnly="True" Text="{Binding RegistrySubmissionCidText}" TextWrapping="Wrap" />
-                        </StackPanel>
-                    </Border>
+                                <WrapPanel Margin="0,18,0,0">
+                                    <Button AutomationProperties.AutomationId="CreateNewIdentityButton" Style="{StaticResource ActionButtonStyle}" Command="{Binding ProvisionIdentityCommand}" Content="{Binding ProvisioningButtonLabel}" />
+                                    <Button Style="{StaticResource SecondaryButtonStyle}" Command="{Binding ApproveJoinRequestCommand}" Content="Approve Join" />
+                                    <Button Style="{StaticResource SecondaryButtonStyle}" Command="{Binding ImportJoinApprovalCommand}" Content="Import Approval" />
+                                </WrapPanel>
+                            </StackPanel>
+                        </Border>
 
-                    <Border Style="{StaticResource CardStyle}">
-                        <StackPanel>
-                            <TextBlock FontFamily="Palatino Linotype" FontSize="24" FontWeight="SemiBold" Foreground="#3F3025" Text="Read-Only IPFS Access" />
-                            <TextBlock Margin="0,8,0,18" Style="{StaticResource CaptionStyle}" Text="Preview canonical public files from IPFS and fetch local read-only copies into the Passport workspace without turning them into writable records." />
-
-                            <TextBlock FontFamily="Palatino Linotype" FontSize="15" Foreground="#4B392C" Text="Root CID" />
-                            <TextBox Margin="0,6,0,12" Padding="10,7" FontFamily="Consolas" Text="{Binding ReadOnlyIpfsCid, UpdateSourceTrigger=PropertyChanged}" />
-
-                            <TextBlock FontFamily="Palatino Linotype" FontSize="15" Foreground="#4B392C" Text="Relative File Path" />
-                            <TextBox Margin="0,6,0,12" Padding="10,7" FontFamily="Consolas" Text="{Binding ReadOnlyIpfsRelativePath, UpdateSourceTrigger=PropertyChanged}" />
-
-                            <WrapPanel>
-                                <Button Style="{StaticResource ActionButtonStyle}" Command="{Binding PreviewReadOnlyIpfsFileCommand}" Content="Preview Text From IPFS" />
-                                <Button Style="{StaticResource ActionButtonStyle}" Command="{Binding FetchReadOnlyIpfsFileCommand}" Content="Fetch Read-Only Copy" />
-                            </WrapPanel>
-
-                            <TextBlock FontFamily="Palatino Linotype" FontSize="15" Foreground="#4B392C" Text="Preview" />
-                            <TextBox Margin="0,6,0,12"
-                                     Padding="10,7"
-                                     Height="150"
-                                     FontFamily="Consolas"
-                                     IsReadOnly="True"
-                                     Text="{Binding ReadOnlyIpfsPreviewText}"
-                                     TextWrapping="Wrap"
-                                     AcceptsReturn="True"
-                                     VerticalScrollBarVisibility="Auto" />
-
-                            <TextBlock FontFamily="Palatino Linotype" FontSize="15" Foreground="#4B392C" Text="Last Read-Only Copy" />
-                            <TextBox Margin="0,6,0,0" Padding="10,7" FontFamily="Consolas" IsReadOnly="True" Text="{Binding ReadOnlyIpfsFetchedPathText}" TextWrapping="Wrap" />
-                        </StackPanel>
-                    </Border>
-
-                    <Border Style="{StaticResource CardStyle}">
-                        <StackPanel>
-                            <TextBlock FontFamily="Palatino Linotype" FontSize="24" FontWeight="SemiBold" Foreground="#3F3025" Text="Status" />
-                            <TextBlock Margin="0,8,0,18" Style="{StaticResource CaptionStyle}" Text="The Passport watches the workspace, node readiness, and the latest submission package produced from this machine." />
-
-                            <Grid Margin="0,0,0,12">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="12" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0">
-                                    <TextBlock FontFamily="Palatino Linotype" FontSize="13" Foreground="#715B46" Text="Workspace" />
-                                    <TextBlock Margin="0,4,0,0" FontFamily="Consolas" FontSize="13" Text="{Binding WorkspaceStateText}" TextWrapping="Wrap" />
-                                </StackPanel>
-                                <StackPanel Grid.Column="2">
-                                    <TextBlock FontFamily="Palatino Linotype" FontSize="13" Foreground="#715B46" Text="IPFS CLI" />
-                                    <TextBlock Margin="0,4,0,0" FontFamily="Consolas" FontSize="13" Text="{Binding IpfsStateText}" TextWrapping="Wrap" />
-                                </StackPanel>
-                            </Grid>
-
-                            <Grid Margin="0,0,0,12">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="12" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0">
-                                    <TextBlock FontFamily="Palatino Linotype" FontSize="13" Foreground="#715B46" Text="Local Node" />
-                                    <TextBlock Margin="0,4,0,0" FontFamily="Consolas" FontSize="13" Text="{Binding NodeStateText}" TextWrapping="Wrap" />
-                                </StackPanel>
-                                <StackPanel Grid.Column="2">
-                                    <TextBlock FontFamily="Palatino Linotype" FontSize="13" Foreground="#715B46" Text="Latest Package" />
-                                    <TextBlock Margin="0,4,0,0" FontFamily="Consolas" FontSize="13" Text="{Binding VerificationStateText}" TextWrapping="Wrap" />
-                                </StackPanel>
-                            </Grid>
-
-                            <Border Background="#EFE4CC" BorderBrush="#D3C095" BorderThickness="1" CornerRadius="14" Padding="14">
+                        <StackPanel Grid.Column="2">
+                            <Border Style="{StaticResource CardStyle}">
                                 <StackPanel>
-                                    <TextBlock FontFamily="Palatino Linotype" FontSize="14" Foreground="#715B46" Text="Latest Submission CID" />
-                                    <TextBlock Margin="0,6,0,0" FontFamily="Consolas" FontSize="13" Foreground="#3D2E23" TextWrapping="Wrap" Text="{Binding RegistrySubmissionCidText}" />
+                                    <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Active Passport" />
+
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Active Identity ID" />
+                                    <TextBox Style="{StaticResource CodeTextBoxStyle}" IsReadOnly="True" Text="{Binding ActiveIdentityId, Mode=OneWay}" />
+
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Active Device ID" />
+                                    <TextBox Style="{StaticResource CodeTextBoxStyle}" IsReadOnly="True" Text="{Binding ActiveDeviceId, Mode=OneWay}" />
+
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Pending Device ID" />
+                                    <TextBox Style="{StaticResource CodeTextBoxStyle}" IsReadOnly="True" Text="{Binding PendingDeviceId, Mode=OneWay}" />
+
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Join Request Path" />
+                                    <TextBox Style="{StaticResource CodeTextBoxStyle}" Text="{Binding JoinRequestPath, UpdateSourceTrigger=PropertyChanged}" />
+
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Join Approval Path" />
+                                    <TextBox Style="{StaticResource CodeTextBoxStyle}" Text="{Binding JoinApprovalPath, UpdateSourceTrigger=PropertyChanged}" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource CardStyle}">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Signing" />
+
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Challenge" />
+                                    <TextBox Style="{StaticResource CodeTextBoxStyle}" Text="{Binding ChallengeText, UpdateSourceTrigger=PropertyChanged}" />
+
+                                    <WrapPanel Margin="0,14,0,0">
+                                        <Button AutomationProperties.AutomationId="GenerateChallengeButton" Style="{StaticResource SecondaryButtonStyle}" Command="{Binding GenerateChallengeCommand}" Content="Generate" />
+                                        <Button Style="{StaticResource ActionButtonStyle}" Command="{Binding SignChallengeCommand}" Content="Sign" />
+                                        <Button Style="{StaticResource ActionButtonStyle}" Command="{Binding CreateRegistrySubmissionCommand}" Content="Prepare Registry Package" />
+                                    </WrapPanel>
+
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Signature Record" />
+                                    <TextBox Height="120" Style="{StaticResource CodeTextBoxStyle}" IsReadOnly="True" Text="{Binding ChallengeSignatureText, Mode=OneWay}" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" />
+
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Registry Package" />
+                                    <TextBox Style="{StaticResource CodeTextBoxStyle}" IsReadOnly="True" Text="{Binding RegistrySubmissionText, Mode=OneWay}" />
                                 </StackPanel>
                             </Border>
                         </StackPanel>
-                    </Border>
+                    </Grid>
+                </ScrollViewer>
+            </TabItem>
 
-                    <Border Style="{StaticResource CardStyle}">
+            <TabItem Header="Storage">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <Grid Margin="0,18,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="1.05*" />
+                            <ColumnDefinition Width="24" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <Border Style="{StaticResource CardStyle}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Storage" />
+
+                                <CheckBox Margin="0,16,0,0" FontSize="13" Foreground="#34413C" IsChecked="{Binding ParticipateInPublicRegistry}" Content="Contribute storage" />
+
+                                <Grid Margin="0,18,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="90" />
+                                    </Grid.ColumnDefinitions>
+                                    <Slider Minimum="5"
+                                            Maximum="500"
+                                            TickFrequency="5"
+                                            IsSnapToTickEnabled="True"
+                                            Value="{Binding StorageAllocationGb, UpdateSourceTrigger=PropertyChanged}" />
+                                    <TextBlock Grid.Column="1"
+                                               Margin="14,0,0,0"
+                                               HorizontalAlignment="Right"
+                                               VerticalAlignment="Center"
+                                               FontFamily="Consolas"
+                                               FontSize="14"
+                                               Foreground="#26332E"
+                                               Text="{Binding StorageAllocationLabel}" />
+                                </Grid>
+
+                                <CheckBox Margin="0,16,0,0" FontSize="13" Foreground="#34413C" IsChecked="{Binding PublishCarExports}" Content="Publish CAR archives" />
+                                <CheckBox Margin="0,10,0,0" FontSize="13" Foreground="#34413C" IsChecked="{Binding PreferWifiOnly}" Content="Prefer unmetered network" />
+
+                                <WrapPanel Margin="0,18,0,0">
+                                    <Button AutomationProperties.AutomationId="InitializeNodeButton" Style="{StaticResource ActionButtonStyle}" Command="{Binding InitializeNodeCommand}" Content="Enable Storage" />
+                                    <Button Style="{StaticResource SecondaryButtonStyle}" Command="{Binding StartNodeCommand}" Content="Start Node" />
+                                    <Button Style="{StaticResource SecondaryButtonStyle}" Command="{Binding StopNodeCommand}" Content="Stop Node" />
+                                    <Button Style="{StaticResource SecondaryButtonStyle}" Command="{Binding RepairNodeCommand}" Content="Apply Settings" />
+                                </WrapPanel>
+
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Status" />
+                                <TextBlock AutomationProperties.AutomationId="StorageActionStatusText"
+                                           Style="{StaticResource StatusValueStyle}"
+                                           Text="{Binding StorageActionStatusText}" />
+
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Capacity Snapshot" />
+                                <TextBox Style="{StaticResource CodeTextBoxStyle}" IsReadOnly="True" Text="{Binding LatestNodeCapacitySnapshotText, Mode=OneWay}" />
+
+                                <WrapPanel Margin="0,14,0,0">
+                                    <Button AutomationProperties.AutomationId="RecordNodeCapacitySnapshotButton" Style="{StaticResource SecondaryButtonStyle}" Command="{Binding RecordNodeCapacitySnapshotCommand}" Content="Record Snapshot" />
+                                </WrapPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Grid.Column="2" Style="{StaticResource CardStyle}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Node" />
+
+                                <Grid Margin="0,18,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="125" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="12" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="12" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="12" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+
+                                    <TextBlock Grid.Row="0" Style="{StaticResource StatusLabelStyle}" Text="Profile" />
+                                    <TextBlock Grid.Row="0" Grid.Column="1" Style="{StaticResource StatusValueStyle}" Text="{Binding ParticipationProfileSummary}" />
+
+                                    <TextBlock Grid.Row="2" Style="{StaticResource StatusLabelStyle}" Text="Config" />
+                                    <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource StatusValueStyle}" Text="{Binding NodeConfigSummary}" />
+
+                                    <TextBlock Grid.Row="4" Style="{StaticResource StatusLabelStyle}" Text="Runtime" />
+                                    <TextBlock Grid.Row="4" Grid.Column="1" Style="{StaticResource StatusValueStyle}" Text="{Binding IpfsStateText}" />
+
+                                    <TextBlock Grid.Row="6" Style="{StaticResource StatusLabelStyle}" Text="Node State" />
+                                    <TextBlock Grid.Row="6" Grid.Column="1" Style="{StaticResource StatusValueStyle}" Text="{Binding NodeStateText}" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </ScrollViewer>
+            </TabItem>
+
+            <TabItem Header="Activity">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <Grid Margin="0,18,0,0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <Border Style="{StaticResource CardStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="150" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="12" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="12" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="12" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="12" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Grid.Row="0" Grid.ColumnSpan="2" Style="{StaticResource SectionTitleStyle}" Text="Status" />
+
+                                <TextBlock Grid.Row="2" Style="{StaticResource StatusLabelStyle}" Text="Workspace" />
+                                <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource StatusValueStyle}" Text="{Binding WorkspaceStateText}" />
+
+                                <TextBlock Grid.Row="4" Style="{StaticResource StatusLabelStyle}" Text="IPFS Runtime" />
+                                <TextBlock Grid.Row="4" Grid.Column="1" Style="{StaticResource StatusValueStyle}" Text="{Binding ResolvedIpfsCliPathText}" />
+
+                                <TextBlock Grid.Row="6" Style="{StaticResource StatusLabelStyle}" Text="Node" />
+                                <TextBlock Grid.Row="6" Grid.Column="1" Style="{StaticResource StatusValueStyle}" Text="{Binding NodeStateText}" />
+
+                                <TextBlock Grid.Row="8" Style="{StaticResource StatusLabelStyle}" Text="Diagnostics" />
+                                <TextBlock Grid.Row="8" Grid.Column="1" Style="{StaticResource StatusValueStyle}" Text="{Binding LatestNodeDiagnosticsText}" />
+                            </Grid>
+                        </Border>
+
+                        <Border Grid.Row="1" Style="{StaticResource CardStyle}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Activity Log" />
+                                <TextBox AutomationProperties.AutomationId="ActivityLogTextBox"
+                                         Height="430"
+                                         Margin="0,12,0,0"
+                                         Style="{StaticResource CodeTextBoxStyle}"
+                                         IsReadOnly="True"
+                                         Text="{Binding ActivityLog, Mode=OneWay}"
+                                         AcceptsReturn="True"
+                                         VerticalScrollBarVisibility="Auto" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </ScrollViewer>
+            </TabItem>
+
+            <TabItem Header="Advanced">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <Grid Margin="0,18,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="24" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
                         <StackPanel>
-                            <TextBlock FontFamily="Palatino Linotype" FontSize="24" FontWeight="SemiBold" Foreground="#3F3025" Text="Activity Log" />
-                            <TextBox Height="300"
-                                     Margin="0,12,0,0"
-                                     Padding="14"
-                                     FontFamily="Consolas"
-                                     FontSize="13"
-                                     Background="#FBF7EF"
-                                     BorderBrush="#D3C095"
-                                     BorderThickness="1"
-                                     IsReadOnly="True"
-                                     Text="{Binding ActivityLog}"
-                                     TextWrapping="Wrap"
-                                     AcceptsReturn="True"
-                                     VerticalScrollBarVisibility="Auto" />
+                            <Border Style="{StaticResource CardStyle}">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Workspace" />
+
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Passport Workspace" />
+                                    <TextBox Style="{StaticResource CodeTextBoxStyle}" Text="{Binding WorkspaceRoot, UpdateSourceTrigger=PropertyChanged}" />
+
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="IPFS Repo Path" />
+                                    <TextBox Style="{StaticResource CodeTextBoxStyle}" Text="{Binding IpfsRepoPath, UpdateSourceTrigger=PropertyChanged}" />
+
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="IPFS Runtime Override" />
+                                    <TextBox Style="{StaticResource CodeTextBoxStyle}" Text="{Binding IpfsCliPathOverride, UpdateSourceTrigger=PropertyChanged}" />
+
+                                    <WrapPanel Margin="0,16,0,0">
+                                        <Button Style="{StaticResource SecondaryButtonStyle}" Command="{Binding SaveSettingsCommand}" Content="Save Settings" />
+                                        <Button Style="{StaticResource SecondaryButtonStyle}" Command="{Binding RefreshStatusCommand}" Content="Refresh Status" />
+                                        <Button Style="{StaticResource SecondaryButtonStyle}" Command="{Binding WriteNodeDiagnosticsCommand}" Content="Write Diagnostics" />
+                                    </WrapPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource CardStyle}">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Node Profile" />
+
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Participation Mode" />
+                                    <ComboBox Padding="8,5" ItemsSource="{Binding NodeParticipationModes}" SelectedItem="{Binding NodeParticipationMode, UpdateSourceTrigger=PropertyChanged}" />
+
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Cache Policy" />
+                                    <ComboBox Padding="8,5" ItemsSource="{Binding NodeCachePolicies}" SelectedItem="{Binding NodeCachePolicy, UpdateSourceTrigger=PropertyChanged}" />
+
+                                    <WrapPanel Margin="0,16,0,0">
+                                        <Button Style="{StaticResource SecondaryButtonStyle}" Command="{Binding RestartNodeCommand}" Content="Restart Node" />
+                                        <Button Style="{StaticResource SecondaryButtonStyle}" Command="{Binding RepairNodeCommand}" Content="Repair Config" />
+                                    </WrapPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource CardStyle}">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Storage Proofs" />
+
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Assignment ID" />
+                                    <TextBox Style="{StaticResource CodeTextBoxStyle}" Text="{Binding StorageAssignmentId, UpdateSourceTrigger=PropertyChanged}" />
+
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Content CID" />
+                                    <TextBox AutomationProperties.AutomationId="StorageAssignmentCidTextBox" Style="{StaticResource CodeTextBoxStyle}" Text="{Binding StorageAssignmentCid, UpdateSourceTrigger=PropertyChanged}" />
+
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Manifest SHA-256" />
+                                    <TextBox Style="{StaticResource CodeTextBoxStyle}" Text="{Binding StorageAssignmentManifestSha256, UpdateSourceTrigger=PropertyChanged}" />
+
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Service Class" />
+                                    <TextBox Style="{StaticResource CodeTextBoxStyle}" Text="{Binding StorageAssignmentServiceClass, UpdateSourceTrigger=PropertyChanged}" />
+
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Assigned Bytes" />
+                                    <TextBox Style="{StaticResource CodeTextBoxStyle}" Text="{Binding StorageAssignmentBytes, UpdateSourceTrigger=PropertyChanged}" />
+
+                                    <WrapPanel Margin="0,16,0,0">
+                                        <Button AutomationProperties.AutomationId="AcknowledgeStorageAssignmentButton" Style="{StaticResource SecondaryButtonStyle}" Command="{Binding AcknowledgeStorageAssignmentCommand}" Content="Acknowledge Assignment" />
+                                    </WrapPanel>
+
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Latest Acknowledgment" />
+                                    <TextBox Style="{StaticResource CodeTextBoxStyle}" IsReadOnly="True" Text="{Binding LatestStorageAssignmentAcknowledgmentText, Mode=OneWay}" />
+
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Proof Source File Path" />
+                                    <TextBox AutomationProperties.AutomationId="StorageProofSourceFilePathTextBox" Style="{StaticResource CodeTextBoxStyle}" Text="{Binding StorageProofSourceFilePath, UpdateSourceTrigger=PropertyChanged}" />
+
+                                    <WrapPanel Margin="0,16,0,0">
+                                        <Button AutomationProperties.AutomationId="CreateStorageEpochProofButton" Style="{StaticResource SecondaryButtonStyle}" Command="{Binding CreateStorageEpochProofCommand}" Content="Create Epoch Proof" />
+                                        <Button Style="{StaticResource SecondaryButtonStyle}" Command="{Binding CreateLocalMeteringStatusCommand}" Content="Create Metering Status" />
+                                        <Button AutomationProperties.AutomationId="VerifyLocalMeteringRecordsButton" Style="{StaticResource SecondaryButtonStyle}" Command="{Binding VerifyLocalMeteringRecordsCommand}" Content="Verify Metering" />
+                                    </WrapPanel>
+
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Latest Epoch Proof" />
+                                    <TextBox Style="{StaticResource CodeTextBoxStyle}" IsReadOnly="True" Text="{Binding LatestStorageEpochProofText, Mode=OneWay}" />
+
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Metering Summary" />
+                                    <TextBox Style="{StaticResource CodeTextBoxStyle}" IsReadOnly="True" Text="{Binding LocalMeteringSummaryText, Mode=OneWay}" />
+
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Latest Metering Verification" />
+                                    <TextBox Style="{StaticResource CodeTextBoxStyle}" IsReadOnly="True" Text="{Binding LatestLocalMeteringVerificationText, Mode=OneWay}" />
+                                </StackPanel>
+                            </Border>
                         </StackPanel>
-                    </Border>
-                </StackPanel>
-            </Grid>
-        </ScrollViewer>
+
+                        <StackPanel Grid.Column="2">
+                            <Border Style="{StaticResource CardStyle}">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Registry" />
+
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Registry Package" />
+                                    <TextBox Style="{StaticResource CodeTextBoxStyle}" IsReadOnly="True" Text="{Binding RegistrySubmissionText, Mode=OneWay}" />
+
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Latest Submission CID" />
+                                    <TextBox Style="{StaticResource CodeTextBoxStyle}" IsReadOnly="True" Text="{Binding RegistrySubmissionCidText, Mode=OneWay}" />
+
+                                    <WrapPanel Margin="0,16,0,0">
+                                        <Button Style="{StaticResource ActionButtonStyle}" Command="{Binding CreateRegistrySubmissionCommand}" Content="Prepare Registry Package" />
+                                        <Button Style="{StaticResource SecondaryButtonStyle}" Command="{Binding PublishRegistrySubmissionCommand}" Content="Publish To IPFS" />
+                                    </WrapPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource CardStyle}">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Read-Only IPFS" />
+
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Root CID" />
+                                    <TextBox AutomationProperties.AutomationId="ReadOnlyIpfsCidTextBox" Style="{StaticResource CodeTextBoxStyle}" Text="{Binding ReadOnlyIpfsCid, UpdateSourceTrigger=PropertyChanged}" />
+
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Relative File Path" />
+                                    <TextBox Style="{StaticResource CodeTextBoxStyle}" Text="{Binding ReadOnlyIpfsRelativePath, UpdateSourceTrigger=PropertyChanged}" />
+
+                                    <WrapPanel Margin="0,16,0,0">
+                                        <Button Style="{StaticResource SecondaryButtonStyle}" Command="{Binding PreviewReadOnlyIpfsFileCommand}" Content="Preview" />
+                                        <Button Style="{StaticResource SecondaryButtonStyle}" Command="{Binding FetchReadOnlyIpfsFileCommand}" Content="Fetch Copy" />
+                                        <Button AutomationProperties.AutomationId="ExportCarButton" Style="{StaticResource SecondaryButtonStyle}" Command="{Binding ExportCarCommand}" Content="Export CAR" />
+                                    </WrapPanel>
+
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Preview" />
+                                    <TextBox Height="150"
+                                             Style="{StaticResource CodeTextBoxStyle}"
+                                             IsReadOnly="True"
+                                             Text="{Binding ReadOnlyIpfsPreviewText, Mode=OneWay}"
+                                             AcceptsReturn="True"
+                                             VerticalScrollBarVisibility="Auto" />
+
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Last Read-Only Copy" />
+                                    <TextBox Style="{StaticResource CodeTextBoxStyle}" IsReadOnly="True" Text="{Binding ReadOnlyIpfsFetchedPathText, Mode=OneWay}" />
+
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Latest CAR Export" />
+                                    <TextBox Style="{StaticResource CodeTextBoxStyle}" IsReadOnly="True" Text="{Binding LatestCarExportText, Mode=OneWay}" />
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </Grid>
+                </ScrollViewer>
+            </TabItem>
+        </TabControl>
     </DockPanel>
 </Window>

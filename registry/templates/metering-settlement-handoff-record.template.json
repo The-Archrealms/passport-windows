@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "record_type": "passport_metering_settlement_handoff_record",
+  "record_id": "20260427T000000Z-example-settlement-handoff",
+  "created_utc": "2026-04-27T00:00:00Z",
+  "effective_utc": "2026-04-27T00:00:00Z",
+  "status": "eligible_for_settlement_review",
+  "registrar_id": "registrar-example",
+  "policy_version": "metering-admission-policy-2026-04-27",
+  "admission_record_id": "20260427T000000Z-example-package-admission",
+  "package_id": "example-metering-package",
+  "audit_status": "complete_or_waived",
+  "dispute_status": "none_open",
+  "correction_record_ids": [],
+  "excluded_record_ids": [],
+  "final_metering": {
+    "accepted_proof_count": 0,
+    "rejected_proof_count": 0,
+    "verified_replicated_byte_seconds": 0,
+    "verified_retrieval_bytes": 0,
+    "verified_repair_bytes": 0
+  },
+  "handoff_status": "eligible_for_settlement_review",
+  "target_settlement_layer": {
+    "settlement_rail": "blockchain",
+    "chain_id": "",
+    "settlement_contract": "",
+    "settlement_method": "",
+    "finality_rule": ""
+  },
+  "settlement_status": "not_settled",
+  "settlement_record_id": "",
+  "summary": "Settlement handoff input record. This only makes metering evidence eligible for later settlement review; it is not settlement."
+}

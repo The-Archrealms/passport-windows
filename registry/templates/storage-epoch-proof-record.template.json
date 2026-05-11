@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "record_type": "storage_epoch_proof_record",
+  "record_id": "<record-id>",
+  "created_utc": "<YYYY-MM-DDTHH:MM:SSZ>",
+  "effective_utc": "<YYYY-MM-DDTHH:MM:SSZ>",
+  "status": "submitted",
+  "archrealms_identity_id": "<identity-id>",
+  "device_id": "<device-id>",
+  "node_id": "<node-id>",
+  "assignment_id": "<assignment-id>",
+  "service_class": "stewarded_archive_storage",
+  "content_ref": {
+    "cid": "<cid>",
+    "manifest_sha256": "<sha256>",
+    "relative_path": ""
+  },
+  "measurement_epoch": {
+    "epoch_id": "<epoch-id>",
+    "starts_utc": "<YYYY-MM-DDTHH:MM:SSZ>",
+    "ends_utc": "<YYYY-MM-DDTHH:MM:SSZ>"
+  },
+  "challenge": {
+    "challenge_id": "<challenge-id>",
+    "challenge_method": "deterministic_epoch_cid_segment_hash",
+    "challenge_seed_sha256": "<sha256>",
+    "segment_offsets": [
+      0
+    ]
+  },
+  "proof_response": {
+    "response_method": "segment_hash",
+    "response_sha256": "<sha256>",
+    "proved_bytes": 0,
+    "observed_utc": "<YYYY-MM-DDTHH:MM:SSZ>"
+  },
+  "metering_claim": {
+    "claimed_replicated_byte_seconds": 0,
+    "claimed_storage_bytes": 0
+  },
+  "signature": {
+    "signature_algorithm": "<algorithm>",
+    "signing_device_record_id": "<device-record-id>",
+    "signature_path": "<relative-signature-path>",
+    "signed_payload_sha256": "<sha256>"
+  },
+  "summary": "<short-summary>"
+}
