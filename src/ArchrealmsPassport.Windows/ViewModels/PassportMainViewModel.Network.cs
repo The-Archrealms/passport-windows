@@ -79,7 +79,29 @@ namespace ArchrealmsPassport.Windows.ViewModels
         public void Dispose()
         {
             _networkUsageService.NetworkStatusChanged -= NetworkUsageService_NetworkStatusChanged;
+            StopStorageIfUnmeteredNetworkEnforcementWouldEnd();
             _networkUsageService.Dispose();
+        }
+
+        private void StopStorageIfUnmeteredNetworkEnforcementWouldEnd()
+        {
+            if (!PreferWifiOnly || !HasActiveNode())
+            {
+                return;
+            }
+
+            try
+            {
+                _localNodeService.StopAsync(
+                    _toolRoot,
+                    WorkspaceRoot,
+                    IpfsRepoPath,
+                    IpfsCliPathOverride).GetAwaiter().GetResult();
+            }
+            catch (Exception ex)
+            {
+                AppendLog("Network enforcement shutdown failed: " + ex.Message);
+            }
         }
     }
 }

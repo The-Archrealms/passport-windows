@@ -13,7 +13,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
     {
         private string GetActiveNodeId()
         {
-            return string.IsNullOrWhiteSpace(_activeNodeId) ? string.Empty : _activeNodeId;
+            return string.IsNullOrWhiteSpace(_activeNodeId) ? _preparedNodeId : _activeNodeId;
         }
 
         private async Task InitializeNodeAsync()

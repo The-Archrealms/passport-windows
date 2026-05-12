@@ -74,6 +74,9 @@ namespace ArchrealmsPassport.Windows.ViewModels
         private string _localMeteringSummaryText = "No submitted proof summary yet";
         private string _latestLocalMeteringVerificationText = "No local metering verification report yet";
         private string _activeNodeId = string.Empty;
+        private string _preparedNodeId = string.Empty;
+        private bool _storageNodePrepared;
+        private bool _storageNodeRunning;
         private string _workspaceRoot = string.Empty;
         private string _ipfsRepoPath = string.Empty;
         private string _ipfsCliPathOverride = string.Empty;

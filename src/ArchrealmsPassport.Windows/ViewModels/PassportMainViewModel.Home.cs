@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Threading.Tasks;
+using System.Windows;
 
 namespace ArchrealmsPassport.Windows.ViewModels
 {
@@ -14,9 +15,15 @@ namespace ArchrealmsPassport.Windows.ViewModels
                 return;
             }
 
-            if (!HasActiveNode())
+            if (!HasPreparedStorageNode())
             {
                 await InitializeNodeAsync();
+                return;
+            }
+
+            if (!HasActiveNode())
+            {
+                await StartNodeAsync();
                 return;
             }
 
@@ -32,6 +39,11 @@ namespace ArchrealmsPassport.Windows.ViewModels
             if (!HasActivePassport())
             {
                 return CanProvisionIdentity();
+            }
+
+            if (!HasPreparedStorageNode())
+            {
+                return CanRunWorkspaceAction();
             }
 
             if (!HasActiveNode())
@@ -82,7 +94,12 @@ namespace ArchrealmsPassport.Windows.ViewModels
 
         private bool HasActiveNode()
         {
-            return !string.IsNullOrWhiteSpace(_activeNodeId);
+            return _storageNodeRunning;
+        }
+
+        private bool HasPreparedStorageNode()
+        {
+            return _storageNodePrepared;
         }
 
         private bool HasRegistrySubmissionPackage()
@@ -117,6 +134,77 @@ namespace ArchrealmsPassport.Windows.ViewModels
             }
 
             return ShortenIdentifier(ActiveIdentityId);
+        }
+
+        internal static string BuildStorageSummaryText(bool participatesInPublicRegistry, bool storageNodePrepared, bool storageNodeRunning, string storageAllocationLabel)
+        {
+            if (!participatesInPublicRegistry)
+            {
+                return "Read-only";
+            }
+
+            if (storageNodeRunning)
+            {
+                return "Running: " + storageAllocationLabel;
+            }
+
+            return storageNodePrepared
+                ? "Paused: " + storageAllocationLabel
+                : "Not enabled";
+        }
+
+        internal static string BuildLocalNodeSummaryText(bool participatesInPublicRegistry, bool storageNodePrepared, bool storageNodeRunning)
+        {
+            if (storageNodeRunning)
+            {
+                return "Online";
+            }
+
+            if (storageNodePrepared)
+            {
+                return "Paused";
+            }
+
+            return participatesInPublicRegistry
+                ? "Not running"
+                : "Off";
+        }
+
+        internal static string BuildPrimaryActionLabel(
+            bool hasActivePassport,
+            bool isJoiningExistingIdentity,
+            bool storageNodePrepared,
+            bool storageNodeRunning,
+            bool isPublishedRegistrySubmission)
+        {
+            if (!hasActivePassport)
+            {
+                return isJoiningExistingIdentity ? "Request Access" : "Create Passport";
+            }
+
+            if (!storageNodePrepared)
+            {
+                return "Enable Storage";
+            }
+
+            if (!storageNodeRunning)
+            {
+                return "Start Storage";
+            }
+
+            if (!isPublishedRegistrySubmission)
+            {
+                return "Register Passport";
+            }
+
+            return "Passport Ready";
+        }
+
+        internal static Visibility BuildPrimaryActionVisibility(bool storageNodePrepared, bool storageNodeRunning, bool isPublishedRegistrySubmission)
+        {
+            return storageNodePrepared && storageNodeRunning && isPublishedRegistrySubmission
+                ? Visibility.Collapsed
+                : Visibility.Visible;
         }
 
         private void RaiseHomePropertiesChanged()

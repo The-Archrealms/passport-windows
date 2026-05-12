@@ -66,7 +66,10 @@ namespace ArchrealmsPassport.Windows.ViewModels
                 WorkspaceStateText = snapshot.WorkspaceReady ? snapshot.WorkspaceRoot : "Workspace unavailable";
                 IpfsStateText = snapshot.IpfsCliSource;
                 ResolvedIpfsCliPathText = snapshot.IpfsCliDetected ? snapshot.IpfsCliPath : "No runtime resolved";
-                _activeNodeId = snapshot.IpfsNodePrepared ? snapshot.NodePeerId : string.Empty;
+                _storageNodePrepared = snapshot.IpfsNodePrepared;
+                _storageNodeRunning = snapshot.NodeApiReachable;
+                _preparedNodeId = snapshot.IpfsNodePrepared ? snapshot.NodePeerId : string.Empty;
+                _activeNodeId = snapshot.NodeApiReachable ? snapshot.NodePeerId : string.Empty;
                 var nodeState = string.IsNullOrWhiteSpace(snapshot.NodeHealthSummary)
                     ? "Node not initialized"
                     : snapshot.NodeHealthSummary;

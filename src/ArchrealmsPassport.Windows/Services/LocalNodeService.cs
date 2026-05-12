@@ -195,11 +195,32 @@ namespace ArchrealmsPassport.Windows.Services
                     await Task.Delay(500, cancellationToken).ConfigureAwait(false);
                 }
 
+                try
+                {
+                    if (!process.HasExited)
+                    {
+                        process.Kill(entireProcessTree: true);
+                    }
+                }
+                catch (Exception)
+                {
+                }
+
+                WriteDaemonRecord(resolvedWorkspaceRoot, new Dictionary<string, object?>
+                {
+                    ["state"] = "startup_timeout",
+                    ["process_id"] = processId,
+                    ["started_utc"] = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture),
+                    ["ipfs_cli_path"] = resolvedIpfsCliPath,
+                    ["ipfs_repo_path"] = resolvedIpfsRepoPath
+                });
+
                 return new LocalNodeOperationResult
                 {
-                    Succeeded = true,
+                    Succeeded = false,
+                    ExitCode = -1,
                     Action = "start-local-node",
-                    Message = "Started local IPFS daemon process, but the API was not reachable before the status timeout.",
+                    Message = "Local IPFS daemon API was not reachable before the startup timeout.",
                     ResolvedIpfsCliPath = resolvedIpfsCliPath,
                     ProcessId = processId,
                     RecordPath = GetDaemonRecordPath(resolvedWorkspaceRoot)

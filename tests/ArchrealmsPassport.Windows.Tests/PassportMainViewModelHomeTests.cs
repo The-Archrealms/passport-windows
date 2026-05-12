@@ -1,0 +1,61 @@
+using System.Windows;
+using ArchrealmsPassport.Windows.ViewModels;
+using Xunit;
+
+namespace ArchrealmsPassport.Windows.Tests;
+
+public sealed class PassportMainViewModelHomeTests
+{
+    [Theory]
+    [InlineData(false, false, false, false, false, "Create Passport")]
+    [InlineData(false, true, false, false, false, "Request Access")]
+    [InlineData(true, false, false, false, false, "Enable Storage")]
+    [InlineData(true, false, true, false, false, "Start Storage")]
+    [InlineData(true, false, true, true, false, "Register Passport")]
+    [InlineData(true, false, true, true, true, "Passport Ready")]
+    public void PrimaryActionLabelSeparatesPreparedStorageFromRunningStorage(
+        bool hasActivePassport,
+        bool isJoiningExistingIdentity,
+        bool storageNodePrepared,
+        bool storageNodeRunning,
+        bool isPublishedRegistrySubmission,
+        string expected)
+    {
+        var label = PassportMainViewModel.BuildPrimaryActionLabel(
+            hasActivePassport,
+            isJoiningExistingIdentity,
+            storageNodePrepared,
+            storageNodeRunning,
+            isPublishedRegistrySubmission);
+
+        Assert.Equal(expected, label);
+    }
+
+    [Theory]
+    [InlineData(true, false, true, "Running: 1 GB")]
+    [InlineData(true, true, false, "Paused: 1 GB")]
+    [InlineData(true, false, false, "Not enabled")]
+    [InlineData(false, false, false, "Read-only")]
+    public void StorageSummarySeparatesPreparedStorageFromRunningStorage(
+        bool participatesInPublicRegistry,
+        bool storageNodePrepared,
+        bool storageNodeRunning,
+        string expected)
+    {
+        var summary = PassportMainViewModel.BuildStorageSummaryText(
+            participatesInPublicRegistry,
+            storageNodePrepared,
+            storageNodeRunning,
+            "1 GB");
+
+        Assert.Equal(expected, summary);
+    }
+
+    [Fact]
+    public void PrimaryActionOnlyHidesAfterRegistrationWhenStorageIsRunning()
+    {
+        Assert.Equal(Visibility.Visible, PassportMainViewModel.BuildPrimaryActionVisibility(false, true, true));
+        Assert.Equal(Visibility.Visible, PassportMainViewModel.BuildPrimaryActionVisibility(true, false, true));
+        Assert.Equal(Visibility.Collapsed, PassportMainViewModel.BuildPrimaryActionVisibility(true, true, true));
+    }
+}

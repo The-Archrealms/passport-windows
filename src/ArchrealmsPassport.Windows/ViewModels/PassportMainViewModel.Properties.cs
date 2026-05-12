@@ -160,14 +160,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
         {
             get
             {
-                if (!ParticipateInPublicRegistry)
-                {
-                    return "Read-only";
-                }
-
-                return HasActiveNode()
-                    ? "Running: " + StorageAllocationLabel
-                    : "Not enabled";
+                return BuildStorageSummaryText(ParticipateInPublicRegistry, HasPreparedStorageNode(), HasActiveNode(), StorageAllocationLabel);
             }
         }
 
@@ -175,14 +168,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
         {
             get
             {
-                if (HasActiveNode())
-                {
-                    return "Online";
-                }
-
-                return ParticipateInPublicRegistry
-                    ? "Not running"
-                    : "Off";
+                return BuildLocalNodeSummaryText(ParticipateInPublicRegistry, HasPreparedStorageNode(), HasActiveNode());
             }
         }
 
@@ -205,22 +191,12 @@ namespace ArchrealmsPassport.Windows.ViewModels
         {
             get
             {
-                if (!HasActivePassport())
-                {
-                    return IsJoiningExistingIdentity ? "Request Access" : "Create Passport";
-                }
-
-                if (!HasActiveNode())
-                {
-                    return "Enable Storage";
-                }
-
-                if (!IsPublishedRegistrySubmission())
-                {
-                    return "Register Passport";
-                }
-
-                return "Passport Ready";
+                return BuildPrimaryActionLabel(
+                    HasActivePassport(),
+                    IsJoiningExistingIdentity,
+                    HasPreparedStorageNode(),
+                    HasActiveNode(),
+                    IsPublishedRegistrySubmission());
             }
         }
 
@@ -228,9 +204,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
         {
             get
             {
-                return IsPublishedRegistrySubmission() && HasActiveNode()
-                    ? Visibility.Collapsed
-                    : Visibility.Visible;
+                return BuildPrimaryActionVisibility(HasPreparedStorageNode(), HasActiveNode(), IsPublishedRegistrySubmission());
             }
         }
 
