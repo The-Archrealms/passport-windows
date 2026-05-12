@@ -70,7 +70,17 @@ namespace ArchrealmsPassport.Windows.ViewModels
         }
         public string SelectedIdentityMode { get { return _selectedIdentityMode; } set { SetField(ref _selectedIdentityMode, value); } }
         public string ExistingIdentityId { get { return _existingIdentityId; } set { SetField(ref _existingIdentityId, value); } }
-        public string ActiveIdentityId { get { return _activeIdentityId; } set { SetField(ref _activeIdentityId, value); } }
+        public string ActiveIdentityId
+        {
+            get { return _activeIdentityId; }
+            set
+            {
+                if (SetField(ref _activeIdentityId, value))
+                {
+                    RaiseHomePropertiesChanged();
+                }
+            }
+        }
         public string ActiveDeviceId { get { return _activeDeviceId; } set { SetField(ref _activeDeviceId, value); } }
         public string ActiveDeviceKeyPath { get { return _activeDeviceKeyPath; } set { SetField(ref _activeDeviceKeyPath, value); } }
         public string PendingDeviceId { get { return _pendingDeviceId; } set { SetField(ref _pendingDeviceId, value); } }
@@ -140,9 +150,9 @@ namespace ArchrealmsPassport.Windows.ViewModels
         {
             get
             {
-                return string.IsNullOrWhiteSpace(CitizenName)
-                    ? Visibility.Visible
-                    : Visibility.Collapsed;
+                return HasActivePassport()
+                    ? Visibility.Collapsed
+                    : Visibility.Visible;
             }
         }
 
