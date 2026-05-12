@@ -303,6 +303,10 @@ namespace ArchrealmsPassport.Windows.ViewModels
                 if (SetField(ref _preferWifiOnly, value))
                 {
                     RaiseNodeProfilePropertiesChanged();
+                    if (value)
+                    {
+                        _ = StopStorageIfNetworkIsRestrictedAsync("Unmetered-only storage was enabled.");
+                    }
                 }
             }
         }
@@ -328,7 +332,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
                 + "; "
                 + NodeCachePolicy
                 + "; "
-                + (PreferWifiOnly ? "unmetered network preferred" : "standard network use");
+                + (PreferWifiOnly ? "unmetered network required" : "standard network use");
         }
 
         private string BuildNodeConfigSummary()

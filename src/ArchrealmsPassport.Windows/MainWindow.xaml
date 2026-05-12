@@ -304,7 +304,7 @@
                                 </Grid>
 
                                 <CheckBox Margin="0,16,0,0" FontSize="13" Foreground="#34413C" IsChecked="{Binding PublishCarExports}" Content="Publish CAR archives" />
-                                <CheckBox Margin="0,10,0,0" FontSize="13" Foreground="#34413C" IsChecked="{Binding PreferWifiOnly}" Content="Prefer unmetered network" />
+                                <CheckBox Margin="0,10,0,0" FontSize="13" Foreground="#34413C" IsChecked="{Binding PreferWifiOnly}" Content="Use storage only on unmetered networks" />
 
                                 <WrapPanel Margin="0,18,0,0">
                                     <Button AutomationProperties.AutomationId="InitializeNodeButton" Style="{StaticResource ActionButtonStyle}" Command="{Binding InitializeNodeCommand}" Content="Enable Storage" />

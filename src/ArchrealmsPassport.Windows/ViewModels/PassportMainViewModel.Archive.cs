@@ -20,6 +20,12 @@ namespace ArchrealmsPassport.Windows.ViewModels
         {
             try
             {
+                _settingsStore.Save(CreateSettingsSnapshot());
+                if (!TryAllowStorageNetworkOperation("Enable storage"))
+                {
+                    return;
+                }
+
                 EnableStorageParticipation();
                 _settingsStore.Save(CreateSettingsSnapshot());
 
@@ -69,6 +75,10 @@ namespace ArchrealmsPassport.Windows.ViewModels
         private async Task StartNodeAsync()
         {
             _settingsStore.Save(CreateSettingsSnapshot());
+            if (!TryAllowStorageNetworkOperation("Start storage node"))
+            {
+                return;
+            }
 
             var result = await _localNodeService.StartAsync(
                 _toolRoot,
@@ -97,6 +107,10 @@ namespace ArchrealmsPassport.Windows.ViewModels
         private async Task RestartNodeAsync()
         {
             _settingsStore.Save(CreateSettingsSnapshot());
+            if (!TryAllowStorageNetworkOperation("Restart storage node"))
+            {
+                return;
+            }
 
             var result = await _localNodeService.RestartAsync(
                 _toolRoot,
@@ -111,6 +125,10 @@ namespace ArchrealmsPassport.Windows.ViewModels
         private async Task RepairNodeAsync()
         {
             _settingsStore.Save(CreateSettingsSnapshot());
+            if (!TryAllowStorageNetworkOperation("Apply storage settings"))
+            {
+                return;
+            }
 
             var result = await _localNodeService.RepairAsync(
                 _toolRoot,
@@ -300,6 +318,10 @@ namespace ArchrealmsPassport.Windows.ViewModels
         private async Task PublishRegistrySubmissionAsync()
         {
             _settingsStore.Save(CreateSettingsSnapshot());
+            if (!TryAllowStorageNetworkOperation("Publish registration package"))
+            {
+                return;
+            }
 
             var result = await _localNodeService.PublishRegistrySubmissionAsync(
                 _toolRoot,
@@ -330,6 +352,10 @@ namespace ArchrealmsPassport.Windows.ViewModels
         private async Task PreviewReadOnlyIpfsFileAsync()
         {
             _settingsStore.Save(CreateSettingsSnapshot());
+            if (!TryAllowStorageNetworkOperation("Preview IPFS file"))
+            {
+                return;
+            }
 
             var result = await _localNodeService.PreviewReadOnlyIpfsFileAsync(
                 _toolRoot,
@@ -363,6 +389,10 @@ namespace ArchrealmsPassport.Windows.ViewModels
         private async Task FetchReadOnlyIpfsFileAsync()
         {
             _settingsStore.Save(CreateSettingsSnapshot());
+            if (!TryAllowStorageNetworkOperation("Fetch IPFS file"))
+            {
+                return;
+            }
 
             var result = await _localNodeService.FetchReadOnlyIpfsFileAsync(
                 _toolRoot,
@@ -395,6 +425,10 @@ namespace ArchrealmsPassport.Windows.ViewModels
         private async Task ExportCarAsync()
         {
             _settingsStore.Save(CreateSettingsSnapshot());
+            if (!TryAllowStorageNetworkOperation("Export CAR archive"))
+            {
+                return;
+            }
 
             var result = await _localNodeService.ExportCarAsync(
                 _toolRoot,

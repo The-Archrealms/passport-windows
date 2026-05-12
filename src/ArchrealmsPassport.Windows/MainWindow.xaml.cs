@@ -23,13 +23,15 @@ namespace ArchrealmsPassport.Windows
 
             var scriptRunner = new PowerShellScriptRunner();
             var localNodeService = new LocalNodeService(scriptRunner);
+            var networkUsageService = new NetworkUsageService();
 
             DataContext = new PassportMainViewModel(
                 new PassportSettingsStore(),
                 new PassportStatusService(localNodeService),
                 localNodeService,
                 new PassportRecordService(),
-                new PassportCryptoService());
+                new PassportCryptoService(),
+                networkUsageService);
 
             InitializeTrayIcon();
         }
@@ -81,6 +83,12 @@ namespace ArchrealmsPassport.Windows
 
             StateChanged -= MainWindow_StateChanged;
             Closing -= MainWindow_Closing;
+            if (DataContext is IDisposable disposable)
+            {
+                disposable.Dispose();
+                DataContext = null;
+            }
+
             DisposeTrayIcon();
         }
 

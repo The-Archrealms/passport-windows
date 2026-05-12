@@ -12,6 +12,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
         private readonly LocalNodeService _localNodeService;
         private readonly PassportRecordService _recordService;
         private readonly PassportCryptoService _cryptoService;
+        private readonly NetworkUsageService _networkUsageService;
         private readonly string _toolRoot;
         private readonly AsyncRelayCommand _saveSettingsCommand;
         private readonly AsyncRelayCommand _refreshStatusCommand;
@@ -90,19 +91,22 @@ namespace ArchrealmsPassport.Windows.ViewModels
         private string _verificationStateText = "No submission package yet";
         private string _storageActionStatusText = "Storage has not been enabled yet.";
         private string _activityLog = string.Empty;
+        private bool _storageNetworkStopInProgress;
 
         public PassportMainViewModel(
             PassportSettingsStore settingsStore,
             PassportStatusService statusService,
             LocalNodeService localNodeService,
             PassportRecordService recordService,
-            PassportCryptoService cryptoService)
+            PassportCryptoService cryptoService,
+            NetworkUsageService networkUsageService)
         {
             _settingsStore = settingsStore;
             _statusService = statusService;
             _localNodeService = localNodeService;
             _recordService = recordService;
             _cryptoService = cryptoService;
+            _networkUsageService = networkUsageService;
             _toolRoot = PassportEnvironment.FindToolRoot();
 
             _saveSettingsCommand = new AsyncRelayCommand(SaveSettingsAsync);
@@ -156,7 +160,8 @@ namespace ArchrealmsPassport.Windows.ViewModels
             PrimaryActionCommand = _primaryActionCommand;
 
             LoadSettings();
-            _ = RefreshStatusAsync();
+            _networkUsageService.NetworkStatusChanged += NetworkUsageService_NetworkStatusChanged;
+            _ = RefreshStatusAndEnforceNetworkPolicyAsync();
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;
