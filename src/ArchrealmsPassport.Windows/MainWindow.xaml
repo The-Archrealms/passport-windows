@@ -173,7 +173,8 @@
                                         HorizontalAlignment="Stretch"
                                         Style="{StaticResource ActionButtonStyle}"
                                         Command="{Binding PrimaryActionCommand}"
-                                        Content="{Binding PrimaryActionLabel}" />
+                                        Content="{Binding PrimaryActionLabel}"
+                                        Visibility="{Binding PrimaryActionVisibility}" />
 
                             </StackPanel>
                         </Border>

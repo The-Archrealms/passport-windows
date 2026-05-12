@@ -144,7 +144,6 @@ $expectedHomeAutomationIds = @(
     "HomeStorageStatusText",
     "HomeNodeStatusText",
     "HomeRegistryStatusText",
-    "PrimaryActionButton",
     "DisplayNameTextBox"
 )
 $expectedStorageAutomationIds = @(

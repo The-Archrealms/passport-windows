@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Windows;
 
 namespace ArchrealmsPassport.Windows.ViewModels
 {
@@ -194,6 +195,16 @@ namespace ArchrealmsPassport.Windows.ViewModels
                 }
 
                 return "Passport Ready";
+            }
+        }
+
+        public Visibility PrimaryActionVisibility
+        {
+            get
+            {
+                return IsPublishedRegistrySubmission()
+                    ? Visibility.Collapsed
+                    : Visibility.Visible;
             }
         }
 
