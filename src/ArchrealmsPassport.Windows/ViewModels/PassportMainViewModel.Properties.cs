@@ -198,7 +198,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
                     return "Complete Registration";
                 }
 
-                return "Refresh Status";
+                return "Passport Ready";
             }
         }
 

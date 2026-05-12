@@ -25,8 +25,6 @@ namespace ArchrealmsPassport.Windows.ViewModels
                 await RegisterWithArchrealmsAsync();
                 return;
             }
-
-            await RefreshStatusAsync();
         }
 
         private bool CanExecutePrimaryAction()
@@ -46,7 +44,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
                 return CanRegisterWithArchrealms();
             }
 
-            return true;
+            return false;
         }
 
         private async Task RegisterWithArchrealmsAsync()
