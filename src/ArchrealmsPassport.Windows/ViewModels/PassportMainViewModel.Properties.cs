@@ -166,8 +166,8 @@ namespace ArchrealmsPassport.Windows.ViewModels
                 }
 
                 return HasActiveNode()
-                    ? "Enabled: " + StorageAllocationLabel
-                    : "Not enabled: " + StorageAllocationLabel;
+                    ? "Running: " + StorageAllocationLabel
+                    : "Not enabled";
             }
         }
 
@@ -192,11 +192,11 @@ namespace ArchrealmsPassport.Windows.ViewModels
             {
                 if (IsPublishedRegistrySubmission())
                 {
-                    return "Registered";
+                    return "Complete";
                 }
 
                 return HasRegistrySubmissionPackage()
-                    ? "Ready to publish"
+                    ? "Ready"
                     : "Not registered";
             }
         }
@@ -210,9 +210,14 @@ namespace ArchrealmsPassport.Windows.ViewModels
                     return IsJoiningExistingIdentity ? "Request Access" : "Create Passport";
                 }
 
+                if (!HasActiveNode())
+                {
+                    return "Enable Storage";
+                }
+
                 if (!IsPublishedRegistrySubmission())
                 {
-                    return "Complete Registration";
+                    return "Register Passport";
                 }
 
                 return "Passport Ready";
@@ -223,7 +228,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
         {
             get
             {
-                return IsPublishedRegistrySubmission()
+                return IsPublishedRegistrySubmission() && HasActiveNode()
                     ? Visibility.Collapsed
                     : Visibility.Visible;
             }

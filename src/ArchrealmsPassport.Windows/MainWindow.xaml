@@ -154,7 +154,7 @@
                                     <TextBlock Grid.Row="2" Style="{StaticResource StatusLabelStyle}" Text="Storage" />
                                     <TextBlock Grid.Row="2" Grid.Column="1" AutomationProperties.AutomationId="HomeStorageStatusText" Style="{StaticResource StatusValueStyle}" Text="{Binding StorageSummaryText}" />
 
-                                    <TextBlock Grid.Row="4" Style="{StaticResource StatusLabelStyle}" Text="Storage Node" />
+                                    <TextBlock Grid.Row="4" Style="{StaticResource StatusLabelStyle}" Text="Storage Service" />
                                     <TextBlock Grid.Row="4" Grid.Column="1" AutomationProperties.AutomationId="HomeNodeStatusText" Style="{StaticResource StatusValueStyle}" Text="{Binding LocalNodeSummaryText}" />
 
                                     <TextBlock Grid.Row="6" Style="{StaticResource StatusLabelStyle}" Text="Registration" />
@@ -182,16 +182,12 @@
                 </ScrollViewer>
             </TabItem>
 
-            <TabItem Header="Passport">
+            <TabItem Header="Profile">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <Grid Margin="0,18,0,0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="1.08*" />
-                            <ColumnDefinition Width="24" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-
-                        <Border Style="{StaticResource CardStyle}">
+                        <Border MaxWidth="720"
+                                HorizontalAlignment="Left"
+                                Style="{StaticResource CardStyle}">
                             <StackPanel>
                                 <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Passport" />
 
@@ -219,50 +215,6 @@
                                 </WrapPanel>
                             </StackPanel>
                         </Border>
-
-                        <StackPanel Grid.Column="2">
-                            <Border Style="{StaticResource CardStyle}">
-                                <StackPanel>
-                                    <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Active Passport" />
-
-                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Passport ID" />
-                                    <TextBox Style="{StaticResource CodeTextBoxStyle}" IsReadOnly="True" Text="{Binding ActiveIdentityId, Mode=OneWay}" />
-
-                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="This Device ID" />
-                                    <TextBox Style="{StaticResource CodeTextBoxStyle}" IsReadOnly="True" Text="{Binding ActiveDeviceId, Mode=OneWay}" />
-
-                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Pending Device ID" />
-                                    <TextBox Style="{StaticResource CodeTextBoxStyle}" IsReadOnly="True" Text="{Binding PendingDeviceId, Mode=OneWay}" />
-
-                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Device Request Path" />
-                                    <TextBox Style="{StaticResource CodeTextBoxStyle}" Text="{Binding JoinRequestPath, UpdateSourceTrigger=PropertyChanged}" />
-
-                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Device Approval Path" />
-                                    <TextBox Style="{StaticResource CodeTextBoxStyle}" Text="{Binding JoinApprovalPath, UpdateSourceTrigger=PropertyChanged}" />
-                                </StackPanel>
-                            </Border>
-
-                            <Border Style="{StaticResource CardStyle}">
-                                <StackPanel>
-                                    <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Signing" />
-
-                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Challenge" />
-                                    <TextBox Style="{StaticResource CodeTextBoxStyle}" Text="{Binding ChallengeText, UpdateSourceTrigger=PropertyChanged}" />
-
-                                    <WrapPanel Margin="0,14,0,0">
-                                        <Button AutomationProperties.AutomationId="GenerateChallengeButton" Style="{StaticResource SecondaryButtonStyle}" Command="{Binding GenerateChallengeCommand}" Content="Generate" />
-                                        <Button Style="{StaticResource ActionButtonStyle}" Command="{Binding SignChallengeCommand}" Content="Sign" />
-                                        <Button Style="{StaticResource ActionButtonStyle}" Command="{Binding CreateRegistrySubmissionCommand}" Content="Complete Registration" />
-                                    </WrapPanel>
-
-                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Signature Record" />
-                                    <TextBox Height="120" Style="{StaticResource CodeTextBoxStyle}" IsReadOnly="True" Text="{Binding ChallengeSignatureText, Mode=OneWay}" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" />
-
-                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Registration Package" />
-                                    <TextBox Style="{StaticResource CodeTextBoxStyle}" IsReadOnly="True" Text="{Binding RegistrySubmissionText, Mode=OneWay}" />
-                                </StackPanel>
-                            </Border>
-                        </StackPanel>
                     </Grid>
                 </ScrollViewer>
             </TabItem>
@@ -270,13 +222,9 @@
             <TabItem Header="Storage">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <Grid Margin="0,18,0,0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="1.05*" />
-                            <ColumnDefinition Width="24" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-
-                        <Border Style="{StaticResource CardStyle}">
+                        <Border MaxWidth="720"
+                                HorizontalAlignment="Left"
+                                Style="{StaticResource CardStyle}">
                             <StackPanel>
                                 <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Storage" />
 
@@ -303,61 +251,17 @@
                                                Text="{Binding StorageAllocationLabel}" />
                                 </Grid>
 
-                                <CheckBox Margin="0,16,0,0" FontSize="13" Foreground="#34413C" IsChecked="{Binding PublishCarExports}" Content="Publish CAR archives" />
-                                <CheckBox Margin="0,10,0,0" FontSize="13" Foreground="#34413C" IsChecked="{Binding PreferWifiOnly}" Content="Use storage only on unmetered networks" />
+                                <CheckBox Margin="0,16,0,0" FontSize="13" Foreground="#34413C" IsChecked="{Binding PreferWifiOnly}" Content="Use storage only on unmetered networks" />
 
                                 <WrapPanel Margin="0,18,0,0">
                                     <Button AutomationProperties.AutomationId="InitializeNodeButton" Style="{StaticResource ActionButtonStyle}" Command="{Binding InitializeNodeCommand}" Content="Enable Storage" />
-                                    <Button Style="{StaticResource SecondaryButtonStyle}" Command="{Binding StartNodeCommand}" Content="Start Node" />
-                                    <Button Style="{StaticResource SecondaryButtonStyle}" Command="{Binding StopNodeCommand}" Content="Stop Node" />
-                                    <Button Style="{StaticResource SecondaryButtonStyle}" Command="{Binding RepairNodeCommand}" Content="Apply Settings" />
+                                    <Button Style="{StaticResource SecondaryButtonStyle}" Command="{Binding StopNodeCommand}" Content="Pause Storage" />
                                 </WrapPanel>
 
                                 <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Status" />
                                 <TextBlock AutomationProperties.AutomationId="StorageActionStatusText"
                                            Style="{StaticResource StatusValueStyle}"
                                            Text="{Binding StorageActionStatusText}" />
-
-                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Capacity Snapshot" />
-                                <TextBox Style="{StaticResource CodeTextBoxStyle}" IsReadOnly="True" Text="{Binding LatestNodeCapacitySnapshotText, Mode=OneWay}" />
-
-                                <WrapPanel Margin="0,14,0,0">
-                                    <Button AutomationProperties.AutomationId="RecordNodeCapacitySnapshotButton" Style="{StaticResource SecondaryButtonStyle}" Command="{Binding RecordNodeCapacitySnapshotCommand}" Content="Record Snapshot" />
-                                </WrapPanel>
-                            </StackPanel>
-                        </Border>
-
-                        <Border Grid.Column="2" Style="{StaticResource CardStyle}">
-                            <StackPanel>
-                                <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Node" />
-
-                                <Grid Margin="0,18,0,0">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="125" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="12" />
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="12" />
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="12" />
-                                        <RowDefinition Height="Auto" />
-                                    </Grid.RowDefinitions>
-
-                                    <TextBlock Grid.Row="0" Style="{StaticResource StatusLabelStyle}" Text="Profile" />
-                                    <TextBlock Grid.Row="0" Grid.Column="1" Style="{StaticResource StatusValueStyle}" Text="{Binding ParticipationProfileSummary}" />
-
-                                    <TextBlock Grid.Row="2" Style="{StaticResource StatusLabelStyle}" Text="Config" />
-                                    <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource StatusValueStyle}" Text="{Binding NodeConfigSummary}" />
-
-                                    <TextBlock Grid.Row="4" Style="{StaticResource StatusLabelStyle}" Text="Runtime" />
-                                    <TextBlock Grid.Row="4" Grid.Column="1" Style="{StaticResource StatusValueStyle}" Text="{Binding IpfsStateText}" />
-
-                                    <TextBlock Grid.Row="6" Style="{StaticResource StatusLabelStyle}" Text="Node State" />
-                                    <TextBlock Grid.Row="6" Grid.Column="1" Style="{StaticResource StatusValueStyle}" Text="{Binding NodeStateText}" />
-                                </Grid>
                             </StackPanel>
                         </Border>
                     </Grid>
@@ -464,9 +368,45 @@
                                     <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Cache Policy" />
                                     <ComboBox Padding="8,5" ItemsSource="{Binding NodeCachePolicies}" SelectedItem="{Binding NodeCachePolicy, UpdateSourceTrigger=PropertyChanged}" />
 
+                                    <CheckBox Margin="0,16,0,0" FontSize="13" Foreground="#34413C" IsChecked="{Binding PublishCarExports}" Content="Publish CAR archives" />
+
+                                    <Grid Margin="0,18,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="125" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="12" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="12" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="12" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+
+                                        <TextBlock Grid.Row="0" Style="{StaticResource StatusLabelStyle}" Text="Profile" />
+                                        <TextBlock Grid.Row="0" Grid.Column="1" Style="{StaticResource StatusValueStyle}" Text="{Binding ParticipationProfileSummary}" />
+
+                                        <TextBlock Grid.Row="2" Style="{StaticResource StatusLabelStyle}" Text="Config" />
+                                        <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource StatusValueStyle}" Text="{Binding NodeConfigSummary}" />
+
+                                        <TextBlock Grid.Row="4" Style="{StaticResource StatusLabelStyle}" Text="Runtime" />
+                                        <TextBlock Grid.Row="4" Grid.Column="1" Style="{StaticResource StatusValueStyle}" Text="{Binding IpfsStateText}" />
+
+                                        <TextBlock Grid.Row="6" Style="{StaticResource StatusLabelStyle}" Text="Node State" />
+                                        <TextBlock Grid.Row="6" Grid.Column="1" Style="{StaticResource StatusValueStyle}" Text="{Binding NodeStateText}" />
+                                    </Grid>
+
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Capacity Snapshot" />
+                                    <TextBox Style="{StaticResource CodeTextBoxStyle}" IsReadOnly="True" Text="{Binding LatestNodeCapacitySnapshotText, Mode=OneWay}" />
+
                                     <WrapPanel Margin="0,16,0,0">
+                                        <Button Style="{StaticResource SecondaryButtonStyle}" Command="{Binding StartNodeCommand}" Content="Start Node" />
+                                        <Button Style="{StaticResource SecondaryButtonStyle}" Command="{Binding StopNodeCommand}" Content="Stop Node" />
                                         <Button Style="{StaticResource SecondaryButtonStyle}" Command="{Binding RestartNodeCommand}" Content="Restart Node" />
                                         <Button Style="{StaticResource SecondaryButtonStyle}" Command="{Binding RepairNodeCommand}" Content="Repair Config" />
+                                        <Button AutomationProperties.AutomationId="RecordNodeCapacitySnapshotButton" Style="{StaticResource SecondaryButtonStyle}" Command="{Binding RecordNodeCapacitySnapshotCommand}" Content="Record Snapshot" />
                                     </WrapPanel>
                                 </StackPanel>
                             </Border>
@@ -521,6 +461,38 @@
                         <StackPanel Grid.Column="2">
                             <Border Style="{StaticResource CardStyle}">
                                 <StackPanel>
+                                    <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Passport Details" />
+
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Passport ID" />
+                                    <TextBox Style="{StaticResource CodeTextBoxStyle}" IsReadOnly="True" Text="{Binding ActiveIdentityId, Mode=OneWay}" />
+
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="This Device ID" />
+                                    <TextBox Style="{StaticResource CodeTextBoxStyle}" IsReadOnly="True" Text="{Binding ActiveDeviceId, Mode=OneWay}" />
+
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Pending Device ID" />
+                                    <TextBox Style="{StaticResource CodeTextBoxStyle}" IsReadOnly="True" Text="{Binding PendingDeviceId, Mode=OneWay}" />
+
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Device Request Path" />
+                                    <TextBox Style="{StaticResource CodeTextBoxStyle}" Text="{Binding JoinRequestPath, UpdateSourceTrigger=PropertyChanged}" />
+
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Device Approval Path" />
+                                    <TextBox Style="{StaticResource CodeTextBoxStyle}" Text="{Binding JoinApprovalPath, UpdateSourceTrigger=PropertyChanged}" />
+
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Challenge" />
+                                    <TextBox Style="{StaticResource CodeTextBoxStyle}" Text="{Binding ChallengeText, UpdateSourceTrigger=PropertyChanged}" />
+
+                                    <WrapPanel Margin="0,14,0,0">
+                                        <Button AutomationProperties.AutomationId="GenerateChallengeButton" Style="{StaticResource SecondaryButtonStyle}" Command="{Binding GenerateChallengeCommand}" Content="Generate" />
+                                        <Button Style="{StaticResource ActionButtonStyle}" Command="{Binding SignChallengeCommand}" Content="Sign" />
+                                    </WrapPanel>
+
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Signature Record" />
+                                    <TextBox Height="120" Style="{StaticResource CodeTextBoxStyle}" IsReadOnly="True" Text="{Binding ChallengeSignatureText, Mode=OneWay}" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource CardStyle}">
+                                <StackPanel>
                                     <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Registration" />
 
                                     <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Registration Package" />
@@ -530,7 +502,7 @@
                                     <TextBox Style="{StaticResource CodeTextBoxStyle}" IsReadOnly="True" Text="{Binding RegistrySubmissionCidText, Mode=OneWay}" />
 
                                     <WrapPanel Margin="0,16,0,0">
-                                        <Button Style="{StaticResource ActionButtonStyle}" Command="{Binding CreateRegistrySubmissionCommand}" Content="Complete Registration" />
+                                        <Button Style="{StaticResource ActionButtonStyle}" Command="{Binding CreateRegistrySubmissionCommand}" Content="Prepare Package" />
                                     </WrapPanel>
                                 </StackPanel>
                             </Border>

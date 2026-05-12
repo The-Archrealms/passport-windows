@@ -14,6 +14,12 @@ namespace ArchrealmsPassport.Windows.ViewModels
                 return;
             }
 
+            if (!HasActiveNode())
+            {
+                await InitializeNodeAsync();
+                return;
+            }
+
             if (!IsPublishedRegistrySubmission() && CanRegisterWithArchrealms())
             {
                 await RegisterWithArchrealmsAsync();
@@ -26,6 +32,11 @@ namespace ArchrealmsPassport.Windows.ViewModels
             if (!HasActivePassport())
             {
                 return CanProvisionIdentity();
+            }
+
+            if (!HasActiveNode())
+            {
+                return CanRunWorkspaceAction();
             }
 
             if (!IsPublishedRegistrySubmission())
@@ -117,6 +128,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
             OnPropertyChanged(nameof(HomePassportNameInputVisibility));
             OnPropertyChanged(nameof(PrimaryActionLabel));
             OnPropertyChanged(nameof(PrimaryActionVisibility));
+            _primaryActionCommand.RaiseCanExecuteChanged();
         }
     }
 }

@@ -92,6 +92,8 @@ namespace ArchrealmsPassport.Windows.ViewModels
                 {
                     RegistrySubmissionText = snapshot.LatestSubmissionPath;
                 }
+
+                RaiseHomePropertiesChanged();
             });
         }
 
