@@ -140,6 +140,10 @@ $windowElement = $null
 $verifiedAutomationIds = @()
 $expectedHomeAutomationIds = @(
     "MainNavigationTabs",
+    "HomePassportStatusText",
+    "HomeStorageStatusText",
+    "HomeNodeStatusText",
+    "HomeRegistryStatusText",
     "DisplayNameTextBox"
 )
 $expectedStorageAutomationIds = @(
