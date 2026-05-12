@@ -22,7 +22,6 @@ namespace ArchrealmsPassport.Windows.Models
         public string NodeCachePolicy { get; set; } = "Balanced pinned archive";
         public bool ParticipateInPublicRegistry { get; set; } = true;
         public bool PreferWindowsHelloCredentials { get; set; }
-        public bool BootstrapLocalNodeOnOnboarding { get; set; } = true;
         public bool PublishCarExports { get; set; } = true;
         public bool PreferWifiOnly { get; set; }
         public string ReadOnlyIpfsCid { get; set; } = string.Empty;

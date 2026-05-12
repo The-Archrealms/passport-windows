@@ -81,7 +81,6 @@ namespace ArchrealmsPassport.Windows.ViewModels
         private string _nodeCachePolicy = "Balanced pinned archive";
         private bool _participateInPublicRegistry = true;
         private bool _preferWindowsHelloCredentials;
-        private bool _bootstrapLocalNodeOnOnboarding = true;
         private bool _publishCarExports = true;
         private bool _preferWifiOnly;
         private string _workspaceStateText = "Workspace unavailable";

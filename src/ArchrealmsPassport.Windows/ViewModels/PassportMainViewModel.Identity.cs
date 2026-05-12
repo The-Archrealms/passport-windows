@@ -35,7 +35,6 @@ namespace ArchrealmsPassport.Windows.ViewModels
                 : "Read-only cache";
             NodeCachePolicy = settings.NodeCachePolicy;
             PreferWindowsHelloCredentials = settings.PreferWindowsHelloCredentials;
-            BootstrapLocalNodeOnOnboarding = settings.BootstrapLocalNodeOnOnboarding;
             PublishCarExports = settings.PublishCarExports;
             PreferWifiOnly = settings.PreferWifiOnly;
             ReadOnlyIpfsCid = settings.ReadOnlyIpfsCid;
@@ -162,7 +161,6 @@ namespace ArchrealmsPassport.Windows.ViewModels
             AppendLog("Device key reference: " + result.PrivateKeyPath);
             AppendLog("Key storage: " + PassportDeviceKeyStore.DescribeReference(result.PrivateKeyPath));
 
-            await BootstrapLocalNodeForOnboardingAsync();
             await RefreshStatusAsync();
         }
 
@@ -217,53 +215,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
             AppendLog("Device credential record: " + result.DeviceRecordPath);
             AppendLog("Authorization record: " + result.AuthorizationRecordPath);
 
-            await BootstrapLocalNodeForOnboardingAsync();
             await RefreshStatusAsync();
-        }
-
-        private async Task BootstrapLocalNodeForOnboardingAsync()
-        {
-            if (!BootstrapLocalNodeOnOnboarding)
-            {
-                AppendLog("Local node onboarding bootstrap skipped by settings.");
-                return;
-            }
-
-            if (!CanRunWorkspaceAction())
-            {
-                AppendLog("Local node onboarding bootstrap skipped because local tooling is not ready.");
-                return;
-            }
-
-            var initializeResult = await _localNodeService.InitializeAsync(
-                _toolRoot,
-                WorkspaceRoot,
-                IpfsRepoPath,
-                StorageAllocationGb,
-                NodeParticipationMode,
-                NodeCachePolicy,
-                GetStorageGcWatermark(),
-                GetNodeProvideStrategy(),
-                IpfsCliPathOverride);
-
-            AppendLocalNodeResult(initializeResult, "Initialized local node during Passport onboarding.");
-            if (!initializeResult.Succeeded)
-            {
-                AppendLog("Passport activation is complete; storage setup can be retried after runtime setup.");
-                return;
-            }
-
-            var startResult = await _localNodeService.StartAsync(
-                _toolRoot,
-                WorkspaceRoot,
-                IpfsRepoPath,
-                IpfsCliPathOverride);
-
-            AppendLocalNodeResult(startResult, "Started local node during Passport onboarding.");
-            if (!startResult.Succeeded)
-            {
-                AppendLog("Passport activation is complete; storage startup can be retried later.");
-            }
         }
 
         private static string NormalizeProvisioningMode(string provisioningMode)

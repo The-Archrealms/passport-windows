@@ -575,7 +575,6 @@ namespace ArchrealmsPassport.Windows.ViewModels
                 NodeCachePolicy = NodeCachePolicy,
                 ParticipateInPublicRegistry = ParticipateInPublicRegistry,
                 PreferWindowsHelloCredentials = PreferWindowsHelloCredentials,
-                BootstrapLocalNodeOnOnboarding = BootstrapLocalNodeOnOnboarding,
                 PublishCarExports = PublishCarExports,
                 PreferWifiOnly = PreferWifiOnly,
                 ReadOnlyIpfsCid = ReadOnlyIpfsCid,

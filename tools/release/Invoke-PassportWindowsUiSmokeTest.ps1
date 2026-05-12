@@ -97,6 +97,34 @@ function Find-AutomationElementById {
     return $Root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $condition)
 }
 
+function Select-TabItemByName {
+    param(
+        [System.Windows.Automation.AutomationElement]$Root,
+        [string]$Name
+    )
+
+    $typeCondition = [System.Windows.Automation.PropertyCondition]::new(
+        [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+        [System.Windows.Automation.ControlType]::TabItem)
+    $tabItem = $null
+    $tabItems = $Root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $typeCondition)
+    foreach ($candidate in $tabItems) {
+        if ($candidate.Current.Name -eq $Name) {
+            $tabItem = $candidate
+            break
+        }
+    }
+
+    if (-not $tabItem) {
+        return $false
+    }
+
+    $selectionPattern = $tabItem.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern)
+    $selectionPattern.Select()
+    Start-Sleep -Milliseconds 500
+    return $true
+}
+
 if (($ExecutablePath -and $PackageFamilyName) -or (-not $ExecutablePath -and -not $PackageFamilyName)) {
     throw "Provide exactly one of -ExecutablePath or -PackageFamilyName."
 }
@@ -110,16 +138,21 @@ $startedProcess = $null
 $process = $null
 $windowElement = $null
 $verifiedAutomationIds = @()
-$expectedAutomationIds = @(
+$expectedHomeAutomationIds = @(
     "MainNavigationTabs",
     "HomePassportStatusText",
     "HomeStorageStatusText",
     "HomeNodeStatusText",
     "HomeRegistryStatusText",
     "PrimaryActionButton",
-    "DisplayNameTextBox",
+    "DisplayNameTextBox"
+)
+$expectedStorageAutomationIds = @(
+    "InitializeNodeButton",
+    "StorageActionStatusText",
     "StorageAllocationSlider"
 )
+$expectedAutomationIds = @($expectedHomeAutomationIds + $expectedStorageAutomationIds)
 
 try {
     if ($StopExisting) {
@@ -154,7 +187,7 @@ try {
             Add-Failure -Failures $failures -Message ("Unexpected window title: " + $windowElement.Current.Name)
         }
         else {
-            foreach ($automationId in $expectedAutomationIds) {
+            foreach ($automationId in $expectedHomeAutomationIds) {
                 $element = Find-AutomationElementById -Root $windowElement -AutomationId $automationId
                 if ($element) {
                     $verifiedAutomationIds += $automationId
@@ -162,6 +195,21 @@ try {
                 else {
                     Add-Failure -Failures $failures -Message "Missing UI automation element: $automationId"
                 }
+            }
+
+            if (Select-TabItemByName -Root $windowElement -Name "Storage") {
+                foreach ($automationId in $expectedStorageAutomationIds) {
+                    $element = Find-AutomationElementById -Root $windowElement -AutomationId $automationId
+                    if ($element) {
+                        $verifiedAutomationIds += $automationId
+                    }
+                    else {
+                        Add-Failure -Failures $failures -Message "Missing Storage tab UI automation element: $automationId"
+                    }
+                }
+            }
+            else {
+                Add-Failure -Failures $failures -Message "Storage tab could not be selected."
             }
 
             if ($ExerciseTrayMinimize) {

@@ -188,11 +188,6 @@ namespace ArchrealmsPassport.Windows.ViewModels
                     return IsJoiningExistingIdentity ? "Request Access" : "Create Passport";
                 }
 
-                if (ParticipateInPublicRegistry && !HasActiveNode())
-                {
-                    return "Enable Storage";
-                }
-
                 if (!IsPublishedRegistrySubmission())
                 {
                     return "Complete Registration";
@@ -267,7 +262,6 @@ namespace ArchrealmsPassport.Windows.ViewModels
             }
         }
         public bool PreferWindowsHelloCredentials { get { return _preferWindowsHelloCredentials; } set { SetField(ref _preferWindowsHelloCredentials, value); } }
-        public bool BootstrapLocalNodeOnOnboarding { get { return _bootstrapLocalNodeOnOnboarding; } set { SetField(ref _bootstrapLocalNodeOnOnboarding, value); } }
         public bool PublishCarExports { get { return _publishCarExports; } set { SetField(ref _publishCarExports, value); } }
         public bool PreferWifiOnly
         {

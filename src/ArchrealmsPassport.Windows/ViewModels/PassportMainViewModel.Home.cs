@@ -14,12 +14,6 @@ namespace ArchrealmsPassport.Windows.ViewModels
                 return;
             }
 
-            if (ParticipateInPublicRegistry && !HasActiveNode())
-            {
-                await InitializeNodeAsync();
-                return;
-            }
-
             if (!IsPublishedRegistrySubmission() && CanRegisterWithArchrealms())
             {
                 await RegisterWithArchrealmsAsync();
@@ -32,11 +26,6 @@ namespace ArchrealmsPassport.Windows.ViewModels
             if (!HasActivePassport())
             {
                 return CanProvisionIdentity();
-            }
-
-            if (ParticipateInPublicRegistry && !HasActiveNode())
-            {
-                return CanRunWorkspaceAction();
             }
 
             if (!IsPublishedRegistrySubmission())
