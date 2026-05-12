@@ -161,10 +161,12 @@
                                     <TextBlock Grid.Row="6" Grid.Column="1" AutomationProperties.AutomationId="HomeRegistryStatusText" Style="{StaticResource StatusValueStyle}" Text="{Binding RegistryPackageSummaryText}" />
                                 </Grid>
 
-                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Passport Name (optional)" />
-                                <TextBox AutomationProperties.AutomationId="DisplayNameTextBox"
-                                         Style="{StaticResource InputTextBoxStyle}"
-                                         Text="{Binding CitizenName, UpdateSourceTrigger=PropertyChanged}" />
+                                <StackPanel Visibility="{Binding HomePassportNameInputVisibility}">
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Passport Name (optional)" />
+                                    <TextBox AutomationProperties.AutomationId="DisplayNameTextBox"
+                                             Style="{StaticResource InputTextBoxStyle}"
+                                             Text="{Binding CitizenName, UpdateSourceTrigger=PropertyChanged}" />
+                                </StackPanel>
 
                                 <Button AutomationProperties.AutomationId="PrimaryActionButton"
                                         Margin="0,22,0,12"

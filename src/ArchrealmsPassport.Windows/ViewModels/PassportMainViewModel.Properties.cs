@@ -52,6 +52,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
                 if (SetField(ref _citizenName, value))
                 {
                     OnPropertyChanged(nameof(PassportSummaryText));
+                    OnPropertyChanged(nameof(HomePassportNameInputVisibility));
                 }
             }
         }
@@ -132,6 +133,16 @@ namespace ArchrealmsPassport.Windows.ViewModels
                 return HasActivePassport()
                     ? "Ready: " + GetPassportDisplayName()
                     : "Not created";
+            }
+        }
+
+        public Visibility HomePassportNameInputVisibility
+        {
+            get
+            {
+                return string.IsNullOrWhiteSpace(CitizenName)
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
             }
         }
 

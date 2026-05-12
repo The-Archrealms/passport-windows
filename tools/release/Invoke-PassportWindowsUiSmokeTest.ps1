@@ -143,8 +143,7 @@ $expectedHomeAutomationIds = @(
     "HomePassportStatusText",
     "HomeStorageStatusText",
     "HomeNodeStatusText",
-    "HomeRegistryStatusText",
-    "DisplayNameTextBox"
+    "HomeRegistryStatusText"
 )
 $expectedStorageAutomationIds = @(
     "InitializeNodeButton",

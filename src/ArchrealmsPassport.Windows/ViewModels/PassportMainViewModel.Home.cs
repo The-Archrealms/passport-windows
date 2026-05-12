@@ -114,6 +114,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
             OnPropertyChanged(nameof(StorageSummaryText));
             OnPropertyChanged(nameof(LocalNodeSummaryText));
             OnPropertyChanged(nameof(RegistryPackageSummaryText));
+            OnPropertyChanged(nameof(HomePassportNameInputVisibility));
             OnPropertyChanged(nameof(PrimaryActionLabel));
             OnPropertyChanged(nameof(PrimaryActionVisibility));
         }
