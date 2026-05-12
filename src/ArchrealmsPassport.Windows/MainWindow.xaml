@@ -127,16 +127,9 @@
             <TabItem Header="Home">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <Grid Margin="0,18,0,0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="1.15*" />
-                            <ColumnDefinition Width="24" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
-
-                        <Border Style="{StaticResource CardStyle}">
+                        <Border MaxWidth="720"
+                                HorizontalAlignment="Left"
+                                Style="{StaticResource CardStyle}">
                             <StackPanel>
                                 <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Home" />
 
@@ -168,6 +161,11 @@
                                     <TextBlock Grid.Row="6" Grid.Column="1" AutomationProperties.AutomationId="HomeRegistryStatusText" Style="{StaticResource StatusValueStyle}" Text="{Binding RegistryPackageSummaryText}" />
                                 </Grid>
 
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Passport Name (optional)" />
+                                <TextBox AutomationProperties.AutomationId="DisplayNameTextBox"
+                                         Style="{StaticResource InputTextBoxStyle}"
+                                         Text="{Binding CitizenName, UpdateSourceTrigger=PropertyChanged}" />
+
                                 <Button AutomationProperties.AutomationId="PrimaryActionButton"
                                         Margin="0,22,0,12"
                                         HorizontalAlignment="Stretch"
@@ -175,17 +173,6 @@
                                         Command="{Binding PrimaryActionCommand}"
                                         Content="{Binding PrimaryActionLabel}"
                                         Visibility="{Binding PrimaryActionVisibility}" />
-                            </StackPanel>
-                        </Border>
-
-                        <Border Grid.Column="2" Style="{StaticResource CardStyle}">
-                            <StackPanel>
-                                <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Start" />
-
-                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Passport Name (optional)" />
-                                <TextBox AutomationProperties.AutomationId="DisplayNameTextBox"
-                                         Style="{StaticResource InputTextBoxStyle}"
-                                         Text="{Binding CitizenName, UpdateSourceTrigger=PropertyChanged}" />
                             </StackPanel>
                         </Border>
 
