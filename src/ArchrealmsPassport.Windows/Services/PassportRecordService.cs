@@ -2169,7 +2169,7 @@ namespace ArchrealmsPassport.Windows.Services
                 return "Anonymous " + identityId.Substring(Math.Max(0, identityId.Length - 6));
             }
 
-            return identityId;
+            return "Passport " + identityId.Substring(Math.Max(0, identityId.Length - 6));
         }
 
         private static string Slugify(string value)

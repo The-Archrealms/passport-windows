@@ -37,6 +37,32 @@ public sealed class PassportRecordServiceTests
     }
 
     [Fact]
+    public void CreateNewIdentityUsesFriendlyDisplayNameFallback()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "archrealms-passport-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var service = new PassportRecordService();
+            var result = service.CreateNewIdentity(root, "", "named", "", false);
+
+            Assert.True(result.Succeeded, result.Message);
+
+            var identityRecord = PassportTestWorkspace.ReadJson(result.IdentityRecordPath);
+            var suffix = result.IdentityId[^6..];
+            Assert.Equal("Passport " + suffix, PassportTestWorkspace.GetString(identityRecord, "display_name"));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+
+    [Fact]
     public void CreateNodeCapacitySnapshotNormalizesSettingsAndSignsPayload()
     {
         using var workspace = PassportTestWorkspace.Create();

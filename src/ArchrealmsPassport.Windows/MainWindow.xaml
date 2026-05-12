@@ -175,9 +175,6 @@
                                         Command="{Binding PrimaryActionCommand}"
                                         Content="{Binding PrimaryActionLabel}" />
 
-                                <WrapPanel>
-                                    <Button Style="{StaticResource SecondaryButtonStyle}" Command="{Binding RefreshStatusCommand}" Content="Refresh" />
-                                </WrapPanel>
                             </StackPanel>
                         </Border>
 
@@ -185,7 +182,7 @@
                             <StackPanel>
                                 <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Start" />
 
-                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Passport Name" />
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Passport Name (optional)" />
                                 <TextBox AutomationProperties.AutomationId="DisplayNameTextBox"
                                          Style="{StaticResource InputTextBoxStyle}"
                                          Text="{Binding CitizenName, UpdateSourceTrigger=PropertyChanged}" />
@@ -236,7 +233,7 @@
                             <StackPanel>
                                 <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Passport" />
 
-                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Passport Name" />
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Passport Name (optional)" />
                                 <TextBox Style="{StaticResource InputTextBoxStyle}" Text="{Binding CitizenName, UpdateSourceTrigger=PropertyChanged}" />
 
                                 <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Setup" />
