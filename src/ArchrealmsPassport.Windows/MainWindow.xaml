@@ -6,10 +6,10 @@
         mc:Ignorable="d"
         Title="Archrealms Passport"
         Icon="Assets/AppIcon.ico"
-        Height="820"
-        Width="1180"
-        MinHeight="720"
-        MinWidth="980"
+        Height="640"
+        Width="900"
+        MinHeight="560"
+        MinWidth="760"
         AutomationProperties.AutomationId="ArchrealmsPassportMainWindow"
         Background="#F3F1EA">
     <Window.Resources>
