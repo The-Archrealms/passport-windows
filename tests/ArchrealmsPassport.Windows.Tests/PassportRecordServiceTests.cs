@@ -9,6 +9,34 @@ namespace ArchrealmsPassport.Windows.Tests;
 public sealed class PassportRecordServiceTests
 {
     [Fact]
+    public void CreateNewIdentityUsesSimplePassportAndDeviceIds()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "archrealms-passport-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var service = new PassportRecordService();
+            var result = service.CreateNewIdentity(root, "Dan", "named", string.Empty, false);
+
+            Assert.True(result.Succeeded, result.Message);
+            Assert.Matches("^passport-[0-9a-f]{10}$", result.IdentityId);
+            Assert.Matches("^device-[0-9a-f]{10}$", result.DeviceId);
+
+            var identityRecord = PassportTestWorkspace.ReadJson(result.IdentityRecordPath);
+            Assert.Equal("Dan", PassportTestWorkspace.GetString(identityRecord, "display_name"));
+            Assert.Equal(result.IdentityId, PassportTestWorkspace.GetString(identityRecord, "archrealms_identity_id"));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+
+    [Fact]
     public void CreateNodeCapacitySnapshotNormalizesSettingsAndSignsPayload()
     {
         using var workspace = PassportTestWorkspace.Create();

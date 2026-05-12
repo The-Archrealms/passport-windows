@@ -1036,7 +1036,7 @@ namespace ArchrealmsPassport.Windows.Services
 
             if (health.RepoInitialized && !health.ApiReachable)
             {
-                actions.Add("Run Start Local Node, then refresh status.");
+                actions.Add("Start the storage node, then refresh status.");
                 actions.Add("If start fails, run Repair Node Config and write diagnostics again.");
             }
 

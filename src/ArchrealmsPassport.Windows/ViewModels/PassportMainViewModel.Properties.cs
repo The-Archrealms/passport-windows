@@ -11,8 +11,8 @@ namespace ArchrealmsPassport.Windows.ViewModels
             {
                 return new[]
                 {
-                    "Create new Passport identity",
-                    "Add this device to existing identity"
+                    "Create a new Passport",
+                    "Add this device to a Passport"
                 };
             }
         }
@@ -43,7 +43,17 @@ namespace ArchrealmsPassport.Windows.ViewModels
             }
         }
 
-        public string CitizenName { get { return _citizenName; } set { SetField(ref _citizenName, value); } }
+        public string CitizenName
+        {
+            get { return _citizenName; }
+            set
+            {
+                if (SetField(ref _citizenName, value))
+                {
+                    OnPropertyChanged(nameof(PassportSummaryText));
+                }
+            }
+        }
         public string SelectedProvisioningMode
         {
             get { return _selectedProvisioningMode; }
@@ -95,8 +105,12 @@ namespace ArchrealmsPassport.Windows.ViewModels
             {
                 return string.Equals(
                     SelectedProvisioningMode,
-                    "Add this device to existing identity",
-                    StringComparison.Ordinal);
+                    "Add this device to a Passport",
+                    StringComparison.Ordinal)
+                    || string.Equals(
+                        SelectedProvisioningMode,
+                        "Add this device to existing identity",
+                        StringComparison.Ordinal);
             }
         }
 
@@ -105,8 +119,8 @@ namespace ArchrealmsPassport.Windows.ViewModels
             get
             {
                 return IsJoiningExistingIdentity
-                    ? "Create Join Request"
-                    : "Create New Identity and Authorize This Device";
+                    ? "Request Access"
+                    : "Create Passport";
             }
         }
 
@@ -115,7 +129,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
             get
             {
                 return HasActivePassport()
-                    ? "Ready: " + ShortenIdentifier(ActiveIdentityId)
+                    ? "Ready: " + GetPassportDisplayName()
                     : "Not created";
             }
         }
@@ -137,7 +151,17 @@ namespace ArchrealmsPassport.Windows.ViewModels
 
         public string LocalNodeSummaryText
         {
-            get { return NodeStateText; }
+            get
+            {
+                if (HasActiveNode())
+                {
+                    return "Online";
+                }
+
+                return ParticipateInPublicRegistry
+                    ? "Not running"
+                    : "Off";
+            }
         }
 
         public string RegistryPackageSummaryText
@@ -146,7 +170,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
             {
                 if (IsPublishedRegistrySubmission())
                 {
-                    return "Registered: " + ShortenIdentifier(RegistrySubmissionCidText);
+                    return "Registered";
                 }
 
                 return HasRegistrySubmissionPackage()
@@ -161,7 +185,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
             {
                 if (!HasActivePassport())
                 {
-                    return IsJoiningExistingIdentity ? "Create Join Request" : "Create Passport";
+                    return IsJoiningExistingIdentity ? "Request Access" : "Create Passport";
                 }
 
                 if (ParticipateInPublicRegistry && !HasActiveNode())
@@ -171,7 +195,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
 
                 if (!IsPublishedRegistrySubmission())
                 {
-                    return "Register with Archrealms";
+                    return "Complete Registration";
                 }
 
                 return "Refresh Status";

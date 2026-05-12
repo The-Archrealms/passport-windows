@@ -122,7 +122,7 @@ namespace ArchrealmsPassport.Windows.Services
             {
                 if (string.IsNullOrWhiteSpace(identityId))
                 {
-                    return FailedJoinRequest("An existing Passport identity identifier is required.");
+                    return FailedJoinRequest("An existing Passport ID is required.");
                 }
 
                 var resolvedWorkspaceRoot = PassportEnvironment.ResolveWorkspaceRoot(workspaceRoot);
@@ -2098,24 +2098,12 @@ namespace ArchrealmsPassport.Windows.Services
 
         private static string CreateIdentityId(string displayName)
         {
-            var slug = Slugify(displayName);
-            if (string.IsNullOrWhiteSpace(slug))
-            {
-                slug = "persona";
-            }
-
-            return "identity-" + slug + "-" + Guid.NewGuid().ToString("N").Substring(0, 10);
+            return "passport-" + Guid.NewGuid().ToString("N").Substring(0, 10);
         }
 
         private static string CreateDeviceId(string deviceLabel)
         {
-            var slug = Slugify(deviceLabel);
-            if (string.IsNullOrWhiteSpace(slug))
-            {
-                slug = "device";
-            }
-
-            return "device-" + slug + "-" + Guid.NewGuid().ToString("N").Substring(0, 10);
+            return "device-" + Guid.NewGuid().ToString("N").Substring(0, 10);
         }
 
         private static string NormalizeNodeId(string nodeId, string deviceId)

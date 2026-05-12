@@ -47,7 +47,7 @@
             <Setter Property="VerticalAlignment" Value="Top" />
         </Style>
         <Style x:Key="StatusValueStyle" TargetType="TextBlock">
-            <Setter Property="FontFamily" Value="Consolas" />
+            <Setter Property="FontFamily" Value="Segoe UI" />
             <Setter Property="FontSize" Value="13" />
             <Setter Property="Foreground" Value="#1D2C27" />
             <Setter Property="TextWrapping" Value="Wrap" />
@@ -92,7 +92,6 @@
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="18" />
                     <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
                 <Border Width="58"
@@ -114,18 +113,9 @@
                     <TextBlock Margin="0,4,0,0"
                                FontSize="13"
                                Foreground="#C9D9D2"
-                               Text="Passport, storage, node, and registry readiness." />
+                               Text="Create, register, and keep your Passport online." />
                 </StackPanel>
 
-                <StackPanel Grid.Column="3" MinWidth="220" VerticalAlignment="Center">
-                    <TextBlock FontSize="12" Foreground="#AFC8BE" Text="Latest Package" />
-                    <TextBlock Margin="0,3,0,0"
-                               FontFamily="Consolas"
-                               FontSize="13"
-                               Foreground="#FFFFFF"
-                               TextWrapping="Wrap"
-                               Text="{Binding VerificationStateText}" />
-                </StackPanel>
             </Grid>
         </Border>
 
@@ -171,7 +161,7 @@
                                     <TextBlock Grid.Row="2" Style="{StaticResource StatusLabelStyle}" Text="Storage" />
                                     <TextBlock Grid.Row="2" Grid.Column="1" AutomationProperties.AutomationId="HomeStorageStatusText" Style="{StaticResource StatusValueStyle}" Text="{Binding StorageSummaryText}" />
 
-                                    <TextBlock Grid.Row="4" Style="{StaticResource StatusLabelStyle}" Text="Local Node" />
+                                    <TextBlock Grid.Row="4" Style="{StaticResource StatusLabelStyle}" Text="Storage Node" />
                                     <TextBlock Grid.Row="4" Grid.Column="1" AutomationProperties.AutomationId="HomeNodeStatusText" Style="{StaticResource StatusValueStyle}" Text="{Binding LocalNodeSummaryText}" />
 
                                     <TextBlock Grid.Row="6" Style="{StaticResource StatusLabelStyle}" Text="Registration" />
@@ -187,34 +177,24 @@
 
                                 <WrapPanel>
                                     <Button Style="{StaticResource SecondaryButtonStyle}" Command="{Binding RefreshStatusCommand}" Content="Refresh" />
-                                    <Button Style="{StaticResource SecondaryButtonStyle}" Command="{Binding SaveSettingsCommand}" Content="Save" />
                                 </WrapPanel>
                             </StackPanel>
                         </Border>
 
                         <Border Grid.Column="2" Style="{StaticResource CardStyle}">
                             <StackPanel>
-                                <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Setup" />
+                                <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Start" />
 
-                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Display Name" />
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Passport Name" />
                                 <TextBox AutomationProperties.AutomationId="DisplayNameTextBox"
                                          Style="{StaticResource InputTextBoxStyle}"
                                          Text="{Binding CitizenName, UpdateSourceTrigger=PropertyChanged}" />
 
-                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Device Label" />
-                                <TextBox Style="{StaticResource InputTextBoxStyle}" Text="{Binding DeviceLabel, UpdateSourceTrigger=PropertyChanged}" />
-
                                 <CheckBox Margin="0,16,0,0"
                                           FontSize="13"
                                           Foreground="#34413C"
-                                          IsChecked="{Binding PreferWindowsHelloCredentials}"
-                                          Content="Use Windows Hello" />
-
-                                <CheckBox Margin="0,10,0,0"
-                                          FontSize="13"
-                                          Foreground="#34413C"
                                           IsChecked="{Binding ParticipateInPublicRegistry}"
-                                          Content="Contribute storage" />
+                                          Content="Share storage" />
 
                                 <Grid Margin="0,16,0,0">
                                     <Grid.ColumnDefinitions>
@@ -256,19 +236,19 @@
                             <StackPanel>
                                 <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Passport" />
 
-                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Display Name" />
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Passport Name" />
                                 <TextBox Style="{StaticResource InputTextBoxStyle}" Text="{Binding CitizenName, UpdateSourceTrigger=PropertyChanged}" />
 
-                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Provisioning Mode" />
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Setup" />
                                 <ComboBox AutomationProperties.AutomationId="ProvisioningModeComboBox"
                                           Padding="8,5"
                                           ItemsSource="{Binding ProvisioningModes}"
                                           SelectedItem="{Binding SelectedProvisioningMode, UpdateSourceTrigger=PropertyChanged}" />
 
-                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Existing Identity ID" />
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Existing Passport ID" />
                                 <TextBox Style="{StaticResource CodeTextBoxStyle}" IsEnabled="{Binding IsJoiningExistingIdentity}" Text="{Binding ExistingIdentityId, UpdateSourceTrigger=PropertyChanged}" />
 
-                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Device Label" />
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Device Name" />
                                 <TextBox Style="{StaticResource InputTextBoxStyle}" Text="{Binding DeviceLabel, UpdateSourceTrigger=PropertyChanged}" />
 
                                 <CheckBox Margin="0,16,0,0" FontSize="13" Foreground="#34413C" IsChecked="{Binding PreferWindowsHelloCredentials}" Content="Use Windows Hello" />
@@ -276,8 +256,8 @@
 
                                 <WrapPanel Margin="0,18,0,0">
                                     <Button AutomationProperties.AutomationId="CreateNewIdentityButton" Style="{StaticResource ActionButtonStyle}" Command="{Binding ProvisionIdentityCommand}" Content="{Binding ProvisioningButtonLabel}" />
-                                    <Button Style="{StaticResource SecondaryButtonStyle}" Command="{Binding ApproveJoinRequestCommand}" Content="Approve Join" />
-                                    <Button Style="{StaticResource SecondaryButtonStyle}" Command="{Binding ImportJoinApprovalCommand}" Content="Import Approval" />
+                                    <Button Style="{StaticResource SecondaryButtonStyle}" Command="{Binding ApproveJoinRequestCommand}" Content="Approve Device" />
+                                    <Button Style="{StaticResource SecondaryButtonStyle}" Command="{Binding ImportJoinApprovalCommand}" Content="Add Device" />
                                 </WrapPanel>
                             </StackPanel>
                         </Border>
@@ -287,19 +267,19 @@
                                 <StackPanel>
                                     <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Active Passport" />
 
-                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Active Identity ID" />
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Passport ID" />
                                     <TextBox Style="{StaticResource CodeTextBoxStyle}" IsReadOnly="True" Text="{Binding ActiveIdentityId, Mode=OneWay}" />
 
-                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Active Device ID" />
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="This Device ID" />
                                     <TextBox Style="{StaticResource CodeTextBoxStyle}" IsReadOnly="True" Text="{Binding ActiveDeviceId, Mode=OneWay}" />
 
                                     <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Pending Device ID" />
                                     <TextBox Style="{StaticResource CodeTextBoxStyle}" IsReadOnly="True" Text="{Binding PendingDeviceId, Mode=OneWay}" />
 
-                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Join Request Path" />
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Device Request Path" />
                                     <TextBox Style="{StaticResource CodeTextBoxStyle}" Text="{Binding JoinRequestPath, UpdateSourceTrigger=PropertyChanged}" />
 
-                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Join Approval Path" />
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Device Approval Path" />
                                     <TextBox Style="{StaticResource CodeTextBoxStyle}" Text="{Binding JoinApprovalPath, UpdateSourceTrigger=PropertyChanged}" />
                                 </StackPanel>
                             </Border>
@@ -314,7 +294,7 @@
                                     <WrapPanel Margin="0,14,0,0">
                                         <Button AutomationProperties.AutomationId="GenerateChallengeButton" Style="{StaticResource SecondaryButtonStyle}" Command="{Binding GenerateChallengeCommand}" Content="Generate" />
                                         <Button Style="{StaticResource ActionButtonStyle}" Command="{Binding SignChallengeCommand}" Content="Sign" />
-                                        <Button Style="{StaticResource ActionButtonStyle}" Command="{Binding CreateRegistrySubmissionCommand}" Content="Register with Archrealms" />
+                                        <Button Style="{StaticResource ActionButtonStyle}" Command="{Binding CreateRegistrySubmissionCommand}" Content="Complete Registration" />
                                     </WrapPanel>
 
                                     <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Signature Record" />
@@ -591,7 +571,7 @@
                                     <TextBox Style="{StaticResource CodeTextBoxStyle}" IsReadOnly="True" Text="{Binding RegistrySubmissionCidText, Mode=OneWay}" />
 
                                     <WrapPanel Margin="0,16,0,0">
-                                        <Button Style="{StaticResource ActionButtonStyle}" Command="{Binding CreateRegistrySubmissionCommand}" Content="Register with Archrealms" />
+                                        <Button Style="{StaticResource ActionButtonStyle}" Command="{Binding CreateRegistrySubmissionCommand}" Content="Complete Registration" />
                                     </WrapPanel>
                                 </StackPanel>
                             </Border>

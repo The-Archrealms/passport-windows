@@ -103,12 +103,22 @@ namespace ArchrealmsPassport.Windows.ViewModels
 
         private static string ShortenIdentifier(string value)
         {
-            if (string.IsNullOrWhiteSpace(value) || value.Length <= 18)
+            if (string.IsNullOrWhiteSpace(value) || value.Length <= 24)
             {
                 return value;
             }
 
             return value.Substring(0, 10) + "..." + value.Substring(value.Length - 5);
+        }
+
+        private string GetPassportDisplayName()
+        {
+            if (!string.IsNullOrWhiteSpace(CitizenName))
+            {
+                return CitizenName.Trim();
+            }
+
+            return ShortenIdentifier(ActiveIdentityId);
         }
 
         private void RaiseHomePropertiesChanged()

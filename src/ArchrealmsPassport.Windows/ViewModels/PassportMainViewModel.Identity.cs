@@ -15,9 +15,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
             var settings = _settingsStore.Load();
 
             CitizenName = settings.CitizenName;
-            SelectedProvisioningMode = string.IsNullOrWhiteSpace(settings.SelectedProvisioningMode)
-                ? "Create new Passport identity"
-                : settings.SelectedProvisioningMode;
+            SelectedProvisioningMode = NormalizeProvisioningMode(settings.SelectedProvisioningMode);
             SelectedIdentityMode = "named";
             ExistingIdentityId = settings.ExistingIdentityId;
             ActiveIdentityId = settings.ActiveIdentityId;
@@ -123,10 +121,10 @@ namespace ArchrealmsPassport.Windows.ViewModels
                 _settingsStore.Save(CreateSettingsSnapshot());
 
                 AppendLog(joinResult.Message);
-                AppendLog("Identity ID: " + joinResult.IdentityId);
+                AppendLog("Passport ID: " + joinResult.IdentityId);
                 AppendLog("Pending device ID: " + joinResult.DeviceId);
-                AppendLog("Join request: " + joinResult.JoinRequestPath);
-                AppendLog("Join request signature: " + joinResult.RequestSignaturePath);
+                AppendLog("Device request: " + joinResult.JoinRequestPath);
+                AppendLog("Device request signature: " + joinResult.RequestSignaturePath);
                 AppendLog("Candidate public key: " + joinResult.PublicKeyPath);
                 AppendLog("Device key reference: " + joinResult.PrivateKeyPath);
                 AppendLog("Key storage: " + PassportDeviceKeyStore.DescribeReference(joinResult.PrivateKeyPath));
@@ -156,8 +154,8 @@ namespace ArchrealmsPassport.Windows.ViewModels
             _settingsStore.Save(CreateSettingsSnapshot());
 
             AppendLog(result.Message);
-            AppendLog("Identity ID: " + result.IdentityId);
-            AppendLog("Device ID: " + result.DeviceId);
+            AppendLog("Passport ID: " + result.IdentityId);
+            AppendLog("This device ID: " + result.DeviceId);
             AppendLog("Identity record: " + result.IdentityRecordPath);
             AppendLog("Device credential record: " + result.DeviceRecordPath);
             AppendLog("Public key: " + result.PublicKeyPath);
@@ -251,7 +249,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
             AppendLocalNodeResult(initializeResult, "Initialized local node during Passport onboarding.");
             if (!initializeResult.Succeeded)
             {
-                AppendLog("Passport identity activation remains complete; node bootstrap can be retried from Initialize Local IPFS Node after runtime setup.");
+                AppendLog("Passport activation is complete; storage setup can be retried after runtime setup.");
                 return;
             }
 
@@ -264,8 +262,29 @@ namespace ArchrealmsPassport.Windows.ViewModels
             AppendLocalNodeResult(startResult, "Started local node during Passport onboarding.");
             if (!startResult.Succeeded)
             {
-                AppendLog("Passport identity activation remains complete; node start can be retried from Start Local Node.");
+                AppendLog("Passport activation is complete; storage startup can be retried later.");
             }
+        }
+
+        private static string NormalizeProvisioningMode(string provisioningMode)
+        {
+            if (string.Equals(
+                provisioningMode,
+                "Add this device to existing identity",
+                StringComparison.Ordinal))
+            {
+                return "Add this device to a Passport";
+            }
+
+            if (string.Equals(
+                provisioningMode,
+                "Add this device to a Passport",
+                StringComparison.Ordinal))
+            {
+                return provisioningMode;
+            }
+
+            return "Create a new Passport";
         }
 
         private Task GenerateChallengeAsync()

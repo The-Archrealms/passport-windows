@@ -3,7 +3,7 @@ namespace ArchrealmsPassport.Windows.Models
     public sealed class PassportSettings
     {
         public string CitizenName { get; set; } = string.Empty;
-        public string SelectedProvisioningMode { get; set; } = "Create new Passport identity";
+        public string SelectedProvisioningMode { get; set; } = "Create a new Passport";
         public string SelectedIdentityMode { get; set; } = "named";
         public string ExistingIdentityId { get; set; } = string.Empty;
         public string ActiveIdentityId { get; set; } = string.Empty;

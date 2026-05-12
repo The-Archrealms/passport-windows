@@ -39,7 +39,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
         private readonly AsyncRelayCommand _primaryActionCommand;
 
         private string _citizenName = string.Empty;
-        private string _selectedProvisioningMode = "Create new Passport identity";
+        private string _selectedProvisioningMode = "Create a new Passport";
         private string _selectedIdentityMode = "named";
         private string _existingIdentityId = string.Empty;
         private string _activeIdentityId = string.Empty;
