@@ -251,11 +251,19 @@ try {
                 Join-Path ([System.IO.Path]::GetTempPath()) ("passport-msix-ui-smoke-" + [Guid]::NewGuid().ToString("N") + ".json")
             }
 
-            & powershell -NoProfile -ExecutionPolicy Bypass -File $uiSmokeScript `
-                -PackageFamilyName $installedPackage.PackageFamilyName `
-                -AppId $AppId `
-                -StopExisting:$StopExisting.IsPresent `
-                -OutputPath $uiSmokeReportPath | Out-Null
+            $uiSmokeArguments = @(
+                "-NoProfile",
+                "-ExecutionPolicy", "Bypass",
+                "-File", $uiSmokeScript,
+                "-PackageFamilyName", $installedPackage.PackageFamilyName,
+                "-AppId", $AppId,
+                "-OutputPath", $uiSmokeReportPath
+            )
+            if ($StopExisting) {
+                $uiSmokeArguments += "-StopExisting"
+            }
+
+            & powershell @uiSmokeArguments | Out-Null
 
             if ($LASTEXITCODE -ne 0) {
                 Add-Failure -Failures $failures -Message "The installed MSIX UI smoke test failed."
