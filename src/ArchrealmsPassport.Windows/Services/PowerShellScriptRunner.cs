@@ -45,6 +45,12 @@ namespace ArchrealmsPassport.Windows.Services
                 processStartInfo.Environment["ARCHREALMS_IPFS_CLI"] = ipfsCliPath;
             }
 
+            var releaseLane = PassportEnvironment.GetReleaseLane();
+            processStartInfo.Environment["ARCHREALMS_PASSPORT_LANE"] = releaseLane.Lane;
+            processStartInfo.Environment["ARCHREALMS_PASSPORT_LEDGER_NAMESPACE"] = releaseLane.LedgerNamespace;
+            processStartInfo.Environment["ARCHREALMS_PASSPORT_TELEMETRY_ENVIRONMENT"] = releaseLane.TelemetryEnvironment;
+            processStartInfo.Environment["ARCHREALMS_PASSPORT_ISSUER_KEY_SCOPE"] = releaseLane.IssuerKeyScope;
+
             foreach (var argument in arguments)
             {
                 processStartInfo.ArgumentList.Add(argument);

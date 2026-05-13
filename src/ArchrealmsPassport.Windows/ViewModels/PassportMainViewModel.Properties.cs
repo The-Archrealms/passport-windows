@@ -299,6 +299,11 @@ namespace ArchrealmsPassport.Windows.ViewModels
         public string StorageActionStatusText { get { return _storageActionStatusText; } private set { SetField(ref _storageActionStatusText, value); } }
         public string ActivityLog { get { return _activityLog; } private set { SetField(ref _activityLog, value); } }
 
+        public string ReleaseLaneSummaryText
+        {
+            get { return _releaseLane.Summary; }
+        }
+
         private void RaiseNodeProfilePropertiesChanged()
         {
             OnPropertyChanged(nameof(ParticipationProfileSummary));

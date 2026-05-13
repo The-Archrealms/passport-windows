@@ -225,6 +225,14 @@ Create a packaged Windows release bundle:
 .\tools\release\Publish-PassportWindows.ps1 -RuntimeIdentifier win-x64
 ```
 
+Release packaging is lane-aware. The default lane is `Staging`, which writes `passport-release-lane.json` into the artifact, uses the `archrealms-passport-staging` ledger namespace, and keeps runtime settings and keys under a staging-specific app data root. Supported lanes are `Dev`, `InternalVerification`, `Staging`, `CanaryMvp`, and `ProductionMvp`.
+
+```powershell
+.\tools\release\Publish-PassportWindows.ps1 `
+  -RuntimeIdentifier win-x64 `
+  -Lane Staging
+```
+
 To force inclusion of a specific local `ipfs.exe` in the published Passport bundle:
 
 ```powershell
@@ -238,8 +246,9 @@ If `-IpfsCliPath` and `ARCHREALMS_IPFS_CLI` are not set, the release script down
 That produces:
 
 - a published application directory under `artifacts/release/passport-windows-win-x64/publish`
-- a zipped bundle under `artifacts/release/passport-windows-win-x64/passport-windows-win-x64.zip`
+- a lane-specific zipped bundle, such as `artifacts/release/passport-windows-win-x64/passport-windows-win-x64-staging.zip`
 - a release manifest with file hashes under `artifacts/release/passport-windows-win-x64/release-manifest.json`
+- a runtime lane manifest under `artifacts/release/passport-windows-win-x64/publish/passport-release-lane.json`
 
 Validate the zip artifact before handing it to testers:
 
@@ -277,7 +286,7 @@ If no explicit IPFS CLI path is supplied, the `MSIX` path uses the same pinned K
 
 That produces:
 
-- a signed sideload `MSIX` package under `artifacts/release/passport-windows-msix-sideload/x64/passport-windows-sideload-x64.msix`
+- a signed lane-specific sideload `MSIX` package under `artifacts/release/passport-windows-msix-sideload/x64`, such as `passport-windows-sideload-staging-x64.msix`
 - a public signing certificate under `artifacts/release/passport-windows-msix-sideload/x64/passport-windows-signing.cer`
 - an `MSIX` package manifest with hashes under `artifacts/release/passport-windows-msix-sideload/x64/msix-package-manifest.json`
 
@@ -310,8 +319,10 @@ The script publishes the app, assembles a package layout, builds the package wit
 
 The `MSIX` script supports separate channels:
 
-- `Sideload`: defaults to package identity `TheArchrealms.PassportWindows.Sideload` and output root `artifacts/release/passport-windows-msix-sideload`
-- `Store`: defaults to package identity `TheArchrealms.PassportWindows` and output root `artifacts/release/passport-windows-msix-store`
+- `Sideload`: defaults to a lane-scoped package identity, for example `TheArchrealms.PassportWindows.Staging.Sideload`, and output root `artifacts/release/passport-windows-msix-sideload`
+- `Store`: defaults to a lane-scoped package identity, for example `TheArchrealms.PassportWindows.Staging`, and output root `artifacts/release/passport-windows-msix-store`
+
+Use `-Lane ProductionMvp` only for an approved production MVP build. `ProductionMvp` uses the production app data root and package identity defaults. `Staging`, `InternalVerification`, and `Dev` are non-production lanes and release validation fails if their lane manifest allows production token records.
 
 For a Microsoft Store package candidate, use Partner Center values when they are available:
 

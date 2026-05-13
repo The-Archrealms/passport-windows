@@ -3,6 +3,8 @@ param(
     [string]$RuntimeIdentifier = "win-x64",
     [string]$Configuration = "Release",
     [string]$Version,
+    [ValidateSet("Dev", "InternalVerification", "Staging", "CanaryMvp", "ProductionMvp")]
+    [string]$Lane = "Staging",
     [string]$IpfsCliPath,
     [string]$KuboVersion = "v0.41.0",
     [string]$OutputRoot,
@@ -87,9 +89,10 @@ if (-not $OutputRoot) {
 $OutputRoot = [System.IO.Path]::GetFullPath($OutputRoot)
 
 $appProject = Join-Path $repoRoot "src\ArchrealmsPassport.Windows\ArchrealmsPassport.Windows.csproj"
+$laneSlug = Get-PassportWindowsReleaseLaneSlug -Lane $Lane
 $publishRoot = Join-Path $OutputRoot ("passport-windows-" + $RuntimeIdentifier)
 $publishDir = Join-Path $publishRoot "publish"
-$zipPath = Join-Path $publishRoot ("passport-windows-" + $RuntimeIdentifier + ".zip")
+$zipPath = Join-Path $publishRoot ("passport-windows-" + $RuntimeIdentifier + "-" + $laneSlug + ".zip")
 $manifestPath = Join-Path $publishRoot "release-manifest.json"
 $selfContainedValue = if ($SelfContained) { "true" } else { "false" }
 $packageVersion = $Version
@@ -128,18 +131,27 @@ $bundledIpfsRuntime = Stage-BundledIpfsRuntime `
     -DownloadRoot (Join-Path $OutputRoot "kubo-cache") `
     -DownloadIfMissing:(!$SkipIpfsRuntimeBootstrap.IsPresent)
 
-if (Test-Path -LiteralPath $zipPath) {
-    Remove-Item -Force $zipPath
-}
-
-Compress-Archive -Path (Join-Path $publishDir "*") -DestinationPath $zipPath
-
 $gitCommit = ""
 try {
     $gitCommit = (git -C $repoRoot rev-parse HEAD).Trim()
 }
 catch {
 }
+
+$releaseLaneManifest = New-PassportWindowsReleaseLaneManifest `
+    -Lane $Lane `
+    -PackageChannel "zip" `
+    -PackageIdentity "" `
+    -PackageDisplayName "Archrealms Passport" `
+    -GitCommit $gitCommit
+$releaseLaneManifestPath = Join-Path $publishDir "passport-release-lane.json"
+$releaseLaneManifest | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $releaseLaneManifestPath -Encoding UTF8
+
+if (Test-Path -LiteralPath $zipPath) {
+    Remove-Item -Force $zipPath
+}
+
+Compress-Archive -Path (Join-Path $publishDir "*") -DestinationPath $zipPath
 
 $files = Get-ChildItem -File -Recurse $publishDir | Sort-Object FullName | ForEach-Object {
     $hash = Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName
@@ -152,6 +164,11 @@ $files = Get-ChildItem -File -Recurse $publishDir | Sort-Object FullName | ForEa
 
 $manifest = [pscustomobject]@{
     created_utc = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
+    lane = $laneSlug
+    release_lane_manifest_path = $releaseLaneManifestPath
+    ledger_namespace = $releaseLaneManifest.ledger_namespace
+    telemetry_environment = $releaseLaneManifest.telemetry_environment
+    issuer_key_scope = $releaseLaneManifest.issuer_key_scope
     dotnet = $dotnet
     runtime_identifier = $RuntimeIdentifier
     configuration = $Configuration

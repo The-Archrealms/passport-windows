@@ -146,6 +146,56 @@ function Test-IpfsExecutable {
     }
 }
 
+function Test-ReleaseLaneManifest {
+    param(
+        [pscustomobject]$Manifest,
+        [string]$ArtifactRoot,
+        [System.Collections.Generic.List[string]]$Failures
+    )
+
+    $laneManifestPath = Join-Path $ArtifactRoot "passport-release-lane.json"
+    if (-not (Test-Path -LiteralPath $laneManifestPath -PathType Leaf)) {
+        Add-Failure -Failures $Failures -Message "Required file is missing: passport-release-lane.json"
+        return $null
+    }
+
+    $laneManifest = Get-Content -LiteralPath $laneManifestPath -Raw | ConvertFrom-Json
+    $lane = [string]$laneManifest.lane
+    $allowedLanes = @("dev", "internal-verification", "staging", "canary-mvp", "production-mvp")
+    if ($allowedLanes -notcontains $lane) {
+        Add-Failure -Failures $Failures -Message "Release lane manifest has unsupported lane: $lane"
+        return $laneManifest
+    }
+
+    if ($Manifest.PSObject.Properties["lane"] -and $Manifest.lane -and -not [string]::Equals([string]$Manifest.lane, $lane, [System.StringComparison]::Ordinal)) {
+        Add-Failure -Failures $Failures -Message "Release manifest lane does not match passport-release-lane.json."
+    }
+
+    foreach ($requiredProperty in @("ledger_namespace", "telemetry_environment", "issuer_key_scope", "policy_version")) {
+        if (-not $laneManifest.PSObject.Properties[$requiredProperty] -or [string]::IsNullOrWhiteSpace([string]$laneManifest.$requiredProperty)) {
+            Add-Failure -Failures $Failures -Message "Release lane manifest is missing $requiredProperty."
+        }
+    }
+
+    $productionLedger = [bool]$laneManifest.production_ledger
+    $allowProductionRecords = [bool]$laneManifest.allow_production_token_records
+    $allowStagingRecords = [bool]$laneManifest.allow_staging_records
+
+    if (($lane -eq "dev" -or $lane -eq "internal-verification" -or $lane -eq "staging") -and ($productionLedger -or $allowProductionRecords)) {
+        Add-Failure -Failures $Failures -Message "Non-production lane is allowed to write production token records."
+    }
+
+    if ($lane -ne "staging" -and $allowStagingRecords) {
+        Add-Failure -Failures $Failures -Message "Only the staging lane may allow staging records."
+    }
+
+    if (($lane -eq "canary-mvp" -or $lane -eq "production-mvp") -and (-not $productionLedger -or -not $allowProductionRecords)) {
+        Add-Failure -Failures $Failures -Message "Production-token lane is not marked for production ledger records."
+    }
+
+    return $laneManifest
+}
+
 if (-not $ManifestPath -or $ManifestPath.Count -lt 1) {
     $ManifestPath = @(
         "artifacts\release\passport-windows-win-x64\release-manifest.json",
@@ -172,6 +222,7 @@ try {
         $manifest = Get-Content -LiteralPath $resolvedManifestPath -Raw | ConvertFrom-Json
         $failures = New-Object 'System.Collections.Generic.List[string]'
         $artifactRoot = Resolve-ArtifactRoot -Manifest $manifest -ManifestDirectory $manifestDirectory -ScratchRoot $scratchRoot
+        $laneManifest = $null
 
         if (-not $artifactRoot) {
             Add-Failure -Failures $failures -Message "Could not resolve artifact root for manifest $resolvedManifestPath."
@@ -179,6 +230,7 @@ try {
 
         $requiredFiles = @(
             "ArchrealmsPassport.Windows.exe",
+            "passport-release-lane.json",
             "tools/ipfs/ArchrealmsIpfs.psm1",
             "tools/ipfs/Export-ArchrealmsIpfsCar.ps1",
             "tools/ipfs/Initialize-ArchrealmsIpfsNode.ps1",
@@ -204,6 +256,8 @@ try {
                     Add-Failure -Failures $failures -Message "Required file is missing: $requiredFile"
                 }
             }
+
+            $laneManifest = Test-ReleaseLaneManifest -Manifest $manifest -ArtifactRoot $artifactRoot -Failures $failures
         }
 
         if ($RequireBundledIpfs -and -not $bundledIpfsIncluded) {
@@ -231,6 +285,8 @@ try {
             zip_path = if ($manifest.PSObject.Properties["zip_path"]) { $manifest.zip_path } else { "" }
             bundled_ipfs_cli_included = $bundledIpfsIncluded
             bundled_ipfs_cli_version = $ipfsVersion
+            lane = if ($laneManifest) { $laneManifest.lane } elseif ($manifest.PSObject.Properties["lane"]) { $manifest.lane } else { "" }
+            ledger_namespace = if ($laneManifest) { $laneManifest.ledger_namespace } else { "" }
             verified_manifest_file_count = $verifiedManifestFileCount
             required_file_count = $requiredFiles.Count
             failures = @($failures)

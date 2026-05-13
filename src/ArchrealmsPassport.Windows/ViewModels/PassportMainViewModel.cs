@@ -13,6 +13,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
         private readonly PassportRecordService _recordService;
         private readonly PassportCryptoService _cryptoService;
         private readonly NetworkUsageService _networkUsageService;
+        private readonly PassportReleaseLane _releaseLane;
         private readonly string _toolRoot;
         private readonly AsyncRelayCommand _saveSettingsCommand;
         private readonly AsyncRelayCommand _refreshStatusCommand;
@@ -110,6 +111,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
             _recordService = recordService;
             _cryptoService = cryptoService;
             _networkUsageService = networkUsageService;
+            _releaseLane = PassportEnvironment.GetReleaseLane();
             _toolRoot = PassportEnvironment.FindToolRoot();
 
             _saveSettingsCommand = new AsyncRelayCommand(SaveSettingsAsync);

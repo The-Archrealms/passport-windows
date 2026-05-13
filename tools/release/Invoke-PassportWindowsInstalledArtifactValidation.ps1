@@ -189,6 +189,7 @@ function Test-RequiredFiles {
 
     $requiredFiles = @(
         "ArchrealmsPassport.Windows.exe",
+        "passport-release-lane.json",
         "tools\ipfs\ArchrealmsIpfs.psm1",
         "tools\ipfs\Initialize-ArchrealmsIpfsNode.ps1",
         "tools\ipfs\Export-ArchrealmsIpfsCar.ps1",

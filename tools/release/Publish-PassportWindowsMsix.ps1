@@ -2,6 +2,8 @@ param(
     [string]$Version,
     [ValidateSet("Sideload", "Store")]
     [string]$Channel = "Sideload",
+    [ValidateSet("Dev", "InternalVerification", "Staging", "CanaryMvp", "ProductionMvp")]
+    [string]$Lane = "Staging",
     [ValidateSet("x64", "x86", "arm64")]
     [string]$Platform = "x64",
     [string]$Configuration = "Release",
@@ -323,6 +325,10 @@ $packageManifestTemplate = Join-Path $repoRoot "src\ArchrealmsPassport.Windows.P
 $assetsRoot = Join-Path $repoRoot "src\ArchrealmsPassport.Windows.Package\Assets"
 $assetScript = Join-Path $repoRoot "tools\release\New-PassportWindowsMsixAssets.ps1"
 $channelSlug = Get-ChannelSlug -Channel $Channel
+$laneSlug = Get-PassportWindowsReleaseLaneSlug -Lane $Lane
+if (-not $PackageIdentityName) {
+    $PackageIdentityName = Get-PassportWindowsReleaseLaneEnvironmentValue -Lane $Lane -Name "PACKAGE_IDENTITY"
+}
 if (-not $PackageIdentityName) {
     $PackageIdentityName = Get-ChannelEnvironmentValue -Channel $Channel -Name "PACKAGE_IDENTITY"
 }
@@ -333,19 +339,20 @@ if (-not $PublisherDisplayName) {
     $PublisherDisplayName = Get-ChannelEnvironmentValue -Channel $Channel -Name "PUBLISHER_DISPLAY_NAME"
 }
 if (-not $PackageDisplayName) {
+    $PackageDisplayName = Get-PassportWindowsReleaseLaneEnvironmentValue -Lane $Lane -Name "DISPLAY_NAME"
+}
+if (-not $PackageDisplayName) {
     $PackageDisplayName = Get-ChannelEnvironmentValue -Channel $Channel -Name "DISPLAY_NAME"
+}
+if (-not $PackageDescription) {
+    $PackageDescription = Get-PassportWindowsReleaseLaneEnvironmentValue -Lane $Lane -Name "DESCRIPTION"
 }
 if (-not $PackageDescription) {
     $PackageDescription = Get-ChannelEnvironmentValue -Channel $Channel -Name "DESCRIPTION"
 }
 
 if (-not $PackageIdentityName) {
-    $PackageIdentityName = if ([string]::Equals($Channel, "Store", [System.StringComparison]::Ordinal)) {
-        "TheArchrealms.PassportWindows"
-    }
-    else {
-        "TheArchrealms.PassportWindows.Sideload"
-    }
+    $PackageIdentityName = Get-PassportWindowsDefaultMsixPackageIdentity -Channel $Channel -Lane $Lane
 }
 if (-not $PackagePublisher) {
     $PackagePublisher = "CN=The Archrealms"
@@ -354,20 +361,10 @@ if (-not $PublisherDisplayName) {
     $PublisherDisplayName = "The Archrealms"
 }
 if (-not $PackageDisplayName) {
-    $PackageDisplayName = if ([string]::Equals($Channel, "Store", [System.StringComparison]::Ordinal)) {
-        "Archrealms Passport"
-    }
-    else {
-        "Archrealms Passport Sideload"
-    }
+    $PackageDisplayName = Get-PassportWindowsDefaultPackageDisplayName -Channel $Channel -Lane $Lane
 }
 if (-not $PackageDescription) {
-    $PackageDescription = if ([string]::Equals($Channel, "Store", [System.StringComparison]::Ordinal)) {
-        "Windows Passport client for the Archrealms."
-    }
-    else {
-        "Sideload build of the Windows Passport client for the Archrealms."
-    }
+    $PackageDescription = Get-PassportWindowsDefaultPackageDescription -Channel $Channel -Lane $Lane
 }
 
 $packageVersion = ConvertTo-AppxVersion -RawVersion $Version
@@ -404,7 +401,7 @@ $publishRoot = Join-Path $artifactRoot "publish"
 $layoutRoot = Join-Path $artifactRoot "layout"
 $certificateRoot = Join-Path $artifactRoot "certificate"
 if (-not $PackageFileName) {
-    $PackageFileName = "passport-windows-" + $channelSlug + "-" + $Platform + ".msix"
+    $PackageFileName = "passport-windows-" + $channelSlug + "-" + $laneSlug + "-" + $Platform + ".msix"
 }
 $packageOutput = Join-Path $artifactRoot $PackageFileName
 $releaseManifestPath = Join-Path $artifactRoot "msix-package-manifest.json"
@@ -435,6 +432,12 @@ $generatedCertificate = $null
 $removeGeneratedCertificate = $false
 $trustedPeopleImport = $null
 $trustedRootImport = $null
+$gitCommit = ""
+try {
+    $gitCommit = (git -C $repoRoot rev-parse HEAD).Trim()
+}
+catch {
+}
 
 if ($CertificatePfxPath) {
     Copy-Item -LiteralPath $CertificatePfxPath -Destination $certificatePfx -Force
@@ -520,6 +523,15 @@ try {
         -KuboVersion $KuboVersion `
         -DownloadRoot (Join-Path $OutputRoot "kubo-cache") `
         -DownloadIfMissing:(!$SkipIpfsRuntimeBootstrap.IsPresent)
+
+    $releaseLaneManifest = New-PassportWindowsReleaseLaneManifest `
+        -Lane $Lane `
+        -PackageChannel $Channel `
+        -PackageIdentity $PackageIdentityName `
+        -PackageDisplayName $PackageDisplayName `
+        -GitCommit $gitCommit
+    $releaseLaneManifestPath = Join-Path $publishRoot "passport-release-lane.json"
+    $releaseLaneManifest | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $releaseLaneManifestPath -Encoding UTF8
 
     Copy-DirectoryContents -Source $publishRoot -Destination $layoutRoot
     Copy-DirectoryContents -Source $assetsRoot -Destination (Join-Path $layoutRoot "Assets")
@@ -633,13 +645,6 @@ finally {
     }
 }
 
-$gitCommit = ""
-try {
-    $gitCommit = (git -C $repoRoot rev-parse HEAD).Trim()
-}
-catch {
-}
-
 $layoutFiles = Get-ChildItem -File -Recurse $layoutRoot | Sort-Object FullName | ForEach-Object {
     $hash = Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName
     [pscustomobject]@{
@@ -651,6 +656,11 @@ $layoutFiles = Get-ChildItem -File -Recurse $layoutRoot | Sort-Object FullName |
 
 $releaseManifest = [pscustomobject]@{
     created_utc = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
+    lane = $laneSlug
+    release_lane_manifest_path = $releaseLaneManifestPath
+    ledger_namespace = $releaseLaneManifest.ledger_namespace
+    telemetry_environment = $releaseLaneManifest.telemetry_environment
+    issuer_key_scope = $releaseLaneManifest.issuer_key_scope
     channel = $Channel
     channel_slug = $channelSlug
     package_tag = $Version

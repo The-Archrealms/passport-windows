@@ -6,12 +6,18 @@ namespace ArchrealmsPassport.Windows.Services
 {
     public static class PassportEnvironment
     {
+        public static PassportReleaseLane GetReleaseLane()
+        {
+            return PassportReleaseLane.Load();
+        }
+
         public static string GetAppDataRoot()
         {
+            var releaseLane = GetReleaseLane();
             var root = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "Archrealms",
-                "PassportWindows");
+                releaseLane.AppDataFolderName);
 
             Directory.CreateDirectory(root);
             return root;

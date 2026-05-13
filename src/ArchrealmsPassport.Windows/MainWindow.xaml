@@ -146,6 +146,8 @@
                                         <RowDefinition Height="Auto" />
                                         <RowDefinition Height="12" />
                                         <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="12" />
+                                        <RowDefinition Height="Auto" />
                                     </Grid.RowDefinitions>
 
                                     <TextBlock Grid.Row="0" Style="{StaticResource StatusLabelStyle}" Text="Passport" />
@@ -159,6 +161,9 @@
 
                                     <TextBlock Grid.Row="6" Style="{StaticResource StatusLabelStyle}" Text="Registration" />
                                     <TextBlock Grid.Row="6" Grid.Column="1" AutomationProperties.AutomationId="HomeRegistryStatusText" Style="{StaticResource StatusValueStyle}" Text="{Binding RegistryPackageSummaryText}" />
+
+                                    <TextBlock Grid.Row="8" Style="{StaticResource StatusLabelStyle}" Text="Release Lane" />
+                                    <TextBlock Grid.Row="8" Grid.Column="1" AutomationProperties.AutomationId="HomeReleaseLaneStatusText" Style="{StaticResource StatusValueStyle}" Text="{Binding ReleaseLaneSummaryText}" />
                                 </Grid>
 
                                 <StackPanel Visibility="{Binding HomePassportNameInputVisibility}">

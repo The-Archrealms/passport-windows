@@ -282,10 +282,184 @@ function Stage-PassportWindowsBundledIpfsRuntime {
     }
 }
 
+function Get-PassportWindowsReleaseLaneSlug {
+    param(
+        [string]$Lane
+    )
+
+    if (-not $Lane) {
+        $Lane = "Staging"
+    }
+
+    switch ($Lane.Trim().ToLowerInvariant().Replace("_", "-")) {
+        "dev" { return "dev" }
+        "development" { return "dev" }
+        "internalverification" { return "internal-verification" }
+        "internal-verification" { return "internal-verification" }
+        "internal" { return "internal-verification" }
+        "stage" { return "staging" }
+        "staging" { return "staging" }
+        "canary" { return "canary-mvp" }
+        "canary-mvp" { return "canary-mvp" }
+        "production" { return "production-mvp" }
+        "production-mvp" { return "production-mvp" }
+        "prod" { return "production-mvp" }
+        default { throw "Unsupported Passport release lane: $Lane" }
+    }
+}
+
+function Get-PassportWindowsReleaseLaneDisplayName {
+    param(
+        [string]$Lane
+    )
+
+    $laneSlug = Get-PassportWindowsReleaseLaneSlug -Lane $Lane
+    switch ($laneSlug) {
+        "internal-verification" { return "Internal Verification" }
+        "staging" { return "Staging" }
+        "canary-mvp" { return "Canary MVP" }
+        "production-mvp" { return "Production MVP" }
+        default { return "Development" }
+    }
+}
+
+function Get-PassportWindowsReleaseLaneEnvironmentValue {
+    param(
+        [string]$Lane,
+        [string]$Name
+    )
+
+    $laneSlug = Get-PassportWindowsReleaseLaneSlug -Lane $Lane
+    $lanePrefix = "PASSPORT_WINDOWS_" + ($laneSlug.ToUpperInvariant().Replace("-", "_")) + "_"
+    $laneValue = [System.Environment]::GetEnvironmentVariable($lanePrefix + $Name)
+    if (-not [string]::IsNullOrWhiteSpace($laneValue)) {
+        return $laneValue
+    }
+
+    return [System.Environment]::GetEnvironmentVariable("PASSPORT_WINDOWS_RELEASE_LANE_" + $Name)
+}
+
+function Get-PassportWindowsDefaultMsixPackageIdentity {
+    param(
+        [string]$Channel,
+        [string]$Lane
+    )
+
+    $laneSlug = Get-PassportWindowsReleaseLaneSlug -Lane $Lane
+    $channelSuffix = if ([string]::Equals($Channel, "Store", [System.StringComparison]::Ordinal)) { "" } else { ".Sideload" }
+
+    switch ($laneSlug) {
+        "production-mvp" { return "TheArchrealms.PassportWindows" + $channelSuffix }
+        "canary-mvp" { return "TheArchrealms.PassportWindows.Canary" + $channelSuffix }
+        "staging" { return "TheArchrealms.PassportWindows.Staging" + $channelSuffix }
+        "internal-verification" { return "TheArchrealms.PassportWindows.InternalVerification" + $channelSuffix }
+        default { return "TheArchrealms.PassportWindows.Dev" + $channelSuffix }
+    }
+}
+
+function Get-PassportWindowsDefaultPackageDisplayName {
+    param(
+        [string]$Channel,
+        [string]$Lane
+    )
+
+    $laneSlug = Get-PassportWindowsReleaseLaneSlug -Lane $Lane
+    $channelSuffix = if ([string]::Equals($Channel, "Store", [System.StringComparison]::Ordinal)) { "" } else { " Sideload" }
+
+    if ([string]::Equals($laneSlug, "production-mvp", [System.StringComparison]::Ordinal)) {
+        return "Archrealms Passport" + $channelSuffix
+    }
+
+    return "Archrealms Passport " + (Get-PassportWindowsReleaseLaneDisplayName -Lane $laneSlug) + $channelSuffix
+}
+
+function Get-PassportWindowsDefaultPackageDescription {
+    param(
+        [string]$Channel,
+        [string]$Lane
+    )
+
+    $laneSlug = Get-PassportWindowsReleaseLaneSlug -Lane $Lane
+    if ([string]::Equals($laneSlug, "production-mvp", [System.StringComparison]::Ordinal)) {
+        return "Windows Passport client for the Archrealms."
+    }
+
+    return "Windows Passport $laneSlug lane build for the Archrealms."
+}
+
+function New-PassportWindowsReleaseLaneManifest {
+    param(
+        [string]$Lane,
+        [string]$PackageChannel,
+        [string]$PackageIdentity,
+        [string]$PackageDisplayName,
+        [string]$GitCommit
+    )
+
+    $laneSlug = Get-PassportWindowsReleaseLaneSlug -Lane $Lane
+    $displayName = Get-PassportWindowsReleaseLaneDisplayName -Lane $laneSlug
+    $productionLedger = [string]::Equals($laneSlug, "canary-mvp", [System.StringComparison]::Ordinal) -or
+        [string]::Equals($laneSlug, "production-mvp", [System.StringComparison]::Ordinal)
+
+    $ledgerNamespace = Get-PassportWindowsReleaseLaneEnvironmentValue -Lane $laneSlug -Name "LEDGER_NAMESPACE"
+    if (-not $ledgerNamespace) {
+        $ledgerNamespace = "archrealms-passport-$laneSlug"
+    }
+
+    $apiBaseUrl = Get-PassportWindowsReleaseLaneEnvironmentValue -Lane $laneSlug -Name "API_BASE_URL"
+    $telemetryEnvironment = Get-PassportWindowsReleaseLaneEnvironmentValue -Lane $laneSlug -Name "TELEMETRY_ENVIRONMENT"
+    if (-not $telemetryEnvironment) {
+        $telemetryEnvironment = $laneSlug
+    }
+
+    $issuerKeyScope = Get-PassportWindowsReleaseLaneEnvironmentValue -Lane $laneSlug -Name "ISSUER_KEY_SCOPE"
+    if (-not $issuerKeyScope) {
+        $issuerKeyScope = "passport-$laneSlug"
+    }
+
+    $featureFlagScope = Get-PassportWindowsReleaseLaneEnvironmentValue -Lane $laneSlug -Name "FEATURE_FLAG_SCOPE"
+    if (-not $featureFlagScope) {
+        $featureFlagScope = "passport-$laneSlug"
+    }
+
+    $policyVersion = Get-PassportWindowsReleaseLaneEnvironmentValue -Lane $laneSlug -Name "POLICY_VERSION"
+    if (-not $policyVersion) {
+        $policyVersion = "passport-release-lanes-v1"
+    }
+
+    return [pscustomobject][ordered]@{
+        schema = "archrealms.passport.release_lane.v1"
+        created_utc = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
+        lane = $laneSlug
+        environment = $laneSlug
+        lane_display_name = $displayName
+        package_channel = if ($PackageChannel) { $PackageChannel.ToLowerInvariant() } else { "unpackaged" }
+        package_identity = if ($PackageIdentity) { $PackageIdentity } else { "" }
+        package_display_name = if ($PackageDisplayName) { $PackageDisplayName } else { "" }
+        ledger_namespace = $ledgerNamespace
+        api_base_url = if ($apiBaseUrl) { $apiBaseUrl } else { "" }
+        telemetry_environment = $telemetryEnvironment
+        issuer_key_scope = $issuerKeyScope
+        feature_flag_scope = $featureFlagScope
+        policy_version = $policyVersion
+        allow_production_token_records = $productionLedger
+        allow_staging_records = [string]::Equals($laneSlug, "staging", [System.StringComparison]::Ordinal)
+        production_ledger = $productionLedger
+        git_commit = if ($GitCommit) { $GitCommit } else { "" }
+    }
+}
+
 Export-ModuleMember -Function `
     Get-PassportWindowsDefaultKuboVersion, `
     Normalize-PassportWindowsKuboVersion, `
     Resolve-PassportWindowsKuboArch, `
     Resolve-PassportWindowsIpfsCliSourcePath, `
     Install-PassportWindowsKuboRuntime, `
-    Stage-PassportWindowsBundledIpfsRuntime
+    Stage-PassportWindowsBundledIpfsRuntime, `
+    Get-PassportWindowsReleaseLaneSlug, `
+    Get-PassportWindowsReleaseLaneDisplayName, `
+    Get-PassportWindowsReleaseLaneEnvironmentValue, `
+    Get-PassportWindowsDefaultMsixPackageIdentity, `
+    Get-PassportWindowsDefaultPackageDisplayName, `
+    Get-PassportWindowsDefaultPackageDescription, `
+    New-PassportWindowsReleaseLaneManifest
