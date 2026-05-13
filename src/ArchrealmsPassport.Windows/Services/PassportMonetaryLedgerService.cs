@@ -43,7 +43,9 @@ namespace ArchrealmsPassport.Windows.Services
             string assetCode,
             long amountBaseUnits,
             IDictionary<string, string>? evidenceReferences = null,
-            string deviceSessionId = "")
+            string deviceSessionId = "",
+            string walletKeyReferencePath = "",
+            string walletPublicKeyPath = "")
         {
             try
             {
@@ -102,6 +104,33 @@ namespace ArchrealmsPassport.Windows.Services
                     EvidenceReferences = NormalizeEvidence(evidenceReferences),
                     SignatureStatus = "unsigned-local-ledger-foundation"
                 };
+
+                if (releaseLane.ProductionLedger && string.IsNullOrWhiteSpace(walletKeyReferencePath))
+                {
+                    return FailedAppend("Production monetary ledger events require a wallet signature.");
+                }
+
+                if (!string.IsNullOrWhiteSpace(walletKeyReferencePath))
+                {
+                    var resolvedWalletPublicKeyPath = ResolveWorkspaceRelativePath(resolvedWorkspaceRoot, NormalizeRequired(walletPublicKeyPath, "wallet public key path"));
+                    if (!File.Exists(resolvedWalletPublicKeyPath))
+                    {
+                        return FailedAppend("The wallet public key path could not be found.");
+                    }
+
+                    var signedPayloadHash = ComputeUnsignedEventPayloadHash(ledgerEvent);
+                    var signatureBytes = PassportDeviceKeyStore.SignData(walletKeyReferencePath, Encoding.UTF8.GetBytes(signedPayloadHash));
+                    if (!VerifySignature(resolvedWalletPublicKeyPath, Encoding.UTF8.GetBytes(signedPayloadHash), signatureBytes))
+                    {
+                        return FailedAppend("The wallet signature could not be verified with the wallet public key.");
+                    }
+
+                    ledgerEvent.SignatureStatus = "wallet_signed";
+                    ledgerEvent.WalletSignatureAlgorithm = "RSA_PKCS1_SHA256";
+                    ledgerEvent.WalletSignatureBase64 = Convert.ToBase64String(signatureBytes);
+                    ledgerEvent.SignedEventHashSha256 = signedPayloadHash;
+                    ledgerEvent.WalletPublicKeyPath = ToWorkspaceRelativePath(resolvedWorkspaceRoot, resolvedWalletPublicKeyPath);
+                }
 
                 var semanticBalances = replay.Balances.ToDictionary(
                     balance => balance.AccountId + "|" + balance.AssetCode,
@@ -166,7 +195,7 @@ namespace ArchrealmsPassport.Windows.Services
                         result.Failures.Add("Duplicate monetary ledger anti-replay nonce: " + ledgerEvent.AntiReplayNonce);
                     }
 
-                    ValidateEventEnvelope(ledgerEvent, item.Path, result.Failures);
+                    ValidateEventEnvelope(resolvedWorkspaceRoot, ledgerEvent, item.Path, result.Failures);
                 }
 
                 var priorGlobalSequence = 0L;
@@ -423,7 +452,39 @@ namespace ArchrealmsPassport.Windows.Services
             }
         }
 
-        private static void ValidateEventEnvelope(PassportMonetaryLedgerEvent ledgerEvent, string path, List<string> failures)
+        public static string ComputeUnsignedEventPayloadHash(PassportMonetaryLedgerEvent ledgerEvent)
+        {
+            var originalEventHash = ledgerEvent.EventHashSha256;
+            var originalSignatureStatus = ledgerEvent.SignatureStatus;
+            var originalAlgorithm = ledgerEvent.WalletSignatureAlgorithm;
+            var originalSignature = ledgerEvent.WalletSignatureBase64;
+            var originalSignedEventHash = ledgerEvent.SignedEventHashSha256;
+            var originalWalletPublicKeyPath = ledgerEvent.WalletPublicKeyPath;
+
+            ledgerEvent.EventHashSha256 = string.Empty;
+            ledgerEvent.SignatureStatus = string.Empty;
+            ledgerEvent.WalletSignatureAlgorithm = string.Empty;
+            ledgerEvent.WalletSignatureBase64 = string.Empty;
+            ledgerEvent.SignedEventHashSha256 = string.Empty;
+            ledgerEvent.WalletPublicKeyPath = string.Empty;
+
+            try
+            {
+                var payload = JsonSerializer.Serialize(ledgerEvent, JsonOptions);
+                return ComputeSha256(Encoding.UTF8.GetBytes(payload));
+            }
+            finally
+            {
+                ledgerEvent.EventHashSha256 = originalEventHash;
+                ledgerEvent.SignatureStatus = originalSignatureStatus;
+                ledgerEvent.WalletSignatureAlgorithm = originalAlgorithm;
+                ledgerEvent.WalletSignatureBase64 = originalSignature;
+                ledgerEvent.SignedEventHashSha256 = originalSignedEventHash;
+                ledgerEvent.WalletPublicKeyPath = originalWalletPublicKeyPath;
+            }
+        }
+
+        private void ValidateEventEnvelope(string workspaceRoot, PassportMonetaryLedgerEvent ledgerEvent, string path, List<string> failures)
         {
             if (!string.Equals(ledgerEvent.RecordType, "passport_monetary_ledger_event", StringComparison.Ordinal))
             {
@@ -476,6 +537,66 @@ namespace ArchrealmsPassport.Windows.Services
                 {
                     failures.Add("Invalid monetary ledger event hash for " + ledgerEvent.EventId + ".");
                 }
+            }
+
+            ValidateEventSignature(workspaceRoot, ledgerEvent, failures);
+        }
+
+        private void ValidateEventSignature(string workspaceRoot, PassportMonetaryLedgerEvent ledgerEvent, List<string> failures)
+        {
+            if (releaseLane.ProductionLedger
+                && !string.Equals(ledgerEvent.SignatureStatus, "wallet_signed", StringComparison.Ordinal))
+            {
+                failures.Add("Production monetary ledger event " + ledgerEvent.EventId + " is not wallet-signed.");
+            }
+
+            if (!string.Equals(ledgerEvent.SignatureStatus, "wallet_signed", StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            if (!string.Equals(ledgerEvent.WalletSignatureAlgorithm, "RSA_PKCS1_SHA256", StringComparison.Ordinal))
+            {
+                failures.Add("Unsupported wallet signature algorithm for event " + ledgerEvent.EventId + ".");
+            }
+
+            if (string.IsNullOrWhiteSpace(ledgerEvent.WalletSignatureBase64))
+            {
+                failures.Add("Missing wallet signature for event " + ledgerEvent.EventId + ".");
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(ledgerEvent.WalletPublicKeyPath))
+            {
+                failures.Add("Missing wallet public key path for event " + ledgerEvent.EventId + ".");
+                return;
+            }
+
+            var expectedSignedHash = ComputeUnsignedEventPayloadHash(ledgerEvent);
+            if (!string.Equals(expectedSignedHash, ledgerEvent.SignedEventHashSha256, StringComparison.OrdinalIgnoreCase))
+            {
+                failures.Add("Wallet signature payload hash does not match event payload for event " + ledgerEvent.EventId + ".");
+                return;
+            }
+
+            try
+            {
+                var publicKeyPath = ResolveWorkspaceRelativePath(workspaceRoot, ledgerEvent.WalletPublicKeyPath);
+                if (!File.Exists(publicKeyPath))
+                {
+                    failures.Add("Wallet public key file is missing for event " + ledgerEvent.EventId + ".");
+                    return;
+                }
+
+                var signatureBytes = Convert.FromBase64String(ledgerEvent.WalletSignatureBase64);
+                if (!VerifySignature(publicKeyPath, Encoding.UTF8.GetBytes(ledgerEvent.SignedEventHashSha256), signatureBytes))
+                {
+                    failures.Add("Wallet signature verification failed for event " + ledgerEvent.EventId + ".");
+                }
+            }
+            catch (Exception ex)
+            {
+                failures.Add("Wallet signature validation failed for event " + ledgerEvent.EventId + ": " + ex.Message);
             }
         }
 
@@ -733,8 +854,28 @@ namespace ArchrealmsPassport.Windows.Services
         {
             var normalizedRoot = Path.GetFullPath(workspaceRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
             var normalizedPath = Path.GetFullPath(path);
+            if (!normalizedPath.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase))
+            {
+                return path.Replace(Path.DirectorySeparatorChar, '/');
+            }
+
             var relative = normalizedPath.Substring(normalizedRoot.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
             return relative.Replace(Path.DirectorySeparatorChar, '/');
+        }
+
+        private static string ResolveWorkspaceRelativePath(string workspaceRoot, string path)
+        {
+            var normalized = path.Replace('/', Path.DirectorySeparatorChar);
+            return Path.IsPathRooted(normalized)
+                ? Path.GetFullPath(normalized)
+                : Path.GetFullPath(Path.Combine(workspaceRoot, normalized));
+        }
+
+        private static bool VerifySignature(string publicKeyPath, byte[] data, byte[] signatureBytes)
+        {
+            using var rsa = RSA.Create();
+            rsa.ImportSubjectPublicKeyInfo(File.ReadAllBytes(publicKeyPath), out _);
+            return rsa.VerifyData(data, signatureBytes, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
         }
 
         private static string CopyFile(string sourcePath, string destinationPath)

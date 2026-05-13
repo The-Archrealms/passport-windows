@@ -77,6 +77,18 @@ namespace ArchrealmsPassport.Windows.Models
         [JsonPropertyName("signature_status")]
         public string SignatureStatus { get; set; } = string.Empty;
 
+        [JsonPropertyName("wallet_signature_algorithm")]
+        public string WalletSignatureAlgorithm { get; set; } = string.Empty;
+
+        [JsonPropertyName("wallet_signature_base64")]
+        public string WalletSignatureBase64 { get; set; } = string.Empty;
+
+        [JsonPropertyName("signed_event_hash_sha256")]
+        public string SignedEventHashSha256 { get; set; } = string.Empty;
+
+        [JsonPropertyName("wallet_public_key_path")]
+        public string WalletPublicKeyPath { get; set; } = string.Empty;
+
         [JsonPropertyName("event_hash_sha256")]
         public string EventHashSha256 { get; set; } = string.Empty;
     }

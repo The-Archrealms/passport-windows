@@ -214,6 +214,60 @@ public sealed class PassportMonetaryLedgerServiceTests
         Assert.Equal(100, cc.EscrowedBaseUnits);
     }
 
+    [Fact]
+    public void ProductionLedgerAppendRequiresWalletSignature()
+    {
+        using var workspace = PassportTestWorkspace.Create();
+        var service = new PassportMonetaryLedgerService(PassportReleaseLane.CreateDefault("production-mvp"));
+
+        var result = service.AppendEvent(
+            workspace.Root,
+            "account-test",
+            workspace.IdentityId,
+            "wallet-key-test",
+            PassportMonetaryLedgerService.EventCrownCreditIssue,
+            PassportMonetaryLedgerService.AssetCrownCredit,
+            100);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("require a wallet signature", result.Message);
+    }
+
+    [Fact]
+    public void ProductionLedgerReplaysWalletSignedEvents()
+    {
+        using var workspace = PassportTestWorkspace.Create();
+        var releaseLane = PassportReleaseLane.CreateDefault("production-mvp");
+        var walletService = new PassportWalletKeyService(releaseLane);
+        var wallet = walletService.CreateAndBindWalletKey(
+            workspace.Root,
+            workspace.IdentityId,
+            workspace.DeviceId,
+            workspace.KeyReferencePath);
+        Assert.True(wallet.Succeeded, wallet.Message);
+
+        var ledgerService = new PassportMonetaryLedgerService(releaseLane);
+        var append = ledgerService.AppendEvent(
+            workspace.Root,
+            "account-test",
+            workspace.IdentityId,
+            wallet.WalletKeyId,
+            PassportMonetaryLedgerService.EventCrownCreditIssue,
+            PassportMonetaryLedgerService.AssetCrownCredit,
+            100,
+            walletKeyReferencePath: wallet.WalletKeyReferencePath,
+            walletPublicKeyPath: wallet.WalletPublicKeyPath);
+        AssertAppend(append);
+
+        var replay = ledgerService.Replay(workspace.Root);
+
+        Assert.True(replay.Succeeded, string.Join("; ", replay.Failures));
+        var ledgerEvent = PassportTestWorkspace.ReadJson(append.EventPath);
+        Assert.Equal("wallet_signed", PassportTestWorkspace.GetString(ledgerEvent, "signature_status"));
+        Assert.False(string.IsNullOrWhiteSpace(PassportTestWorkspace.GetString(ledgerEvent, "wallet_signature_base64")));
+        Assert.False(string.IsNullOrWhiteSpace(PassportTestWorkspace.GetString(ledgerEvent, "signed_event_hash_sha256")));
+    }
+
     private static void AssertAppend(PassportMonetaryLedgerAppendResult result)
     {
         Assert.True(result.Succeeded, result.Message);
