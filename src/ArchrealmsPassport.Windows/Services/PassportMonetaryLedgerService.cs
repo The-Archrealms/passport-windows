@@ -21,6 +21,8 @@ namespace ArchrealmsPassport.Windows.Services
         public const string EventCrownCreditBurn = "cc_burn";
         public const string EventCrownCreditRefund = "cc_refund";
         public const string EventCrownCreditRecredit = "cc_recredit";
+        public const string EventCrownCreditTransferIn = "cc_transfer_in";
+        public const string EventCrownCreditTransferOut = "cc_transfer_out";
 
         private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions
         {
@@ -837,8 +839,21 @@ namespace ArchrealmsPassport.Windows.Services
                     balance.AvailableBaseUnits += ledgerEvent.AmountBaseUnits;
                     break;
 
+                case EventCrownCreditTransferIn:
+                    balance.AvailableBaseUnits += ledgerEvent.AmountBaseUnits;
+                    break;
+
+                case EventCrownCreditTransferOut:
+                    if (balance.AvailableBaseUnits < ledgerEvent.AmountBaseUnits)
+                    {
+                        failures.Add("CC transfer out exceeds available balance for account " + ledgerEvent.AccountId + ".");
+                    }
+
+                    balance.AvailableBaseUnits -= ledgerEvent.AmountBaseUnits;
+                    break;
+
                 default:
-                    failures.Add("Unsupported CC event type " + ledgerEvent.EventType + ". MVP CC events are issue, escrow, burn, refund, and re-credit only.");
+                    failures.Add("Unsupported CC event type " + ledgerEvent.EventType + ". MVP CC events are issue, escrow, burn, refund, re-credit, transfer-in, and transfer-out only.");
                     break;
             }
         }
