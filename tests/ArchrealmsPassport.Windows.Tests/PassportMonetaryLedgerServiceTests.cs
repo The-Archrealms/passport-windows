@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text.Json;
 using ArchrealmsPassport.Windows.Models;
 using ArchrealmsPassport.Windows.Services;
@@ -247,7 +248,7 @@ public sealed class PassportMonetaryLedgerServiceTests
         Assert.True(wallet.Succeeded, wallet.Message);
 
         var ledgerService = new PassportMonetaryLedgerService(releaseLane);
-        var capacityEvidence = CreateCapacityEvidence(workspace.Root, releaseLane, 500);
+        var capacityEvidence = CreateProductionCcIssueEvidence(workspace, releaseLane, "account-test", wallet.WalletKeyId, 100, 500);
         var append = ledgerService.AppendEvent(
             workspace.Root,
             "account-test",
@@ -284,7 +285,7 @@ public sealed class PassportMonetaryLedgerServiceTests
         Assert.True(wallet.Succeeded, wallet.Message);
 
         var ledgerService = new PassportMonetaryLedgerService(releaseLane);
-        var capacityEvidence = CreateCapacityEvidence(workspace.Root, releaseLane, 500);
+        var capacityEvidence = CreateProductionCcIssueEvidence(workspace, releaseLane, "account-test", wallet.WalletKeyId, 100, 500);
         var append = ledgerService.AppendEvent(
             workspace.Root,
             "account-test",
@@ -356,6 +357,36 @@ public sealed class PassportMonetaryLedgerServiceTests
     }
 
     [Fact]
+    public void ProductionLedgerRejectsCcIssueWithoutIssuerAuthorityEvidence()
+    {
+        using var workspace = PassportTestWorkspace.Create();
+        var releaseLane = PassportReleaseLane.CreateDefault("production-mvp");
+        var walletService = new PassportWalletKeyService(releaseLane);
+        var wallet = walletService.CreateAndBindWalletKey(
+            workspace.Root,
+            workspace.IdentityId,
+            workspace.DeviceId,
+            workspace.KeyReferencePath);
+        Assert.True(wallet.Succeeded, wallet.Message);
+
+        var capacityEvidence = CreateCapacityEvidence(workspace.Root, releaseLane, 500);
+        var append = new PassportMonetaryLedgerService(releaseLane).AppendEvent(
+            workspace.Root,
+            "account-test",
+            workspace.IdentityId,
+            wallet.WalletKeyId,
+            PassportMonetaryLedgerService.EventCrownCreditIssue,
+            PassportMonetaryLedgerService.AssetCrownCredit,
+            100,
+            capacityEvidence,
+            walletKeyReferencePath: wallet.WalletKeyReferencePath,
+            walletPublicKeyPath: wallet.WalletPublicKeyPath);
+
+        Assert.False(append.Succeeded);
+        Assert.Contains("admin_authority_record_path", append.Message, System.StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void ProductionLedgerRejectsCcIssueAboveConservativeCapacityEvidence()
     {
         using var workspace = PassportTestWorkspace.Create();
@@ -411,5 +442,83 @@ public sealed class PassportMonetaryLedgerServiceTests
             ["capacity_report_path"] = capacity.ReportPath,
             ["capacity_report_sha256"] = capacity.ReportSha256
         };
+    }
+
+    private static Dictionary<string, string> CreateProductionCcIssueEvidence(
+        PassportTestWorkspace workspace,
+        PassportReleaseLane releaseLane,
+        string accountId,
+        string walletKeyId,
+        long amountBaseUnits,
+        long maxIssuanceBaseUnits)
+    {
+        var evidence = CreateCapacityEvidence(workspace.Root, releaseLane, maxIssuanceBaseUnits);
+        var secondDeviceId = AddSecondActiveDevice(workspace);
+        var intentHash = PassportMonetaryLedgerService.ComputeCrownCreditIssueIntentHash(
+            releaseLane,
+            accountId,
+            workspace.IdentityId,
+            walletKeyId,
+            amountBaseUnits,
+            evidence);
+        var adminAuthority = new PassportAdminAuthorityService(releaseLane).CreateDualControlAction(
+            workspace.Root,
+            workspace.IdentityId,
+            workspace.DeviceId,
+            workspace.KeyReferencePath,
+            secondDeviceId,
+            workspace.KeyReferencePath,
+            "cc_issue",
+            "mvp_cc_issuance",
+            "capacity_authorized",
+            "capacity-report",
+            evidence["capacity_report_sha256"],
+            intentHash);
+        Assert.True(adminAuthority.Succeeded, adminAuthority.Message);
+
+        evidence["admin_authority_record_path"] = adminAuthority.RecordPath;
+        evidence["admin_authority_record_sha256"] = PassportAdminAuthorityService.ComputeFileSha256(adminAuthority.RecordPath);
+        evidence["admin_authority_requester_signature_path"] = adminAuthority.RequesterSignaturePath;
+        evidence["admin_authority_approver_signature_path"] = adminAuthority.ApproverSignaturePath;
+        return evidence;
+    }
+
+    private static string AddSecondActiveDevice(PassportTestWorkspace workspace)
+    {
+        var secondDeviceId = workspace.DeviceId + "-second";
+        var timestamp = System.DateTime.UtcNow.ToString("yyyyMMddTHHmmssZ");
+        var createdUtc = System.DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
+        var secondPublicKeyPath = Path.Combine(workspace.Root, "records", "registry", "public-keys", secondDeviceId + ".spki.der");
+        File.Copy(workspace.PublicKeyPath, secondPublicKeyPath, true);
+        var recordPath = Path.Combine(workspace.Root, "records", "registry", "device-credentials", timestamp + "-" + secondDeviceId + ".json");
+        var record = new Dictionary<string, object?>
+        {
+            ["schema_version"] = 1,
+            ["record_type"] = "device_credential_record",
+            ["record_id"] = timestamp + "-" + secondDeviceId,
+            ["created_utc"] = createdUtc,
+            ["effective_utc"] = createdUtc,
+            ["status"] = "active",
+            ["archrealms_identity_id"] = workspace.IdentityId,
+            ["device_id"] = secondDeviceId,
+            ["device_label"] = "Second Test Device",
+            ["device_class"] = "desktop",
+            ["client_platform"] = "windows",
+            ["credential_origin"] = "test-fixture",
+            ["public_key_algorithm"] = "RSA",
+            ["public_key_format"] = "SPKI_DER",
+            ["public_key_path"] = "records/registry/public-keys/" + secondDeviceId + ".spki.der",
+            ["public_key_sha256"] = System.Convert.ToHexString(SHA256.HashData(workspace.PublicKeyBytes)).ToLowerInvariant(),
+            ["authorized_scopes"] = new[] { "authenticate", "submit_registry_record", "publish_archive" },
+            ["authorization_mode"] = "test-fixture",
+            ["authorization_package_path"] = string.Empty,
+            ["authorization_record_path"] = string.Empty,
+            ["authorizer_device_id"] = workspace.DeviceId,
+            ["expires_utc"] = string.Empty,
+            ["revocation_record_id"] = string.Empty,
+            ["attestation_refs"] = System.Array.Empty<string>()
+        };
+        File.WriteAllText(recordPath, JsonSerializer.Serialize(record, new JsonSerializerOptions { WriteIndented = true }));
+        return secondDeviceId;
     }
 }

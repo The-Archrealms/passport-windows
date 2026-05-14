@@ -71,6 +71,85 @@ public sealed class PassportAdminAuthorityServiceTests
         Assert.Contains("two distinct", result.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void ValidateDualControlAdminActionEvidenceVerifiesRecordAndSignatures()
+    {
+        using var workspace = PassportTestWorkspace.Create();
+        var secondDeviceId = AddSecondActiveDevice(workspace);
+        var service = new PassportAdminAuthorityService(PassportReleaseLane.CreateDefault("staging"));
+        var targetHash = new string('e', 64);
+        var payloadHash = new string('f', 64);
+        var created = service.CreateDualControlAction(
+            workspace.Root,
+            workspace.IdentityId,
+            workspace.DeviceId,
+            workspace.KeyReferencePath,
+            secondDeviceId,
+            workspace.KeyReferencePath,
+            "cc_issue",
+            "mvp_cc_issuance",
+            "capacity_authorized",
+            "capacity-record-test",
+            targetHash,
+            payloadHash);
+        Assert.True(created.Succeeded, created.Message);
+
+        var validation = service.ValidateDualControlActionEvidence(
+            workspace.Root,
+            new Dictionary<string, string>
+            {
+                ["admin_authority_record_path"] = created.RecordPath,
+                ["admin_authority_record_sha256"] = PassportAdminAuthorityService.ComputeFileSha256(created.RecordPath),
+                ["admin_authority_requester_signature_path"] = created.RequesterSignaturePath,
+                ["admin_authority_approver_signature_path"] = created.ApproverSignaturePath
+            },
+            "cc_issue",
+            targetHash,
+            payloadHash);
+
+        Assert.True(validation.Succeeded, validation.Message);
+        Assert.True(validation.RequesterSignatureVerified);
+        Assert.True(validation.ApproverSignatureVerified);
+    }
+
+    [Fact]
+    public void ValidateDualControlAdminActionEvidenceRejectsMismatchedTarget()
+    {
+        using var workspace = PassportTestWorkspace.Create();
+        var secondDeviceId = AddSecondActiveDevice(workspace);
+        var service = new PassportAdminAuthorityService(PassportReleaseLane.CreateDefault("staging"));
+        var created = service.CreateDualControlAction(
+            workspace.Root,
+            workspace.IdentityId,
+            workspace.DeviceId,
+            workspace.KeyReferencePath,
+            secondDeviceId,
+            workspace.KeyReferencePath,
+            "cc_issue",
+            "mvp_cc_issuance",
+            "capacity_authorized",
+            "capacity-record-test",
+            new string('e', 64),
+            new string('f', 64));
+        Assert.True(created.Succeeded, created.Message);
+
+        var validation = service.ValidateDualControlActionEvidence(
+            workspace.Root,
+            new Dictionary<string, string>
+            {
+                ["admin_authority_record_path"] = created.RecordPath,
+                ["admin_authority_record_sha256"] = PassportAdminAuthorityService.ComputeFileSha256(created.RecordPath),
+                ["admin_authority_requester_signature_path"] = created.RequesterSignaturePath,
+                ["admin_authority_approver_signature_path"] = created.ApproverSignaturePath
+            },
+            "cc_issue",
+            new string('0', 64),
+            new string('f', 64));
+
+        Assert.False(validation.Succeeded);
+        Assert.Contains("target record hash", validation.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static string AddSecondActiveDevice(PassportTestWorkspace workspace)
     {
         var secondDeviceId = workspace.DeviceId + "-second";

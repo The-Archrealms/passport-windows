@@ -142,11 +142,10 @@ namespace ArchrealmsPassport.Windows.Services
                     && string.Equals(ledgerEvent.AssetCode, AssetCrownCredit, StringComparison.Ordinal)
                     && string.Equals(ledgerEvent.EventType, EventCrownCreditIssue, StringComparison.Ordinal))
                 {
-                    var capacityValidation = new PassportCrownCreditCapacityService(releaseLane)
-                        .ValidateIssuance(resolvedWorkspaceRoot, ledgerEvent.AmountBaseUnits, ledgerEvent.EvidenceReferences);
-                    if (!capacityValidation.Succeeded)
+                    var issuanceGate = ValidateProductionCrownCreditIssuanceGate(resolvedWorkspaceRoot, ledgerEvent);
+                    if (!issuanceGate.Succeeded)
                     {
-                        return FailedAppend(capacityValidation.Message);
+                        return FailedAppend(issuanceGate.Message);
                     }
                 }
 
@@ -470,6 +469,32 @@ namespace ArchrealmsPassport.Windows.Services
             }
         }
 
+        public static string ComputeCrownCreditIssueIntentHash(
+            PassportReleaseLane releaseLane,
+            string accountId,
+            string identityId,
+            string walletKeyId,
+            long amountBaseUnits,
+            IDictionary<string, string> evidenceReferences)
+        {
+            var capacityReportSha256 = evidenceReferences.TryGetValue("capacity_report_sha256", out var hash)
+                ? hash.Trim().ToLowerInvariant()
+                : string.Empty;
+            var intent = new SortedDictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["release_lane"] = releaseLane.Lane,
+                ["ledger_namespace"] = releaseLane.LedgerNamespace,
+                ["event_type"] = EventCrownCreditIssue,
+                ["asset_code"] = AssetCrownCredit,
+                ["account_id"] = (accountId ?? string.Empty).Trim(),
+                ["archrealms_identity_id"] = (identityId ?? string.Empty).Trim(),
+                ["wallet_key_id"] = (walletKeyId ?? string.Empty).Trim(),
+                ["amount_base_units"] = amountBaseUnits,
+                ["capacity_report_sha256"] = capacityReportSha256
+            };
+            return ComputeSha256(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(intent, JsonOptions)));
+        }
+
         public static string ComputeUnsignedEventPayloadHash(PassportMonetaryLedgerEvent ledgerEvent)
         {
             var originalEventHash = ledgerEvent.EventHashSha256;
@@ -563,13 +588,55 @@ namespace ArchrealmsPassport.Windows.Services
                 && string.Equals(ledgerEvent.AssetCode, AssetCrownCredit, StringComparison.Ordinal)
                 && string.Equals(ledgerEvent.EventType, EventCrownCreditIssue, StringComparison.Ordinal))
             {
-                var capacityValidation = new PassportCrownCreditCapacityService(releaseLane)
-                    .ValidateIssuance(workspaceRoot, ledgerEvent.AmountBaseUnits, ledgerEvent.EvidenceReferences);
-                if (!capacityValidation.Succeeded)
+                var issuanceGate = ValidateProductionCrownCreditIssuanceGate(workspaceRoot, ledgerEvent);
+                if (!issuanceGate.Succeeded)
                 {
-                    failures.Add("CC issuance capacity validation failed for event " + ledgerEvent.EventId + ": " + capacityValidation.Message);
+                    failures.Add("CC issuance authority validation failed for event " + ledgerEvent.EventId + ": " + issuanceGate.Message);
                 }
             }
+        }
+
+        private PassportMonetaryLedgerAppendResult ValidateProductionCrownCreditIssuanceGate(
+            string workspaceRoot,
+            PassportMonetaryLedgerEvent ledgerEvent)
+        {
+            var capacityValidation = new PassportCrownCreditCapacityService(releaseLane)
+                .ValidateIssuance(workspaceRoot, ledgerEvent.AmountBaseUnits, ledgerEvent.EvidenceReferences);
+            if (!capacityValidation.Succeeded)
+            {
+                return FailedAppend(capacityValidation.Message);
+            }
+
+            if (!ledgerEvent.EvidenceReferences.TryGetValue("capacity_report_sha256", out var capacityReportSha256)
+                || string.IsNullOrWhiteSpace(capacityReportSha256))
+            {
+                return FailedAppend("Production CC issuance requires capacity_report_sha256 evidence.");
+            }
+
+            var intentHash = ComputeCrownCreditIssueIntentHash(
+                releaseLane,
+                ledgerEvent.AccountId,
+                ledgerEvent.IdentityId,
+                ledgerEvent.WalletKeyId,
+                ledgerEvent.AmountBaseUnits,
+                ledgerEvent.EvidenceReferences);
+            var issuerValidation = new PassportAdminAuthorityService(releaseLane)
+                .ValidateDualControlActionEvidence(
+                    workspaceRoot,
+                    ledgerEvent.EvidenceReferences,
+                    EventCrownCreditIssue,
+                    capacityReportSha256,
+                    intentHash);
+            if (!issuerValidation.Succeeded)
+            {
+                return FailedAppend(issuerValidation.Message);
+            }
+
+            return new PassportMonetaryLedgerAppendResult
+            {
+                Succeeded = true,
+                Message = "Production CC issuance authority is valid."
+            };
         }
 
         private void ValidateEventSignature(string workspaceRoot, PassportMonetaryLedgerEvent ledgerEvent, List<string> failures)
