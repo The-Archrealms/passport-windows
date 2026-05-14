@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "record_type": "passport_arch_cc_conversion_execution",
+  "execution_id": "<execution-id>",
+  "created_utc": "<YYYY-MM-DDTHH:MM:SSZ>",
+  "release_lane": "<release-lane>",
+  "ledger_namespace": "<ledger-namespace>",
+  "policy_version": "<policy-version>",
+  "account_id": "<account-id>",
+  "archrealms_identity_id": "<identity-id>",
+  "wallet_key_id": "<wallet-key-id>",
+  "quote_id": "<quote-id>",
+  "quote_record_path": "<quote-record-path>",
+  "quote_record_sha256": "<quote-record-sha256>",
+  "source_ledger_event_path": "<source-debit-event-path>",
+  "source_ledger_event_sha256": "<source-debit-event-sha256>",
+  "destination_ledger_event_path": "<destination-credit-event-path>",
+  "destination_ledger_event_sha256": "<destination-credit-event-sha256>",
+  "status": "executed",
+  "summary": "Wallet-signed ARCH/CC conversion execution linked to an accepted floating-rate quote and balance-changing ledger events."
+}

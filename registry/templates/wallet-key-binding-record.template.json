@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "record_type": "passport_wallet_key_binding",
+  "record_id": "<record-id>",
+  "created_utc": "<YYYY-MM-DDTHH:MM:SSZ>",
+  "release_lane": "<release-lane>",
+  "ledger_namespace": "<ledger-namespace>",
+  "policy_version": "<policy-version>",
+  "status": "active",
+  "archrealms_identity_id": "<identity-id>",
+  "authorizing_device_id": "<device-id>",
+  "wallet_key_id": "<wallet-key-id>",
+  "wallet_key_algorithm": "RSA",
+  "wallet_key_size_bits": 3072,
+  "wallet_public_key_path": "<wallet-public-key-path>",
+  "wallet_public_key_sha256": "<sha256>",
+  "authorized_scopes": [
+    "sign_arch_operations",
+    "sign_cc_operations",
+    "sign_conversion_quotes",
+    "sign_escrow_redemption"
+  ],
+  "prohibited_scopes": [
+    "alter_identity",
+    "alter_citizenship",
+    "alter_office",
+    "alter_registry_authority",
+    "alter_constitutional_status",
+    "alter_crown_authority"
+  ],
+  "summary": "Passport identity/device authorization binding a separate wallet key for monetary operations only."
+}

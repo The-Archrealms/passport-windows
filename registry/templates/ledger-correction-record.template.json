@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "record_type": "passport_ledger_correction",
+  "correction_id": "<correction-id>",
+  "created_utc": "<YYYY-MM-DDTHH:MM:SSZ>",
+  "release_lane": "<release-lane>",
+  "ledger_namespace": "<ledger-namespace>",
+  "policy_version": "<policy-version>",
+  "account_id": "<account-id>",
+  "archrealms_identity_id": "<identity-id>",
+  "wallet_key_id": "<wallet-key-id>",
+  "asset_code": "ARCH | CC",
+  "correction_event_type": "<ledger-event-type>",
+  "amount_base_units": 0,
+  "reason_code": "<reason-code>",
+  "target_record_path": "<target-record-path>",
+  "target_record_sha256": "<target-record-sha256>",
+  "admin_authority_path": "<admin-authority-record-path>",
+  "admin_authority_sha256": "<admin-authority-record-sha256>",
+  "ledger_event_path": "<balancing-ledger-event-path>",
+  "ledger_event_sha256": "<balancing-ledger-event-sha256>",
+  "summary": "Ledger correction is a new balancing event; prior events are never deleted, mutated, silently overwritten, or backdated."
+}

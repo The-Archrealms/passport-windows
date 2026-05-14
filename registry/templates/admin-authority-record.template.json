@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "record_type": "passport_admin_authority",
+  "record_id": "<record-id>",
+  "created_utc": "<YYYY-MM-DDTHH:MM:SSZ>",
+  "release_lane": "<release-lane>",
+  "ledger_namespace": "<ledger-namespace>",
+  "policy_version": "<policy-version>",
+  "status": "approved",
+  "action_type": "cc_issue | ledger_correction | wallet_revocation | device_revocation | recovery_override | escrow_release | burn_override | telemetry_access",
+  "authority_scope": "<scope>",
+  "reason_code": "<reason-code>",
+  "target_record_path": "<target-record-path>",
+  "target_record_sha256": "<target-record-sha256>",
+  "requested_payload_sha256": "<requested-payload-sha256>",
+  "requester_device_id": "<requester-device-id>",
+  "approver_device_id": "<approver-device-id>",
+  "requester_signature_path": "<requester-signature-record-path>",
+  "approver_signature_path": "<approver-signature-record-path>",
+  "ai_authority": "none",
+  "summary": "Dual-control administrative authority evidence for authority-bearing Passport operations."
+}

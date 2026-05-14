@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "record_type": "passport_monetary_transparency_root",
+  "record_id": "<record-id>",
+  "created_utc": "<YYYY-MM-DDTHH:MM:SSZ>",
+  "release_lane": "<release-lane>",
+  "ledger_namespace": "<ledger-namespace>",
+  "policy_version": "<policy-version>",
+  "event_count": 0,
+  "first_global_sequence": 0,
+  "last_global_sequence": 0,
+  "event_hashes": [],
+  "epoch_root_sha256": "<epoch-root-sha256>",
+  "summary": "Transparency root over ordered monetary event hashes for replayable ARCH/CC ledger history."
+}

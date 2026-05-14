@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "record_type": "passport_monetary_account_export",
+  "record_id": "<record-id>",
+  "created_utc": "<YYYY-MM-DDTHH:MM:SSZ>",
+  "release_lane": "<release-lane>",
+  "ledger_namespace": "<ledger-namespace>",
+  "policy_version": "<policy-version>",
+  "account_id": "<account-id>",
+  "event_count": 0,
+  "events": [
+    {
+      "event_id": "<event-id>",
+      "event_type": "<event-type>",
+      "asset_code": "ARCH | CC",
+      "global_sequence": 0,
+      "account_sequence": 0,
+      "event_hash_sha256": "<event-sha256>",
+      "export_path": "<relative-event-export-path>"
+    }
+  ],
+  "balances": [],
+  "transparency_root_sha256": "<epoch-root-sha256>",
+  "transparency_root_export_path": "transparency-root.json",
+  "verifier_replay_root": "records/passport/monetary/events",
+  "summary": "Replayable Passport ARCH/CC account export. Balances are derived from exported events."
+}
