@@ -41,6 +41,11 @@ namespace ArchrealmsPassport.Windows.Services
                     return FailedBinding("The active Passport device credential record could not be found.");
                 }
 
+                if (new PassportRecoveryService(releaseLane).IsDeviceDeauthorized(resolvedWorkspaceRoot, normalizedIdentityId, normalizedDeviceId))
+                {
+                    return FailedBinding("The authorizing device has been deauthorized.");
+                }
+
                 var devicePublicKeyPath = ResolvePublicKeyPath(resolvedWorkspaceRoot, deviceRecord.Value.RootElement);
                 if (string.IsNullOrWhiteSpace(devicePublicKeyPath) || !File.Exists(devicePublicKeyPath))
                 {
@@ -213,6 +218,11 @@ namespace ArchrealmsPassport.Windows.Services
                 if (deviceRecord == null)
                 {
                     return FailedRevocation("The active authorizing device credential record could not be found.");
+                }
+
+                if (new PassportRecoveryService(releaseLane).IsDeviceDeauthorized(resolvedWorkspaceRoot, normalizedIdentityId, normalizedDeviceId))
+                {
+                    return FailedRevocation("The authorizing device has been deauthorized.");
                 }
 
                 var devicePublicKeyPath = ResolvePublicKeyPath(resolvedWorkspaceRoot, deviceRecord.Value.RootElement);
