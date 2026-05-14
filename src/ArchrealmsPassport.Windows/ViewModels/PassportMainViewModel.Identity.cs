@@ -21,6 +21,9 @@ namespace ArchrealmsPassport.Windows.ViewModels
             ActiveIdentityId = settings.ActiveIdentityId;
             ActiveDeviceId = settings.ActiveDeviceId;
             ActiveDeviceKeyPath = settings.ActiveDeviceKeyPath;
+            ActiveWalletKeyId = settings.ActiveWalletKeyId;
+            ActiveWalletKeyReferencePath = settings.ActiveWalletKeyReferencePath;
+            ActiveWalletPublicKeyPath = settings.ActiveWalletPublicKeyPath;
             PendingDeviceId = settings.PendingDeviceId;
             PendingDeviceKeyPath = settings.PendingDeviceKeyPath;
             DeviceLabel = string.IsNullOrWhiteSpace(settings.DeviceLabel) ? Environment.MachineName : settings.DeviceLabel;
@@ -42,6 +45,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
             ReadOnlyIpfsFetchedPathText = string.IsNullOrWhiteSpace(settings.ReadOnlyIpfsFetchedPath)
                 ? "No read-only copy yet"
                 : settings.ReadOnlyIpfsFetchedPath;
+            UpdateMonetaryStatus();
         }
 
         private async Task SaveSettingsAsync()
@@ -97,6 +101,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
                 }
 
                 RaiseHomePropertiesChanged();
+                UpdateMonetaryStatus();
             });
         }
 
@@ -153,6 +158,9 @@ namespace ArchrealmsPassport.Windows.ViewModels
             ExistingIdentityId = result.IdentityId;
             ActiveDeviceId = result.DeviceId;
             ActiveDeviceKeyPath = result.PrivateKeyPath;
+            ActiveWalletKeyId = string.Empty;
+            ActiveWalletKeyReferencePath = string.Empty;
+            ActiveWalletPublicKeyPath = string.Empty;
             PendingDeviceId = string.Empty;
             PendingDeviceKeyPath = string.Empty;
             _settingsStore.Save(CreateSettingsSnapshot());
@@ -211,6 +219,9 @@ namespace ArchrealmsPassport.Windows.ViewModels
             ExistingIdentityId = result.IdentityId;
             ActiveDeviceId = result.DeviceId;
             ActiveDeviceKeyPath = PendingDeviceKeyPath;
+            ActiveWalletKeyId = string.Empty;
+            ActiveWalletKeyReferencePath = string.Empty;
+            ActiveWalletPublicKeyPath = string.Empty;
             PendingDeviceId = string.Empty;
             PendingDeviceKeyPath = string.Empty;
             _settingsStore.Save(CreateSettingsSnapshot());

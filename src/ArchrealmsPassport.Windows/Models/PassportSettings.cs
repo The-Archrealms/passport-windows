@@ -9,6 +9,9 @@ namespace ArchrealmsPassport.Windows.Models
         public string ActiveIdentityId { get; set; } = string.Empty;
         public string ActiveDeviceId { get; set; } = string.Empty;
         public string ActiveDeviceKeyPath { get; set; } = string.Empty;
+        public string ActiveWalletKeyId { get; set; } = string.Empty;
+        public string ActiveWalletKeyReferencePath { get; set; } = string.Empty;
+        public string ActiveWalletPublicKeyPath { get; set; } = string.Empty;
         public string PendingDeviceId { get; set; } = string.Empty;
         public string PendingDeviceKeyPath { get; set; } = string.Empty;
         public string DeviceLabel { get; set; } = string.Empty;

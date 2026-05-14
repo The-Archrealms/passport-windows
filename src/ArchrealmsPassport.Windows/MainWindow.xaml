@@ -218,6 +218,37 @@
                                     <Button Style="{StaticResource SecondaryButtonStyle}" Command="{Binding ApproveJoinRequestCommand}" Content="Approve Device" />
                                     <Button Style="{StaticResource SecondaryButtonStyle}" Command="{Binding ImportJoinApprovalCommand}" Content="Add Device" />
                                 </WrapPanel>
+
+                                <TextBlock Margin="0,22,0,0" Style="{StaticResource SectionTitleStyle}" Text="Wallet" />
+
+                                <Grid Margin="0,16,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="130" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="12" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="12" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+
+                                    <TextBlock Grid.Row="0" Style="{StaticResource StatusLabelStyle}" Text="Wallet Key" />
+                                    <TextBlock Grid.Row="0" Grid.Column="1" AutomationProperties.AutomationId="WalletStatusText" Style="{StaticResource StatusValueStyle}" Text="{Binding WalletSummaryText}" />
+
+                                    <TextBlock Grid.Row="2" Style="{StaticResource StatusLabelStyle}" Text="ARCH / CC" />
+                                    <TextBlock Grid.Row="2" Grid.Column="1" AutomationProperties.AutomationId="MonetaryLedgerStatusText" Style="{StaticResource StatusValueStyle}" Text="{Binding MonetaryLedgerSummaryText}" />
+
+                                    <TextBlock Grid.Row="4" Style="{StaticResource StatusLabelStyle}" Text="Export" />
+                                    <TextBlock Grid.Row="4" Grid.Column="1" Style="{StaticResource StatusValueStyle}" Text="{Binding MonetaryExportText}" />
+                                </Grid>
+
+                                <WrapPanel Margin="0,18,0,0">
+                                    <Button AutomationProperties.AutomationId="BindWalletKeyButton" Style="{StaticResource ActionButtonStyle}" Command="{Binding BindWalletKeyCommand}" Content="Bind Wallet Key" />
+                                    <Button Style="{StaticResource SecondaryButtonStyle}" Command="{Binding RefreshMonetaryLedgerCommand}" Content="Refresh Ledger" />
+                                    <Button AutomationProperties.AutomationId="ExportMonetaryLedgerButton" Style="{StaticResource SecondaryButtonStyle}" Command="{Binding ExportMonetaryLedgerCommand}" Content="Export Account" />
+                                </WrapPanel>
                             </StackPanel>
                         </Border>
                     </Grid>

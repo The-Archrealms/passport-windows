@@ -83,6 +83,9 @@ namespace ArchrealmsPassport.Windows.ViewModels
         }
         public string ActiveDeviceId { get { return _activeDeviceId; } set { SetField(ref _activeDeviceId, value); } }
         public string ActiveDeviceKeyPath { get { return _activeDeviceKeyPath; } set { SetField(ref _activeDeviceKeyPath, value); } }
+        public string ActiveWalletKeyId { get { return _activeWalletKeyId; } private set { SetField(ref _activeWalletKeyId, value); } }
+        public string ActiveWalletKeyReferencePath { get { return _activeWalletKeyReferencePath; } private set { SetField(ref _activeWalletKeyReferencePath, value); } }
+        public string ActiveWalletPublicKeyPath { get { return _activeWalletPublicKeyPath; } private set { SetField(ref _activeWalletPublicKeyPath, value); } }
         public string PendingDeviceId { get { return _pendingDeviceId; } set { SetField(ref _pendingDeviceId, value); } }
         public string PendingDeviceKeyPath { get { return _pendingDeviceKeyPath; } set { SetField(ref _pendingDeviceKeyPath, value); } }
         public string DeviceLabel { get { return _deviceLabel; } set { SetField(ref _deviceLabel, value); } }
@@ -297,6 +300,9 @@ namespace ArchrealmsPassport.Windows.ViewModels
         public string NodeStateText { get { return _nodeStateText; } private set { SetField(ref _nodeStateText, value); } }
         public string VerificationStateText { get { return _verificationStateText; } private set { SetField(ref _verificationStateText, value); } }
         public string StorageActionStatusText { get { return _storageActionStatusText; } private set { SetField(ref _storageActionStatusText, value); } }
+        public string WalletSummaryText { get { return _walletSummaryText; } private set { SetField(ref _walletSummaryText, value); } }
+        public string MonetaryLedgerSummaryText { get { return _monetaryLedgerSummaryText; } private set { SetField(ref _monetaryLedgerSummaryText, value); } }
+        public string MonetaryExportText { get { return _monetaryExportText; } private set { SetField(ref _monetaryExportText, value); } }
         public string ActivityLog { get { return _activityLog; } private set { SetField(ref _activityLog, value); } }
 
         public string ReleaseLaneSummaryText

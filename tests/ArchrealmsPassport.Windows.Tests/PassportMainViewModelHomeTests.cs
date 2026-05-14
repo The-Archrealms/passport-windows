@@ -1,4 +1,6 @@
 using System.Windows;
+using ArchrealmsPassport.Windows.Models;
+using ArchrealmsPassport.Windows.Services;
 using ArchrealmsPassport.Windows.ViewModels;
 using Xunit;
 
@@ -57,5 +59,50 @@ public sealed class PassportMainViewModelHomeTests
         Assert.Equal(Visibility.Visible, PassportMainViewModel.BuildPrimaryActionVisibility(false, true, true));
         Assert.Equal(Visibility.Visible, PassportMainViewModel.BuildPrimaryActionVisibility(true, false, true));
         Assert.Equal(Visibility.Collapsed, PassportMainViewModel.BuildPrimaryActionVisibility(true, true, true));
+    }
+
+    [Fact]
+    public void MonetarySummaryRequiresWalletBeforeLedgerRecords()
+    {
+        var replay = new PassportMonetaryLedgerReplayResult();
+
+        var summary = PassportMainViewModel.BuildMonetaryLedgerSummary(
+            hasActivePassport: true,
+            hasActiveWallet: false,
+            replay,
+            "passport-test");
+
+        Assert.Equal("Bind a wallet key before ARCH/CC records can be signed.", summary);
+    }
+
+    [Fact]
+    public void MonetarySummaryShowsReplayDerivedArchAndCcBalances()
+    {
+        var replay = new PassportMonetaryLedgerReplayResult
+        {
+            EventCount = 3
+        };
+        replay.Balances.Add(new PassportMonetaryBalance
+        {
+            AccountId = "passport-test",
+            AssetCode = PassportMonetaryLedgerService.AssetArch,
+            AvailableBaseUnits = 125
+        });
+        replay.Balances.Add(new PassportMonetaryBalance
+        {
+            AccountId = "passport-test",
+            AssetCode = PassportMonetaryLedgerService.AssetCrownCredit,
+            AvailableBaseUnits = 40,
+            EscrowedBaseUnits = 10,
+            BurnedBaseUnits = 5
+        });
+
+        var summary = PassportMainViewModel.BuildMonetaryLedgerSummary(
+            hasActivePassport: true,
+            hasActiveWallet: true,
+            replay,
+            "passport-test");
+
+        Assert.Equal("ARCH available 125; CC available 40, escrowed 10, burned 5", summary);
     }
 }

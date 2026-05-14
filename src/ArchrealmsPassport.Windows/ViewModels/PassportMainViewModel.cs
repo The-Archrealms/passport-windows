@@ -31,6 +31,9 @@ namespace ArchrealmsPassport.Windows.ViewModels
         private readonly AsyncRelayCommand _provisionIdentityCommand;
         private readonly AsyncRelayCommand _approveJoinRequestCommand;
         private readonly AsyncRelayCommand _importJoinApprovalCommand;
+        private readonly AsyncRelayCommand _bindWalletKeyCommand;
+        private readonly AsyncRelayCommand _refreshMonetaryLedgerCommand;
+        private readonly AsyncRelayCommand _exportMonetaryLedgerCommand;
         private readonly AsyncRelayCommand _generateChallengeCommand;
         private readonly AsyncRelayCommand _signChallengeCommand;
         private readonly AsyncRelayCommand _createRegistrySubmissionCommand;
@@ -47,6 +50,9 @@ namespace ArchrealmsPassport.Windows.ViewModels
         private string _activeIdentityId = string.Empty;
         private string _activeDeviceId = string.Empty;
         private string _activeDeviceKeyPath = string.Empty;
+        private string _activeWalletKeyId = string.Empty;
+        private string _activeWalletKeyReferencePath = string.Empty;
+        private string _activeWalletPublicKeyPath = string.Empty;
         private string _pendingDeviceId = string.Empty;
         private string _pendingDeviceKeyPath = string.Empty;
         private string _deviceLabel = string.Empty;
@@ -94,6 +100,9 @@ namespace ArchrealmsPassport.Windows.ViewModels
         private string _nodeStateText = "Node not initialized";
         private string _verificationStateText = "No submission package yet";
         private string _storageActionStatusText = "Storage has not been enabled yet.";
+        private string _walletSummaryText = "No wallet key bound.";
+        private string _monetaryLedgerSummaryText = "No ARCH/CC records loaded.";
+        private string _monetaryExportText = "No account export yet.";
         private string _activityLog = string.Empty;
         private bool _storageNetworkStopInProgress;
 
@@ -130,6 +139,9 @@ namespace ArchrealmsPassport.Windows.ViewModels
             _provisionIdentityCommand = new AsyncRelayCommand(ProvisionIdentityAsync, CanProvisionIdentity);
             _approveJoinRequestCommand = new AsyncRelayCommand(ApproveJoinRequestAsync, CanApproveJoinRequest);
             _importJoinApprovalCommand = new AsyncRelayCommand(ImportJoinApprovalAsync, CanImportJoinApproval);
+            _bindWalletKeyCommand = new AsyncRelayCommand(BindWalletKeyAsync, CanBindWalletKey);
+            _refreshMonetaryLedgerCommand = new AsyncRelayCommand(RefreshMonetaryLedgerAsync, CanRefreshMonetaryLedger);
+            _exportMonetaryLedgerCommand = new AsyncRelayCommand(ExportMonetaryLedgerAsync, CanExportMonetaryLedger);
             _generateChallengeCommand = new AsyncRelayCommand(GenerateChallengeAsync);
             _signChallengeCommand = new AsyncRelayCommand(SignChallengeAsync, CanUseActiveDeviceCredential);
             _createRegistrySubmissionCommand = new AsyncRelayCommand(RegisterWithArchrealmsAsync, CanRegisterWithArchrealms);
@@ -155,6 +167,9 @@ namespace ArchrealmsPassport.Windows.ViewModels
             ProvisionIdentityCommand = _provisionIdentityCommand;
             ApproveJoinRequestCommand = _approveJoinRequestCommand;
             ImportJoinApprovalCommand = _importJoinApprovalCommand;
+            BindWalletKeyCommand = _bindWalletKeyCommand;
+            RefreshMonetaryLedgerCommand = _refreshMonetaryLedgerCommand;
+            ExportMonetaryLedgerCommand = _exportMonetaryLedgerCommand;
             GenerateChallengeCommand = _generateChallengeCommand;
             SignChallengeCommand = _signChallengeCommand;
             CreateRegistrySubmissionCommand = _createRegistrySubmissionCommand;
@@ -187,6 +202,9 @@ namespace ArchrealmsPassport.Windows.ViewModels
         public ICommand ProvisionIdentityCommand { get; private set; }
         public ICommand ApproveJoinRequestCommand { get; private set; }
         public ICommand ImportJoinApprovalCommand { get; private set; }
+        public ICommand BindWalletKeyCommand { get; private set; }
+        public ICommand RefreshMonetaryLedgerCommand { get; private set; }
+        public ICommand ExportMonetaryLedgerCommand { get; private set; }
         public ICommand GenerateChallengeCommand { get; private set; }
         public ICommand SignChallengeCommand { get; private set; }
         public ICommand CreateRegistrySubmissionCommand { get; private set; }

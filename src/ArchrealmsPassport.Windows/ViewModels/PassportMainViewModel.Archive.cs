@@ -596,6 +596,9 @@ namespace ArchrealmsPassport.Windows.ViewModels
                 ActiveIdentityId = ActiveIdentityId,
                 ActiveDeviceId = ActiveDeviceId,
                 ActiveDeviceKeyPath = ActiveDeviceKeyPath,
+                ActiveWalletKeyId = ActiveWalletKeyId,
+                ActiveWalletKeyReferencePath = ActiveWalletKeyReferencePath,
+                ActiveWalletPublicKeyPath = ActiveWalletPublicKeyPath,
                 PendingDeviceId = PendingDeviceId,
                 PendingDeviceKeyPath = PendingDeviceKeyPath,
                 DeviceLabel = DeviceLabel,
@@ -664,6 +667,9 @@ namespace ArchrealmsPassport.Windows.ViewModels
             _provisionIdentityCommand.RaiseCanExecuteChanged();
             _approveJoinRequestCommand.RaiseCanExecuteChanged();
             _importJoinApprovalCommand.RaiseCanExecuteChanged();
+            _bindWalletKeyCommand.RaiseCanExecuteChanged();
+            _refreshMonetaryLedgerCommand.RaiseCanExecuteChanged();
+            _exportMonetaryLedgerCommand.RaiseCanExecuteChanged();
             _generateChallengeCommand.RaiseCanExecuteChanged();
             _signChallengeCommand.RaiseCanExecuteChanged();
             _createRegistrySubmissionCommand.RaiseCanExecuteChanged();
