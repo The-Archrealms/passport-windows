@@ -138,6 +138,18 @@ namespace ArchrealmsPassport.Windows.Services
                     ledgerEvent.WalletPublicKeyPath = ToWorkspaceRelativePath(resolvedWorkspaceRoot, resolvedWalletPublicKeyPath);
                 }
 
+                if (releaseLane.ProductionLedger
+                    && string.Equals(ledgerEvent.AssetCode, AssetCrownCredit, StringComparison.Ordinal)
+                    && string.Equals(ledgerEvent.EventType, EventCrownCreditIssue, StringComparison.Ordinal))
+                {
+                    var capacityValidation = new PassportCrownCreditCapacityService(releaseLane)
+                        .ValidateIssuance(resolvedWorkspaceRoot, ledgerEvent.AmountBaseUnits, ledgerEvent.EvidenceReferences);
+                    if (!capacityValidation.Succeeded)
+                    {
+                        return FailedAppend(capacityValidation.Message);
+                    }
+                }
+
                 var semanticBalances = replay.Balances.ToDictionary(
                     balance => balance.AccountId + "|" + balance.AssetCode,
                     balance => new PassportMonetaryBalance
@@ -546,6 +558,18 @@ namespace ArchrealmsPassport.Windows.Services
             }
 
             ValidateEventSignature(workspaceRoot, ledgerEvent, failures);
+
+            if (releaseLane.ProductionLedger
+                && string.Equals(ledgerEvent.AssetCode, AssetCrownCredit, StringComparison.Ordinal)
+                && string.Equals(ledgerEvent.EventType, EventCrownCreditIssue, StringComparison.Ordinal))
+            {
+                var capacityValidation = new PassportCrownCreditCapacityService(releaseLane)
+                    .ValidateIssuance(workspaceRoot, ledgerEvent.AmountBaseUnits, ledgerEvent.EvidenceReferences);
+                if (!capacityValidation.Succeeded)
+                {
+                    failures.Add("CC issuance capacity validation failed for event " + ledgerEvent.EventId + ": " + capacityValidation.Message);
+                }
+            }
         }
 
         private void ValidateEventSignature(string workspaceRoot, PassportMonetaryLedgerEvent ledgerEvent, List<string> failures)

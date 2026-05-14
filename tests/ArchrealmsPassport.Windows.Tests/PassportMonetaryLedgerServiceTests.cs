@@ -247,6 +247,7 @@ public sealed class PassportMonetaryLedgerServiceTests
         Assert.True(wallet.Succeeded, wallet.Message);
 
         var ledgerService = new PassportMonetaryLedgerService(releaseLane);
+        var capacityEvidence = CreateCapacityEvidence(workspace.Root, releaseLane, 500);
         var append = ledgerService.AppendEvent(
             workspace.Root,
             "account-test",
@@ -255,6 +256,7 @@ public sealed class PassportMonetaryLedgerServiceTests
             PassportMonetaryLedgerService.EventCrownCreditIssue,
             PassportMonetaryLedgerService.AssetCrownCredit,
             100,
+            capacityEvidence,
             walletKeyReferencePath: wallet.WalletKeyReferencePath,
             walletPublicKeyPath: wallet.WalletPublicKeyPath);
         AssertAppend(append);
@@ -282,6 +284,7 @@ public sealed class PassportMonetaryLedgerServiceTests
         Assert.True(wallet.Succeeded, wallet.Message);
 
         var ledgerService = new PassportMonetaryLedgerService(releaseLane);
+        var capacityEvidence = CreateCapacityEvidence(workspace.Root, releaseLane, 500);
         var append = ledgerService.AppendEvent(
             workspace.Root,
             "account-test",
@@ -290,6 +293,7 @@ public sealed class PassportMonetaryLedgerServiceTests
             PassportMonetaryLedgerService.EventCrownCreditIssue,
             PassportMonetaryLedgerService.AssetCrownCredit,
             100,
+            capacityEvidence,
             walletKeyReferencePath: wallet.WalletKeyReferencePath,
             walletPublicKeyPath: wallet.WalletPublicKeyPath);
         AssertAppend(append);
@@ -323,10 +327,89 @@ public sealed class PassportMonetaryLedgerServiceTests
         Assert.Equal(1, replay.EventCount);
     }
 
+    [Fact]
+    public void ProductionLedgerRejectsCcIssueWithoutCapacityEvidence()
+    {
+        using var workspace = PassportTestWorkspace.Create();
+        var releaseLane = PassportReleaseLane.CreateDefault("production-mvp");
+        var walletService = new PassportWalletKeyService(releaseLane);
+        var wallet = walletService.CreateAndBindWalletKey(
+            workspace.Root,
+            workspace.IdentityId,
+            workspace.DeviceId,
+            workspace.KeyReferencePath);
+        Assert.True(wallet.Succeeded, wallet.Message);
+
+        var append = new PassportMonetaryLedgerService(releaseLane).AppendEvent(
+            workspace.Root,
+            "account-test",
+            workspace.IdentityId,
+            wallet.WalletKeyId,
+            PassportMonetaryLedgerService.EventCrownCreditIssue,
+            PassportMonetaryLedgerService.AssetCrownCredit,
+            100,
+            walletKeyReferencePath: wallet.WalletKeyReferencePath,
+            walletPublicKeyPath: wallet.WalletPublicKeyPath);
+
+        Assert.False(append.Succeeded);
+        Assert.Contains("capacity_report_path", append.Message, System.StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ProductionLedgerRejectsCcIssueAboveConservativeCapacityEvidence()
+    {
+        using var workspace = PassportTestWorkspace.Create();
+        var releaseLane = PassportReleaseLane.CreateDefault("production-mvp");
+        var walletService = new PassportWalletKeyService(releaseLane);
+        var wallet = walletService.CreateAndBindWalletKey(
+            workspace.Root,
+            workspace.IdentityId,
+            workspace.DeviceId,
+            workspace.KeyReferencePath);
+        Assert.True(wallet.Succeeded, wallet.Message);
+
+        var capacityEvidence = CreateCapacityEvidence(workspace.Root, releaseLane, 50);
+        var append = new PassportMonetaryLedgerService(releaseLane).AppendEvent(
+            workspace.Root,
+            "account-test",
+            workspace.IdentityId,
+            wallet.WalletKeyId,
+            PassportMonetaryLedgerService.EventCrownCreditIssue,
+            PassportMonetaryLedgerService.AssetCrownCredit,
+            100,
+            capacityEvidence,
+            walletKeyReferencePath: wallet.WalletKeyReferencePath,
+            walletPublicKeyPath: wallet.WalletPublicKeyPath);
+
+        Assert.False(append.Succeeded);
+        Assert.Contains("exceeds", append.Message, System.StringComparison.OrdinalIgnoreCase);
+    }
+
     private static void AssertAppend(PassportMonetaryLedgerAppendResult result)
     {
         Assert.True(result.Succeeded, result.Message);
         Assert.True(File.Exists(result.EventPath), result.EventPath);
         Assert.False(string.IsNullOrWhiteSpace(result.EventHashSha256));
+    }
+
+    private static Dictionary<string, string> CreateCapacityEvidence(string workspaceRoot, PassportReleaseLane releaseLane, long maxIssuanceBaseUnits)
+    {
+        var capacity = new PassportCrownCreditCapacityService(releaseLane).CreateCapacityReport(
+            workspaceRoot,
+            "storage",
+            conservativeServiceLiabilityCapacityBaseUnits: 1_000,
+            outstandingCrownCreditBeforeBaseUnits: 0,
+            maxIssuanceBaseUnits: maxIssuanceBaseUnits,
+            capacityHaircutBasisPoints: 6500,
+            independentVolumeQualified: true,
+            thinMarketIssuanceZero: false,
+            continuityReserveExcluded: true,
+            operationalReserveExcluded: true);
+        Assert.True(capacity.Succeeded, capacity.Message);
+        return new Dictionary<string, string>
+        {
+            ["capacity_report_path"] = capacity.ReportPath,
+            ["capacity_report_sha256"] = capacity.ReportSha256
+        };
     }
 }
