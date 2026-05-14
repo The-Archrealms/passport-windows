@@ -38,6 +38,7 @@ Included today:
 - registry submission publish and verify scripts under `tools/passport/`
 - a small verifier helper under `tools/registry-verifier/`
 - a local metering verifier helper under `tools/metering-verifier/`
+- a monetary ledger export verifier under `tools/ledger-verifier/`
 
 Not included today:
 
@@ -51,6 +52,8 @@ Not included today:
 The current economy-facing path is proof and metering first. Public economy-facing release is gated on blockchain-based settlement finality. Until that layer exists, Passport may build proof, metering, admission, and settlement-handoff inputs, but it must not present local records as final settlement.
 
 The first metering verifier is local and narrow. `Verify-ArchrealmsPassportMetering.ps1` reads a Passport workspace, verifies signed metering payloads and device signatures, and emits an authoritative-style metering report with accepted/rejected proof counts. It does not settle value.
+
+The first monetary ledger verifier is also local and narrow. `Verify-ArchrealmsPassportMonetaryExport.ps1` verifies a Passport account export by checking event file hashes, account hash chains, Merkle inclusion proofs, the transparency root, replay-derived balances, and exported wallet key-history material. It does not provide public-chain anchoring or external settlement finality.
 
 Metering reports can be packaged for registrar/admission review with `New-ArchrealmsPassportMeteringPackage.ps1` and verified with `Verify-ArchrealmsPassportMeteringPackage.ps1`. The package format preserves the authoritative metering report, referenced source records, signed payloads, detached signatures, and a manifest of document hashes.
 
@@ -166,10 +169,16 @@ Build the app:
 dotnet build .\src\ArchrealmsPassport.Windows\ArchrealmsPassport.Windows.csproj /p:UseSharedCompilation=false
 ```
 
-Build the verifier helper:
+Build the registry verifier helper:
 
 ```powershell
 dotnet build .\tools\registry-verifier\Archrealms.RegistryVerifier.csproj
+```
+
+Build the monetary ledger verifier helper:
+
+```powershell
+dotnet build .\tools\ledger-verifier\Archrealms.LedgerVerifier.csproj /m:1 /nr:false /p:UseSharedCompilation=false
 ```
 
 The project file copies the local `tools/` and `registry/templates/` folders into the app output so the desktop client can use the bundled scripts.

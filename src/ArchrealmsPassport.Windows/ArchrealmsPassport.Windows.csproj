@@ -31,6 +31,14 @@
       <Link>tools\registry-verifier\Program.cs</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <Content Include="..\..\tools\ledger-verifier\Archrealms.LedgerVerifier.csproj">
+      <Link>tools\ledger-verifier\Archrealms.LedgerVerifier.csproj</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\..\tools\ledger-verifier\Program.cs">
+      <Link>tools\ledger-verifier\Program.cs</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
     <Content Include="..\..\registry\templates\**\*">
       <Link>registry\templates\%(RecursiveDir)%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

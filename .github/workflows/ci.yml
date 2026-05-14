@@ -23,9 +23,13 @@ jobs:
         shell: pwsh
         run: dotnet build .\src\ArchrealmsPassport.Windows\ArchrealmsPassport.Windows.csproj /m:1 /nr:false /p:UseSharedCompilation=false
 
-      - name: Build verifier
+      - name: Build registry verifier
         shell: pwsh
         run: dotnet build .\tools\registry-verifier\Archrealms.RegistryVerifier.csproj
+
+      - name: Build ledger verifier
+        shell: pwsh
+        run: dotnet build .\tools\ledger-verifier\Archrealms.LedgerVerifier.csproj /m:1 /nr:false /p:UseSharedCompilation=false
 
       - name: Run unit and service tests
         shell: pwsh

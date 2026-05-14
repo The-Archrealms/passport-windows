@@ -6,10 +6,22 @@
   "release_lane": "<release-lane>",
   "ledger_namespace": "<ledger-namespace>",
   "policy_version": "<policy-version>",
+  "root_algorithm": "merkle_sha256_v1",
   "event_count": 0,
   "first_global_sequence": 0,
   "last_global_sequence": 0,
   "event_hashes": [],
+  "event_leaves": [
+    {
+      "event_id": "<event-id>",
+      "global_sequence": 0,
+      "account_id": "<account-id>",
+      "asset_code": "ARCH | CC",
+      "event_hash_sha256": "<event-sha256>",
+      "leaf_hash_sha256": "<leaf-sha256>"
+    }
+  ],
   "epoch_root_sha256": "<epoch-root-sha256>",
+  "public_chain_anchor_status": "not_anchored_external_launch_gate",
   "summary": "Transparency root over ordered monetary event hashes for replayable ARCH/CC ledger history."
 }

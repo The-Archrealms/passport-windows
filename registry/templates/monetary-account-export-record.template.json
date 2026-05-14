@@ -15,13 +15,58 @@
       "asset_code": "ARCH | CC",
       "global_sequence": 0,
       "account_sequence": 0,
+      "prior_account_event_hash": "<prior-account-event-sha256-or-empty>",
       "event_hash_sha256": "<event-sha256>",
-      "export_path": "<relative-event-export-path>"
+      "event_file_sha256": "<event-file-sha256>",
+      "export_path": "<relative-event-export-path>",
+      "inclusion_proof": {
+        "proof_version": 1,
+        "root_algorithm": "merkle_sha256_v1",
+        "event_id": "<event-id>",
+        "global_sequence": 0,
+        "leaf_index": 0,
+        "leaf_hash_sha256": "<leaf-sha256>",
+        "epoch_root_sha256": "<epoch-root-sha256>",
+        "siblings": [
+          {
+            "position": "left | right",
+            "hash_sha256": "<sibling-sha256>"
+          }
+        ]
+      }
     }
   ],
   "balances": [],
+  "account_hash_chain": [
+    {
+      "account_sequence": 0,
+      "event_id": "<event-id>",
+      "prior_account_event_hash": "<prior-account-event-sha256-or-empty>",
+      "event_hash_sha256": "<event-sha256>"
+    }
+  ],
+  "key_history": [
+    {
+      "material_type": "wallet_key_history | wallet_public_key",
+      "source_path": "<workspace-relative-source-path>",
+      "export_path": "<export-relative-path>",
+      "sha256": "<material-sha256>"
+    }
+  ],
   "transparency_root_sha256": "<epoch-root-sha256>",
   "transparency_root_export_path": "transparency-root.json",
   "verifier_replay_root": "records/passport/monetary/events",
+  "verifier": {
+    "tool_name": "Archrealms.LedgerVerifier",
+    "tool_project": "tools/ledger-verifier/Archrealms.LedgerVerifier.csproj",
+    "checks": [
+      "event_hashes",
+      "account_hash_chain",
+      "transparency_root",
+      "inclusion_proofs",
+      "replay_balances",
+      "key_history_hashes"
+    ]
+  },
   "summary": "Replayable Passport ARCH/CC account export. Balances are derived from exported events."
 }

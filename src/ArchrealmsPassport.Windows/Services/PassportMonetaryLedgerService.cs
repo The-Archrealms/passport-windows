@@ -300,36 +300,29 @@ namespace ArchrealmsPassport.Windows.Services
                     .ThenBy(item => item.Event.CreatedUtc, StringComparer.Ordinal)
                     .ThenBy(item => item.Event.EventId, StringComparer.Ordinal)
                     .ToArray();
-                var eventHashes = readEvents.Select(item => item.Event.EventHashSha256).ToArray();
-                var rootMaterial = string.Join(
-                    "\n",
-                    new[]
-                    {
-                        releaseLane.Lane,
-                        releaseLane.LedgerNamespace,
-                        releaseLane.PolicyVersion,
-                        readEvents.Length.ToString()
-                    }.Concat(eventHashes));
-                var epochRoot = ComputeSha256(Encoding.UTF8.GetBytes(rootMaterial));
+                var transparencySnapshot = BuildTransparencySnapshot(readEvents);
                 var timestamp = DateTime.UtcNow.ToString("yyyyMMddTHHmmssZ");
                 var createdUtc = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
                 var rootsRoot = Path.Combine(resolvedWorkspaceRoot, "records", "passport", "monetary", "transparency-roots");
                 Directory.CreateDirectory(rootsRoot);
-                var recordPath = Path.Combine(rootsRoot, timestamp + "-" + releaseLane.Lane + "-" + epochRoot[..12] + ".json");
+                var recordPath = Path.Combine(rootsRoot, timestamp + "-" + releaseLane.Lane + "-" + transparencySnapshot.EpochRootSha256[..12] + ".json");
                 var record = new Dictionary<string, object?>
                 {
                     ["schema_version"] = 1,
                     ["record_type"] = "passport_monetary_transparency_root",
-                    ["record_id"] = timestamp + "-" + epochRoot[..12],
+                    ["record_id"] = timestamp + "-" + transparencySnapshot.EpochRootSha256[..12],
                     ["created_utc"] = createdUtc,
                     ["release_lane"] = releaseLane.Lane,
                     ["ledger_namespace"] = releaseLane.LedgerNamespace,
                     ["policy_version"] = releaseLane.PolicyVersion,
+                    ["root_algorithm"] = "merkle_sha256_v1",
                     ["event_count"] = readEvents.Length,
                     ["first_global_sequence"] = readEvents.Length == 0 ? 0 : readEvents.First().Event.GlobalSequence,
                     ["last_global_sequence"] = readEvents.Length == 0 ? 0 : readEvents.Last().Event.GlobalSequence,
-                    ["event_hashes"] = eventHashes,
-                    ["epoch_root_sha256"] = epochRoot,
+                    ["event_hashes"] = transparencySnapshot.EventHashes,
+                    ["event_leaves"] = transparencySnapshot.EventLeaves,
+                    ["epoch_root_sha256"] = transparencySnapshot.EpochRootSha256,
+                    ["public_chain_anchor_status"] = "not_anchored_external_launch_gate",
                     ["summary"] = "Transparency root for replayable Passport ARCH/CC monetary ledger events."
                 };
 
@@ -340,7 +333,7 @@ namespace ArchrealmsPassport.Windows.Services
                     Succeeded = true,
                     Message = "Monetary ledger transparency root created.",
                     RecordPath = recordPath,
-                    EpochRootSha256 = epochRoot,
+                    EpochRootSha256 = transparencySnapshot.EpochRootSha256,
                     EventCount = readEvents.Length
                 };
             }
@@ -362,7 +355,13 @@ namespace ArchrealmsPassport.Windows.Services
                     return FailedExport("The monetary ledger must replay cleanly before exporting account history: " + string.Join("; ", replay.Failures));
                 }
 
-                var accountEvents = ReadEvents(resolvedWorkspaceRoot)
+                var orderedEvents = ReadEvents(resolvedWorkspaceRoot)
+                    .OrderBy(item => item.Event.GlobalSequence)
+                    .ThenBy(item => item.Event.CreatedUtc, StringComparer.Ordinal)
+                    .ThenBy(item => item.Event.EventId, StringComparer.Ordinal)
+                    .ToArray();
+                var transparencySnapshot = BuildTransparencySnapshot(orderedEvents);
+                var accountEvents = orderedEvents
                     .Where(item => string.Equals(item.Event.AccountId, normalizedAccountId, StringComparison.Ordinal))
                     .OrderBy(item => item.Event.AccountSequence)
                     .ThenBy(item => item.Event.CreatedUtc, StringComparer.Ordinal)
@@ -397,6 +396,7 @@ namespace ArchrealmsPassport.Windows.Services
                     var relativePath = ToWorkspaceRelativePath(resolvedWorkspaceRoot, item.Path);
                     var exportPath = Path.Combine(exportRoot, relativePath.Replace('/', Path.DirectorySeparatorChar));
                     CopyFile(item.Path, exportPath);
+                    var leaf = FindLeaf(transparencySnapshot, item.Event.EventId, item.Event.EventHashSha256);
                     eventManifestRows.Add(new Dictionary<string, object?>
                     {
                         ["event_id"] = item.Event.EventId,
@@ -404,13 +404,17 @@ namespace ArchrealmsPassport.Windows.Services
                         ["asset_code"] = item.Event.AssetCode,
                         ["global_sequence"] = item.Event.GlobalSequence,
                         ["account_sequence"] = item.Event.AccountSequence,
+                        ["prior_account_event_hash"] = item.Event.PriorAccountEventHash,
                         ["event_hash_sha256"] = item.Event.EventHashSha256,
-                        ["export_path"] = relativePath
+                        ["event_file_sha256"] = ComputeSha256(File.ReadAllBytes(exportPath)),
+                        ["export_path"] = relativePath,
+                        ["inclusion_proof"] = BuildInclusionProof(transparencySnapshot, leaf)
                     });
                 }
 
                 var exportedTransparencyRootPath = Path.Combine(exportRoot, "transparency-root.json");
                 CopyFile(transparencyRoot.RecordPath, exportedTransparencyRootPath);
+                var keyHistoryRows = CopyWalletKeyHistory(resolvedWorkspaceRoot, exportRoot, accountEvents.Select(item => item.Event).ToArray());
 
                 var accountBalances = replay.Balances
                     .Where(balance => string.Equals(balance.AccountId, normalizedAccountId, StringComparison.Ordinal))
@@ -430,9 +434,25 @@ namespace ArchrealmsPassport.Windows.Services
                     ["event_count"] = accountEvents.Length,
                     ["events"] = eventManifestRows,
                     ["balances"] = accountBalances,
+                    ["account_hash_chain"] = BuildAccountHashChain(accountEvents.Select(item => item.Event).ToArray()),
+                    ["key_history"] = keyHistoryRows,
                     ["transparency_root_sha256"] = transparencyRoot.EpochRootSha256,
                     ["transparency_root_export_path"] = "transparency-root.json",
                     ["verifier_replay_root"] = "records/passport/monetary/events",
+                    ["verifier"] = new Dictionary<string, object?>
+                    {
+                        ["tool_name"] = "Archrealms.LedgerVerifier",
+                        ["tool_project"] = "tools/ledger-verifier/Archrealms.LedgerVerifier.csproj",
+                        ["checks"] = new[]
+                        {
+                            "event_hashes",
+                            "account_hash_chain",
+                            "transparency_root",
+                            "inclusion_proofs",
+                            "replay_balances",
+                            "key_history_hashes"
+                        }
+                    },
                     ["summary"] = "Replayable Passport ARCH/CC monetary account export. Balances are derived from exported events."
                 };
                 File.WriteAllText(manifestPath, JsonSerializer.Serialize(manifest, JsonOptions), Encoding.UTF8);
@@ -453,6 +473,97 @@ namespace ArchrealmsPassport.Windows.Services
             {
                 return FailedExport("Monetary ledger account export failed: " + ex.Message);
             }
+        }
+
+        public PassportMonetaryLedgerExportVerificationResult VerifyAccountExport(string exportRoot)
+        {
+            var result = new PassportMonetaryLedgerExportVerificationResult();
+
+            try
+            {
+                var resolvedExportRoot = Path.GetFullPath(NormalizeRequired(exportRoot, "export root"));
+                var manifestPath = Path.Combine(resolvedExportRoot, "manifest.json");
+                if (!File.Exists(manifestPath))
+                {
+                    result.Failures.Add("Missing account export manifest.");
+                    result.Message = "Monetary ledger account export verification failed.";
+                    return result;
+                }
+
+                using var manifestDocument = JsonDocument.Parse(File.ReadAllText(manifestPath));
+                var manifest = manifestDocument.RootElement;
+                if (!Matches(manifest, "record_type", "passport_monetary_account_export"))
+                {
+                    result.Failures.Add("Invalid account export manifest record type.");
+                }
+
+                if (!Matches(manifest, "release_lane", releaseLane.Lane))
+                {
+                    result.Failures.Add("Export release lane does not match verifier release lane.");
+                }
+
+                if (!Matches(manifest, "ledger_namespace", releaseLane.LedgerNamespace))
+                {
+                    result.Failures.Add("Export ledger namespace does not match verifier ledger namespace.");
+                }
+
+                var transparencyRootPath = ResolveWorkspaceRelativePath(
+                    resolvedExportRoot,
+                    ReadString(manifest, "transparency_root_export_path"));
+                if (!File.Exists(transparencyRootPath))
+                {
+                    result.Failures.Add("Missing exported transparency root.");
+                }
+                else
+                {
+                    VerifyTransparencyRoot(transparencyRootPath, ReadString(manifest, "transparency_root_sha256"), result.Failures);
+                }
+
+                var eventCount = 0;
+                if (manifest.TryGetProperty("events", out var events) && events.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var eventRow in events.EnumerateArray())
+                    {
+                        eventCount++;
+                        VerifyExportedEvent(resolvedExportRoot, manifest, eventRow, result.Failures);
+                    }
+                }
+                else
+                {
+                    result.Failures.Add("Manifest does not contain an events array.");
+                }
+
+                VerifyManifestAccountHashChain(manifest, result.Failures);
+
+                if (manifest.TryGetProperty("key_history", out var keyHistory) && keyHistory.ValueKind == JsonValueKind.Array)
+                {
+                    VerifyKeyHistory(resolvedExportRoot, keyHistory, result.Failures);
+                }
+
+                var replay = Replay(resolvedExportRoot);
+                if (!replay.Succeeded)
+                {
+                    result.Failures.AddRange(replay.Failures.Select(failure => "Replay failed: " + failure));
+                }
+                else
+                {
+                    VerifyManifestBalances(manifest, replay, result.Failures);
+                }
+
+                result.EventCount = eventCount;
+                result.ExportRootSha256 = ComputeDirectoryHash(resolvedExportRoot);
+                result.Succeeded = result.Failures.Count == 0;
+                result.Message = result.Succeeded
+                    ? "Monetary ledger account export verification succeeded."
+                    : "Monetary ledger account export verification failed.";
+            }
+            catch (Exception ex)
+            {
+                result.Failures.Add("Monetary ledger account export verification failed: " + ex.Message);
+                result.Message = "Monetary ledger account export verification failed.";
+            }
+
+            return result;
         }
 
         public static string ComputeEventHash(PassportMonetaryLedgerEvent ledgerEvent)
@@ -877,6 +988,513 @@ namespace ArchrealmsPassport.Windows.Services
             return balance;
         }
 
+        private TransparencySnapshot BuildTransparencySnapshot(IReadOnlyList<(string Path, PassportMonetaryLedgerEvent Event)> orderedEvents)
+        {
+            var leaves = orderedEvents
+                .Select((item, index) =>
+                {
+                    var leafHash = ComputeTransparencyLeafHash(item.Event);
+                    return new TransparencyLeaf
+                    {
+                        Index = index,
+                        EventId = item.Event.EventId,
+                        GlobalSequence = item.Event.GlobalSequence,
+                        AccountId = item.Event.AccountId,
+                        AssetCode = item.Event.AssetCode,
+                        EventHashSha256 = item.Event.EventHashSha256,
+                        LeafHashSha256 = leafHash
+                    };
+                })
+                .ToArray();
+
+            var leafHashes = leaves.Select(leaf => leaf.LeafHashSha256).ToArray();
+            return new TransparencySnapshot
+            {
+                EventHashes = orderedEvents.Select(item => item.Event.EventHashSha256).ToArray(),
+                EventLeaves = leaves
+                    .Select(leaf => new Dictionary<string, object?>
+                    {
+                        ["event_id"] = leaf.EventId,
+                        ["global_sequence"] = leaf.GlobalSequence,
+                        ["account_id"] = leaf.AccountId,
+                        ["asset_code"] = leaf.AssetCode,
+                        ["event_hash_sha256"] = leaf.EventHashSha256,
+                        ["leaf_hash_sha256"] = leaf.LeafHashSha256
+                    })
+                    .ToArray(),
+                Leaves = leaves,
+                LeafHashes = leafHashes,
+                EpochRootSha256 = ComputeMerkleRoot(leafHashes)
+            };
+        }
+
+        private static string ComputeTransparencyLeafHash(PassportMonetaryLedgerEvent ledgerEvent)
+        {
+            var material = string.Join(
+                "\n",
+                "passport-monetary-ledger-leaf-v1",
+                ledgerEvent.GlobalSequence.ToString(),
+                ledgerEvent.EventId,
+                ledgerEvent.EventHashSha256);
+            return ComputeSha256(Encoding.UTF8.GetBytes(material));
+        }
+
+        private static string ComputeMerkleRoot(IReadOnlyList<string> leafHashes)
+        {
+            if (leafHashes.Count == 0)
+            {
+                return ComputeSha256(Encoding.UTF8.GetBytes("passport-monetary-ledger-empty-root-v1"));
+            }
+
+            var level = leafHashes.Select(NormalizeHash).ToList();
+            while (level.Count > 1)
+            {
+                var next = new List<string>();
+                for (var i = 0; i < level.Count; i += 2)
+                {
+                    var left = level[i];
+                    var right = i + 1 < level.Count ? level[i + 1] : left;
+                    next.Add(ComputeMerkleParent(left, right));
+                }
+
+                level = next;
+            }
+
+            return level[0];
+        }
+
+        private static string ComputeMerkleParent(string leftHash, string rightHash)
+        {
+            var material = string.Join(
+                "\n",
+                "passport-monetary-ledger-node-v1",
+                NormalizeHash(leftHash),
+                NormalizeHash(rightHash));
+            return ComputeSha256(Encoding.UTF8.GetBytes(material));
+        }
+
+        private static Dictionary<string, object?> BuildInclusionProof(TransparencySnapshot snapshot, TransparencyLeaf leaf)
+        {
+            var siblings = BuildMerkleProof(snapshot.LeafHashes, leaf.Index);
+            return new Dictionary<string, object?>
+            {
+                ["proof_version"] = 1,
+                ["root_algorithm"] = "merkle_sha256_v1",
+                ["event_id"] = leaf.EventId,
+                ["global_sequence"] = leaf.GlobalSequence,
+                ["leaf_index"] = leaf.Index,
+                ["leaf_hash_sha256"] = leaf.LeafHashSha256,
+                ["epoch_root_sha256"] = snapshot.EpochRootSha256,
+                ["siblings"] = siblings
+            };
+        }
+
+        private static List<Dictionary<string, object?>> BuildMerkleProof(IReadOnlyList<string> leafHashes, int leafIndex)
+        {
+            if (leafIndex < 0 || leafIndex >= leafHashes.Count)
+            {
+                throw new InvalidOperationException("Transparency inclusion proof leaf index is out of range.");
+            }
+
+            var proof = new List<Dictionary<string, object?>>();
+            var index = leafIndex;
+            var level = leafHashes.Select(NormalizeHash).ToList();
+            while (level.Count > 1)
+            {
+                var isRight = index % 2 == 1;
+                var siblingIndex = isRight ? index - 1 : index + 1;
+                var siblingHash = siblingIndex < level.Count ? level[siblingIndex] : level[index];
+                proof.Add(new Dictionary<string, object?>
+                {
+                    ["position"] = isRight ? "left" : "right",
+                    ["hash_sha256"] = siblingHash
+                });
+
+                var next = new List<string>();
+                for (var i = 0; i < level.Count; i += 2)
+                {
+                    var left = level[i];
+                    var right = i + 1 < level.Count ? level[i + 1] : left;
+                    next.Add(ComputeMerkleParent(left, right));
+                }
+
+                index /= 2;
+                level = next;
+            }
+
+            return proof;
+        }
+
+        private static bool VerifyMerkleProof(JsonElement proof, string expectedRootSha256, List<string> failures)
+        {
+            var eventId = ReadString(proof, "event_id");
+            var computed = ReadString(proof, "leaf_hash_sha256");
+            if (string.IsNullOrWhiteSpace(computed))
+            {
+                failures.Add("Inclusion proof is missing a leaf hash for event " + eventId + ".");
+                return false;
+            }
+
+            if (proof.TryGetProperty("siblings", out var siblings) && siblings.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var sibling in siblings.EnumerateArray())
+                {
+                    var siblingHash = ReadString(sibling, "hash_sha256");
+                    var position = ReadString(sibling, "position");
+                    if (string.Equals(position, "left", StringComparison.Ordinal))
+                    {
+                        computed = ComputeMerkleParent(siblingHash, computed);
+                    }
+                    else if (string.Equals(position, "right", StringComparison.Ordinal))
+                    {
+                        computed = ComputeMerkleParent(computed, siblingHash);
+                    }
+                    else
+                    {
+                        failures.Add("Inclusion proof has an invalid sibling position for event " + eventId + ".");
+                        return false;
+                    }
+                }
+            }
+
+            var expected = NormalizeHash(expectedRootSha256);
+            var proofRoot = NormalizeHash(ReadString(proof, "epoch_root_sha256"));
+            if (!string.Equals(proofRoot, expected, StringComparison.Ordinal))
+            {
+                failures.Add("Inclusion proof root does not match export transparency root for event " + eventId + ".");
+                return false;
+            }
+
+            if (!string.Equals(NormalizeHash(computed), expected, StringComparison.Ordinal))
+            {
+                failures.Add("Inclusion proof does not resolve to the transparency root for event " + eventId + ".");
+                return false;
+            }
+
+            return true;
+        }
+
+        private static TransparencyLeaf FindLeaf(TransparencySnapshot snapshot, string eventId, string eventHashSha256)
+        {
+            var leaf = snapshot.Leaves.FirstOrDefault(item =>
+                string.Equals(item.EventId, eventId, StringComparison.Ordinal)
+                && string.Equals(item.EventHashSha256, eventHashSha256, StringComparison.OrdinalIgnoreCase));
+            if (leaf == null)
+            {
+                throw new InvalidOperationException("Unable to find transparency leaf for event " + eventId + ".");
+            }
+
+            return leaf;
+        }
+
+        private static List<Dictionary<string, object?>> BuildAccountHashChain(IReadOnlyList<PassportMonetaryLedgerEvent> accountEvents)
+        {
+            return accountEvents
+                .OrderBy(item => item.AccountSequence)
+                .ThenBy(item => item.CreatedUtc, StringComparer.Ordinal)
+                .ThenBy(item => item.EventId, StringComparer.Ordinal)
+                .Select(item => new Dictionary<string, object?>
+                {
+                    ["account_sequence"] = item.AccountSequence,
+                    ["event_id"] = item.EventId,
+                    ["prior_account_event_hash"] = item.PriorAccountEventHash,
+                    ["event_hash_sha256"] = item.EventHashSha256
+                })
+                .ToList();
+        }
+
+        private static List<Dictionary<string, object?>> CopyWalletKeyHistory(
+            string workspaceRoot,
+            string exportRoot,
+            IReadOnlyList<PassportMonetaryLedgerEvent> accountEvents)
+        {
+            var walletKeyIds = accountEvents
+                .Select(item => item.WalletKeyId)
+                .Where(item => !string.IsNullOrWhiteSpace(item))
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+            var identityIds = accountEvents
+                .Select(item => item.IdentityId)
+                .Where(item => !string.IsNullOrWhiteSpace(item))
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+            var sourceRoots = new[]
+            {
+                Path.Combine(workspaceRoot, "records", "passport", "wallet", "bindings"),
+                Path.Combine(workspaceRoot, "records", "passport", "wallet", "revocations")
+            };
+            var copied = new List<Dictionary<string, object?>>();
+            var copiedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var sourceRoot in sourceRoots.Where(Directory.Exists))
+            {
+                foreach (var file in Directory.GetFiles(sourceRoot, "*.json").OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase))
+                {
+                    using var document = JsonDocument.Parse(File.ReadAllText(file));
+                    var root = document.RootElement;
+                    var walletKeyId = ReadString(root, "wallet_key_id");
+                    var identityId = ReadString(root, "archrealms_identity_id");
+                    if (!walletKeyIds.Contains(walletKeyId, StringComparer.Ordinal)
+                        || !identityIds.Contains(identityId, StringComparer.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    CopyExportMaterial(workspaceRoot, exportRoot, file, copied, copiedPaths, "wallet_key_history");
+
+                    if (root.TryGetProperty("wallet_public_key_path", out var publicKeyPathElement))
+                    {
+                        var publicKeyPath = ResolveWorkspaceRelativePath(workspaceRoot, publicKeyPathElement.GetString() ?? string.Empty);
+                        if (File.Exists(publicKeyPath))
+                        {
+                            CopyExportMaterial(workspaceRoot, exportRoot, publicKeyPath, copied, copiedPaths, "wallet_public_key");
+                        }
+                    }
+                }
+            }
+
+            return copied;
+        }
+
+        private static void CopyExportMaterial(
+            string workspaceRoot,
+            string exportRoot,
+            string sourcePath,
+            List<Dictionary<string, object?>> copied,
+            HashSet<string> copiedPaths,
+            string materialType)
+        {
+            var relativePath = ToWorkspaceRelativePath(workspaceRoot, sourcePath);
+            if (relativePath.StartsWith("records/passport/wallet/keys/", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            if (!copiedPaths.Add(relativePath))
+            {
+                return;
+            }
+
+            var exportPath = Path.Combine(exportRoot, relativePath.Replace('/', Path.DirectorySeparatorChar));
+            CopyFile(sourcePath, exportPath);
+            copied.Add(new Dictionary<string, object?>
+            {
+                ["material_type"] = materialType,
+                ["source_path"] = relativePath,
+                ["export_path"] = ToWorkspaceRelativePath(exportRoot, exportPath),
+                ["sha256"] = ComputeSha256(File.ReadAllBytes(exportPath))
+            });
+        }
+
+        private void VerifyExportedEvent(string exportRoot, JsonElement manifest, JsonElement eventRow, List<string> failures)
+        {
+            var eventId = ReadString(eventRow, "event_id");
+            var relativePath = ReadString(eventRow, "export_path");
+            var eventPath = ResolveWorkspaceRelativePath(exportRoot, relativePath);
+            if (!File.Exists(eventPath))
+            {
+                failures.Add("Missing exported event file for event " + eventId + ".");
+                return;
+            }
+
+            var expectedFileHash = ReadString(eventRow, "event_file_sha256");
+            if (!string.IsNullOrWhiteSpace(expectedFileHash))
+            {
+                var actualFileHash = ComputeSha256(File.ReadAllBytes(eventPath));
+                if (!string.Equals(actualFileHash, expectedFileHash, StringComparison.OrdinalIgnoreCase))
+                {
+                    failures.Add("Exported event file hash mismatch for event " + eventId + ".");
+                }
+            }
+
+            var ledgerEvent = JsonSerializer.Deserialize<PassportMonetaryLedgerEvent>(File.ReadAllText(eventPath));
+            if (ledgerEvent == null)
+            {
+                failures.Add("Unable to parse exported event " + eventId + ".");
+                return;
+            }
+
+            if (!string.Equals(ledgerEvent.EventId, eventId, StringComparison.Ordinal))
+            {
+                failures.Add("Exported event ID mismatch for " + eventId + ".");
+            }
+
+            if (!string.Equals(ledgerEvent.EventHashSha256, ReadString(eventRow, "event_hash_sha256"), StringComparison.OrdinalIgnoreCase))
+            {
+                failures.Add("Export manifest event hash mismatch for " + eventId + ".");
+            }
+
+            var computedEventHash = ComputeEventHash(ledgerEvent);
+            if (!string.Equals(computedEventHash, ledgerEvent.EventHashSha256, StringComparison.OrdinalIgnoreCase))
+            {
+                failures.Add("Exported event hash is invalid for event " + eventId + ".");
+            }
+
+            if (eventRow.TryGetProperty("inclusion_proof", out var proof))
+            {
+                var leafHash = ComputeTransparencyLeafHash(ledgerEvent);
+                if (!string.Equals(leafHash, ReadString(proof, "leaf_hash_sha256"), StringComparison.OrdinalIgnoreCase))
+                {
+                    failures.Add("Inclusion proof leaf hash does not match event " + eventId + ".");
+                }
+
+                VerifyMerkleProof(proof, ReadString(manifest, "transparency_root_sha256"), failures);
+            }
+            else
+            {
+                failures.Add("Exported event is missing an inclusion proof: " + eventId + ".");
+            }
+        }
+
+        private static void VerifyTransparencyRoot(string transparencyRootPath, string expectedRootSha256, List<string> failures)
+        {
+            using var document = JsonDocument.Parse(File.ReadAllText(transparencyRootPath));
+            var root = document.RootElement;
+            if (!Matches(root, "record_type", "passport_monetary_transparency_root"))
+            {
+                failures.Add("Invalid transparency root record type.");
+                return;
+            }
+
+            if (!Matches(root, "root_algorithm", "merkle_sha256_v1"))
+            {
+                failures.Add("Unsupported transparency root algorithm.");
+                return;
+            }
+
+            if (!string.Equals(ReadString(root, "epoch_root_sha256"), expectedRootSha256, StringComparison.OrdinalIgnoreCase))
+            {
+                failures.Add("Transparency root hash does not match manifest.");
+            }
+
+            if (!root.TryGetProperty("event_leaves", out var eventLeaves) || eventLeaves.ValueKind != JsonValueKind.Array)
+            {
+                failures.Add("Transparency root is missing event leaves.");
+                return;
+            }
+
+            var leafHashes = eventLeaves
+                .EnumerateArray()
+                .Select(item => ReadString(item, "leaf_hash_sha256"))
+                .ToArray();
+            var computedRoot = ComputeMerkleRoot(leafHashes);
+            if (!string.Equals(computedRoot, expectedRootSha256, StringComparison.OrdinalIgnoreCase))
+            {
+                failures.Add("Transparency root cannot be recomputed from event leaves.");
+            }
+        }
+
+        private static void VerifyKeyHistory(string exportRoot, JsonElement keyHistory, List<string> failures)
+        {
+            foreach (var item in keyHistory.EnumerateArray())
+            {
+                var exportPath = ResolveWorkspaceRelativePath(exportRoot, ReadString(item, "export_path"));
+                if (!File.Exists(exportPath))
+                {
+                    failures.Add("Missing key-history export material: " + ReadString(item, "export_path") + ".");
+                    continue;
+                }
+
+                var expectedHash = ReadString(item, "sha256");
+                var actualHash = ComputeSha256(File.ReadAllBytes(exportPath));
+                if (!string.Equals(actualHash, expectedHash, StringComparison.OrdinalIgnoreCase))
+                {
+                    failures.Add("Key-history export material hash mismatch: " + ReadString(item, "export_path") + ".");
+                }
+
+                if (ReadString(item, "export_path").Contains("records/passport/wallet/keys/", StringComparison.OrdinalIgnoreCase))
+                {
+                    failures.Add("Account export must not include protected wallet private key material.");
+                }
+            }
+        }
+
+        private static void VerifyManifestBalances(JsonElement manifest, PassportMonetaryLedgerReplayResult replay, List<string> failures)
+        {
+            if (!manifest.TryGetProperty("balances", out var balances) || balances.ValueKind != JsonValueKind.Array)
+            {
+                failures.Add("Manifest does not contain replay balances.");
+                return;
+            }
+
+            foreach (var manifestBalance in balances.EnumerateArray())
+            {
+                var accountId = ReadString(manifestBalance, "account_id");
+                var assetCode = ReadString(manifestBalance, "asset_code");
+                var replayBalance = replay.Balances.FirstOrDefault(balance =>
+                    string.Equals(balance.AccountId, accountId, StringComparison.Ordinal)
+                    && string.Equals(balance.AssetCode, assetCode, StringComparison.Ordinal));
+                if (replayBalance == null)
+                {
+                    failures.Add("Replay does not contain manifest balance for " + accountId + " " + assetCode + ".");
+                    continue;
+                }
+
+                if (replayBalance.AvailableBaseUnits != ReadInt64(manifestBalance, "available_base_units")
+                    || replayBalance.EscrowedBaseUnits != ReadInt64(manifestBalance, "escrowed_base_units")
+                    || replayBalance.BurnedBaseUnits != ReadInt64(manifestBalance, "burned_base_units"))
+                {
+                    failures.Add("Replay balance does not match manifest for " + accountId + " " + assetCode + ".");
+                }
+            }
+        }
+
+        private static void VerifyManifestAccountHashChain(JsonElement manifest, List<string> failures)
+        {
+            if (!manifest.TryGetProperty("events", out var events) || events.ValueKind != JsonValueKind.Array)
+            {
+                return;
+            }
+
+            if (!manifest.TryGetProperty("account_hash_chain", out var chain) || chain.ValueKind != JsonValueKind.Array)
+            {
+                failures.Add("Manifest does not contain an account hash chain.");
+                return;
+            }
+
+            var eventRows = events
+                .EnumerateArray()
+                .ToDictionary(
+                    item => ReadString(item, "event_id"),
+                    item => item.Clone(),
+                    StringComparer.Ordinal);
+            var expectedSequence = 1L;
+            var expectedPriorHash = string.Empty;
+            foreach (var chainItem in chain.EnumerateArray().OrderBy(item => ReadInt64(item, "account_sequence")))
+            {
+                var eventId = ReadString(chainItem, "event_id");
+                if (!eventRows.TryGetValue(eventId, out var eventRow))
+                {
+                    failures.Add("Account hash chain references an event missing from the export manifest: " + eventId + ".");
+                    continue;
+                }
+
+                var sequence = ReadInt64(chainItem, "account_sequence");
+                if (sequence != expectedSequence)
+                {
+                    failures.Add("Account hash chain expected sequence " + expectedSequence + " but found " + sequence + ".");
+                }
+
+                if (!string.Equals(ReadString(chainItem, "prior_account_event_hash"), expectedPriorHash, StringComparison.OrdinalIgnoreCase))
+                {
+                    failures.Add("Account hash chain prior hash mismatch at sequence " + sequence + ".");
+                }
+
+                if (!string.Equals(ReadString(chainItem, "event_hash_sha256"), ReadString(eventRow, "event_hash_sha256"), StringComparison.OrdinalIgnoreCase))
+                {
+                    failures.Add("Account hash chain event hash mismatch for event " + eventId + ".");
+                }
+
+                expectedPriorHash = ReadString(chainItem, "event_hash_sha256");
+                expectedSequence++;
+            }
+
+            if (chain.GetArrayLength() != eventRows.Count)
+            {
+                failures.Add("Account hash chain length does not match exported event count.");
+            }
+        }
+
         private IEnumerable<(string Path, PassportMonetaryLedgerEvent Event)> ReadEvents(string workspaceRoot)
         {
             var eventsRoot = GetEventsRoot(workspaceRoot);
@@ -989,6 +1607,36 @@ namespace ArchrealmsPassport.Windows.Services
                 : Path.GetFullPath(Path.Combine(workspaceRoot, normalized));
         }
 
+        private static bool Matches(JsonElement root, string propertyName, string expectedValue)
+        {
+            return string.Equals(ReadString(root, propertyName), expectedValue, StringComparison.Ordinal);
+        }
+
+        private static string ReadString(JsonElement root, string propertyName)
+        {
+            return root.TryGetProperty(propertyName, out var value) ? value.GetString() ?? string.Empty : string.Empty;
+        }
+
+        private static long ReadInt64(JsonElement root, string propertyName)
+        {
+            if (!root.TryGetProperty(propertyName, out var value))
+            {
+                return 0;
+            }
+
+            if (value.ValueKind == JsonValueKind.Number && value.TryGetInt64(out var number))
+            {
+                return number;
+            }
+
+            return value.ValueKind == JsonValueKind.String && long.TryParse(value.GetString(), out var parsed) ? parsed : 0;
+        }
+
+        private static string NormalizeHash(string hash)
+        {
+            return (hash ?? string.Empty).Trim().ToLowerInvariant();
+        }
+
         private static bool VerifySignature(string publicKeyPath, byte[] data, byte[] signatureBytes)
         {
             using var rsa = RSA.Create();
@@ -1019,6 +1667,36 @@ namespace ArchrealmsPassport.Windows.Services
         private static string ComputeSha256(byte[] value)
         {
             return Convert.ToHexString(SHA256.HashData(value)).ToLowerInvariant();
+        }
+
+        private sealed class TransparencySnapshot
+        {
+            public string[] EventHashes { get; set; } = Array.Empty<string>();
+
+            public Dictionary<string, object?>[] EventLeaves { get; set; } = Array.Empty<Dictionary<string, object?>>();
+
+            public TransparencyLeaf[] Leaves { get; set; } = Array.Empty<TransparencyLeaf>();
+
+            public string[] LeafHashes { get; set; } = Array.Empty<string>();
+
+            public string EpochRootSha256 { get; set; } = string.Empty;
+        }
+
+        private sealed class TransparencyLeaf
+        {
+            public int Index { get; set; }
+
+            public string EventId { get; set; } = string.Empty;
+
+            public long GlobalSequence { get; set; }
+
+            public string AccountId { get; set; } = string.Empty;
+
+            public string AssetCode { get; set; } = string.Empty;
+
+            public string EventHashSha256 { get; set; } = string.Empty;
+
+            public string LeafHashSha256 { get; set; } = string.Empty;
         }
 
         private static PassportMonetaryLedgerAppendResult FailedAppend(string message)

@@ -216,6 +216,94 @@ public sealed class PassportMonetaryLedgerServiceTests
     }
 
     [Fact]
+    public void AccountExportContainsInclusionProofsKeyHistoryAndVerifierMaterial()
+    {
+        using var workspace = PassportTestWorkspace.Create();
+        var releaseLane = PassportReleaseLane.CreateDefault("staging");
+        var wallet = new PassportWalletKeyService(releaseLane).CreateAndBindWalletKey(
+            workspace.Root,
+            workspace.IdentityId,
+            workspace.DeviceId,
+            workspace.KeyReferencePath);
+        Assert.True(wallet.Succeeded, wallet.Message);
+
+        var service = new PassportMonetaryLedgerService(releaseLane);
+        var accountId = "account-" + workspace.IdentityId;
+        AssertAppend(service.AppendEvent(
+            workspace.Root,
+            accountId,
+            workspace.IdentityId,
+            wallet.WalletKeyId,
+            PassportMonetaryLedgerService.EventCrownCreditIssue,
+            PassportMonetaryLedgerService.AssetCrownCredit,
+            300,
+            walletKeyReferencePath: wallet.WalletKeyReferencePath,
+            walletPublicKeyPath: wallet.WalletPublicKeyPath));
+        AssertAppend(service.AppendEvent(
+            workspace.Root,
+            accountId,
+            workspace.IdentityId,
+            wallet.WalletKeyId,
+            PassportMonetaryLedgerService.EventCrownCreditEscrow,
+            PassportMonetaryLedgerService.AssetCrownCredit,
+            50,
+            walletKeyReferencePath: wallet.WalletKeyReferencePath,
+            walletPublicKeyPath: wallet.WalletPublicKeyPath));
+
+        var export = service.CreateAccountExport(workspace.Root, accountId);
+
+        Assert.True(export.Succeeded, export.Message);
+        var manifest = PassportTestWorkspace.ReadJson(export.ManifestPath);
+        var firstEvent = manifest.GetProperty("events").EnumerateArray().First();
+        var proof = firstEvent.GetProperty("inclusion_proof");
+        Assert.Equal("merkle_sha256_v1", PassportTestWorkspace.GetString(proof, "root_algorithm"));
+        Assert.Equal(PassportTestWorkspace.GetString(manifest, "transparency_root_sha256"), PassportTestWorkspace.GetString(proof, "epoch_root_sha256"));
+        Assert.Equal("Archrealms.LedgerVerifier", PassportTestWorkspace.GetString(manifest.GetProperty("verifier"), "tool_name"));
+
+        var keyHistory = manifest.GetProperty("key_history").EnumerateArray().ToArray();
+        Assert.Contains(keyHistory, item => PassportTestWorkspace.GetString(item, "material_type") == "wallet_key_history");
+        Assert.Contains(keyHistory, item => PassportTestWorkspace.GetString(item, "material_type") == "wallet_public_key");
+        Assert.DoesNotContain(keyHistory, item => PassportTestWorkspace.GetString(item, "export_path").Contains("records/passport/wallet/keys/", System.StringComparison.OrdinalIgnoreCase));
+
+        var verification = service.VerifyAccountExport(export.ExportRoot);
+
+        Assert.True(verification.Succeeded, string.Join("; ", verification.Failures));
+        Assert.Equal(2, verification.EventCount);
+        Assert.False(string.IsNullOrWhiteSpace(verification.ExportRootSha256));
+    }
+
+    [Fact]
+    public void AccountExportVerifierRejectsTamperedEventFiles()
+    {
+        using var workspace = PassportTestWorkspace.Create();
+        var releaseLane = PassportReleaseLane.CreateDefault("staging");
+        var service = new PassportMonetaryLedgerService(releaseLane);
+        var accountId = "account-test";
+        AssertAppend(service.AppendEvent(
+            workspace.Root,
+            accountId,
+            workspace.IdentityId,
+            "wallet-key-test",
+            PassportMonetaryLedgerService.EventCrownCreditIssue,
+            PassportMonetaryLedgerService.AssetCrownCredit,
+            300));
+
+        var export = service.CreateAccountExport(workspace.Root, accountId);
+        Assert.True(export.Succeeded, export.Message);
+        var manifest = PassportTestWorkspace.ReadJson(export.ManifestPath);
+        var exportedEventPath = Path.Combine(
+            export.ExportRoot,
+            PassportTestWorkspace.GetString(manifest.GetProperty("events").EnumerateArray().First(), "export_path")
+                .Replace('/', Path.DirectorySeparatorChar));
+        File.WriteAllText(exportedEventPath, File.ReadAllText(exportedEventPath).Replace("\"amount_base_units\": 300", "\"amount_base_units\": 301"));
+
+        var verification = service.VerifyAccountExport(export.ExportRoot);
+
+        Assert.False(verification.Succeeded);
+        Assert.Contains(verification.Failures, failure => failure.Contains("hash", System.StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public void ProductionLedgerAppendRequiresWalletSignature()
     {
         using var workspace = PassportTestWorkspace.Create();
