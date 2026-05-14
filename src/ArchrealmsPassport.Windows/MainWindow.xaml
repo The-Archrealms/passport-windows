@@ -304,6 +304,41 @@
                 </ScrollViewer>
             </TabItem>
 
+            <TabItem Header="Registry">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <Grid Margin="0,18,0,0">
+                        <Border MaxWidth="820"
+                                HorizontalAlignment="Left"
+                                Style="{StaticResource CardStyle}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Registry" />
+
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Filter" />
+                                <TextBox AutomationProperties.AutomationId="RegistryFilterTextBox"
+                                         Style="{StaticResource InputTextBoxStyle}"
+                                         Text="{Binding RegistryFilterText, UpdateSourceTrigger=PropertyChanged}" />
+
+                                <WrapPanel Margin="0,16,0,0">
+                                    <Button AutomationProperties.AutomationId="RefreshRegistryBrowserButton" Style="{StaticResource ActionButtonStyle}" Command="{Binding RefreshRegistryBrowserCommand}" Content="Refresh Registry" />
+                                </WrapPanel>
+
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Status" />
+                                <TextBlock AutomationProperties.AutomationId="RegistryBrowserSummaryText" Style="{StaticResource StatusValueStyle}" Text="{Binding RegistryBrowserSummaryText}" />
+
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Records" />
+                                <TextBox AutomationProperties.AutomationId="RegistryRecordListTextBox"
+                                         Height="430"
+                                         Style="{StaticResource CodeTextBoxStyle}"
+                                         IsReadOnly="True"
+                                         Text="{Binding RegistryRecordListText, Mode=OneWay}"
+                                         AcceptsReturn="True"
+                                         VerticalScrollBarVisibility="Auto" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </ScrollViewer>
+            </TabItem>
+
             <TabItem Header="Activity">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <Grid Margin="0,18,0,0">

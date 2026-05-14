@@ -24,7 +24,7 @@ public sealed class PassportRegistryTemplateTests
     [InlineData("monetary-ledger-event-record.template.json", "passport_monetary_ledger_event")]
     [InlineData("wallet-key-binding-record.template.json", "passport_wallet_key_binding")]
     [InlineData("admin-authority-record.template.json", "passport_admin_authority")]
-    [InlineData("crown-credit-capacity-report-record.template.json", "passport_crown_credit_capacity_report")]
+    [InlineData("crown-credit-capacity-report-record.template.json", "passport_cc_capacity_report")]
     [InlineData("arch-cc-conversion-quote-record.template.json", "passport_arch_cc_conversion_quote")]
     [InlineData("arch-cc-conversion-execution-record.template.json", "passport_arch_cc_conversion_execution")]
     [InlineData("storage-redemption-record.template.json", "passport_storage_redemption")]

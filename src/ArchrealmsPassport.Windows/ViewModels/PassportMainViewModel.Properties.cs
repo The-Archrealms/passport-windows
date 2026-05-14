@@ -95,6 +95,9 @@ namespace ArchrealmsPassport.Windows.ViewModels
         public string ChallengeSignatureText { get { return _challengeSignatureText; } set { SetField(ref _challengeSignatureText, value); } }
         public string RegistrySubmissionText { get { return _registrySubmissionText; } set { SetField(ref _registrySubmissionText, value); } }
         public string RegistrySubmissionCidText { get { return _registrySubmissionCidText; } set { SetField(ref _registrySubmissionCidText, value); } }
+        public string RegistryFilterText { get { return _registryFilterText; } set { SetField(ref _registryFilterText, value); } }
+        public string RegistryBrowserSummaryText { get { return _registryBrowserSummaryText; } private set { SetField(ref _registryBrowserSummaryText, value); } }
+        public string RegistryRecordListText { get { return _registryRecordListText; } private set { SetField(ref _registryRecordListText, value); } }
         public string ReadOnlyIpfsCid { get { return _readOnlyIpfsCid; } set { SetField(ref _readOnlyIpfsCid, value); } }
         public string ReadOnlyIpfsRelativePath { get { return _readOnlyIpfsRelativePath; } set { SetField(ref _readOnlyIpfsRelativePath, value); } }
         public string ReadOnlyIpfsPreviewText { get { return _readOnlyIpfsPreviewText; } set { SetField(ref _readOnlyIpfsPreviewText, value); } }

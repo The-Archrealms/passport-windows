@@ -38,6 +38,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
         private readonly AsyncRelayCommand _signChallengeCommand;
         private readonly AsyncRelayCommand _createRegistrySubmissionCommand;
         private readonly AsyncRelayCommand _publishRegistrySubmissionCommand;
+        private readonly AsyncRelayCommand _refreshRegistryBrowserCommand;
         private readonly AsyncRelayCommand _previewReadOnlyIpfsFileCommand;
         private readonly AsyncRelayCommand _fetchReadOnlyIpfsFileCommand;
         private readonly AsyncRelayCommand _exportCarCommand;
@@ -62,6 +63,9 @@ namespace ArchrealmsPassport.Windows.ViewModels
         private string _challengeSignatureText = "No signed challenge yet";
         private string _registrySubmissionText = "No registration package yet";
         private string _registrySubmissionCidText = "Not published";
+        private string _registryFilterText = string.Empty;
+        private string _registryBrowserSummaryText = "No registry records loaded.";
+        private string _registryRecordListText = "No registry records loaded.";
         private string _readOnlyIpfsCid = string.Empty;
         private string _readOnlyIpfsRelativePath = string.Empty;
         private string _readOnlyIpfsPreviewText = "No IPFS file preview yet";
@@ -146,6 +150,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
             _signChallengeCommand = new AsyncRelayCommand(SignChallengeAsync, CanUseActiveDeviceCredential);
             _createRegistrySubmissionCommand = new AsyncRelayCommand(RegisterWithArchrealmsAsync, CanRegisterWithArchrealms);
             _publishRegistrySubmissionCommand = new AsyncRelayCommand(PublishRegistrySubmissionAsync, CanPublishRegistrySubmission);
+            _refreshRegistryBrowserCommand = new AsyncRelayCommand(RefreshRegistryBrowserAsync, CanRefreshRegistryBrowser);
             _previewReadOnlyIpfsFileCommand = new AsyncRelayCommand(PreviewReadOnlyIpfsFileAsync, CanReadOnlyAccessIpfsFile);
             _fetchReadOnlyIpfsFileCommand = new AsyncRelayCommand(FetchReadOnlyIpfsFileAsync, CanReadOnlyAccessIpfsFile);
             _exportCarCommand = new AsyncRelayCommand(ExportCarAsync, CanReadOnlyAccessIpfsFile);
@@ -174,6 +179,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
             SignChallengeCommand = _signChallengeCommand;
             CreateRegistrySubmissionCommand = _createRegistrySubmissionCommand;
             PublishRegistrySubmissionCommand = _publishRegistrySubmissionCommand;
+            RefreshRegistryBrowserCommand = _refreshRegistryBrowserCommand;
             PreviewReadOnlyIpfsFileCommand = _previewReadOnlyIpfsFileCommand;
             FetchReadOnlyIpfsFileCommand = _fetchReadOnlyIpfsFileCommand;
             ExportCarCommand = _exportCarCommand;
@@ -209,6 +215,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
         public ICommand SignChallengeCommand { get; private set; }
         public ICommand CreateRegistrySubmissionCommand { get; private set; }
         public ICommand PublishRegistrySubmissionCommand { get; private set; }
+        public ICommand RefreshRegistryBrowserCommand { get; private set; }
         public ICommand PreviewReadOnlyIpfsFileCommand { get; private set; }
         public ICommand FetchReadOnlyIpfsFileCommand { get; private set; }
         public ICommand ExportCarCommand { get; private set; }

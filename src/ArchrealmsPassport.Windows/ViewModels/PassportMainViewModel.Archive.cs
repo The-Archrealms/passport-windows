@@ -674,6 +674,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
             _signChallengeCommand.RaiseCanExecuteChanged();
             _createRegistrySubmissionCommand.RaiseCanExecuteChanged();
             _publishRegistrySubmissionCommand.RaiseCanExecuteChanged();
+            _refreshRegistryBrowserCommand.RaiseCanExecuteChanged();
             _previewReadOnlyIpfsFileCommand.RaiseCanExecuteChanged();
             _fetchReadOnlyIpfsFileCommand.RaiseCanExecuteChanged();
             _exportCarCommand.RaiseCanExecuteChanged();
