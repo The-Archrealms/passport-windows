@@ -191,6 +191,218 @@ namespace ArchrealmsPassport.Windows.Services
             }
         }
 
+        public PassportWalletKeyRevocationResult RevokeWalletKey(
+            string workspaceRoot,
+            string identityId,
+            string authorizingDeviceId,
+            string authorizingDeviceKeyReferencePath,
+            string walletKeyId,
+            string reasonCode,
+            bool freezePendingEscrow)
+        {
+            try
+            {
+                var resolvedWorkspaceRoot = PassportEnvironment.ResolveWorkspaceRoot(workspaceRoot);
+                var normalizedIdentityId = NormalizeRequired(identityId, "identity ID");
+                var normalizedDeviceId = NormalizeRequired(authorizingDeviceId, "authorizing device ID");
+                var normalizedDeviceKeyReferencePath = NormalizeRequired(authorizingDeviceKeyReferencePath, "authorizing device key reference path");
+                var normalizedWalletKeyId = NormalizeRequired(walletKeyId, "wallet key ID");
+                var normalizedReasonCode = NormalizeReasonCode(reasonCode);
+
+                var deviceRecord = FindLatestDeviceRecord(resolvedWorkspaceRoot, normalizedIdentityId, normalizedDeviceId, "active");
+                if (deviceRecord == null)
+                {
+                    return FailedRevocation("The active authorizing device credential record could not be found.");
+                }
+
+                var devicePublicKeyPath = ResolvePublicKeyPath(resolvedWorkspaceRoot, deviceRecord.Value.RootElement);
+                if (string.IsNullOrWhiteSpace(devicePublicKeyPath) || !File.Exists(devicePublicKeyPath))
+                {
+                    return FailedRevocation("The authorizing device public key could not be resolved.");
+                }
+
+                var binding = FindLatestWalletBinding(resolvedWorkspaceRoot, normalizedIdentityId, normalizedWalletKeyId);
+                if (binding == null)
+                {
+                    return FailedRevocation("The wallet key binding record could not be found.");
+                }
+
+                if (!string.Equals(ReadString(binding.Value.RootElement, "status"), "active", StringComparison.Ordinal))
+                {
+                    return FailedRevocation("The wallet key binding is not active.");
+                }
+
+                if (!IsWalletKeyActive(resolvedWorkspaceRoot, normalizedIdentityId, normalizedWalletKeyId))
+                {
+                    return FailedRevocation("The wallet key is already revoked or inactive.");
+                }
+
+                var timestamp = DateTime.UtcNow.ToString("yyyyMMddTHHmmssZ");
+                var createdUtc = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
+                var revocationsRoot = Path.Combine(resolvedWorkspaceRoot, "records", "passport", "wallet", "revocations");
+                Directory.CreateDirectory(revocationsRoot);
+
+                var revocationRecordPath = Path.Combine(revocationsRoot, timestamp + "-" + normalizedWalletKeyId + ".json");
+                var revocationRecord = new Dictionary<string, object?>
+                {
+                    ["schema_version"] = 1,
+                    ["record_type"] = "passport_wallet_key_revocation",
+                    ["record_id"] = timestamp + "-" + normalizedWalletKeyId,
+                    ["created_utc"] = createdUtc,
+                    ["release_lane"] = releaseLane.Lane,
+                    ["ledger_namespace"] = releaseLane.LedgerNamespace,
+                    ["policy_version"] = releaseLane.PolicyVersion,
+                    ["status"] = "revoked",
+                    ["archrealms_identity_id"] = normalizedIdentityId,
+                    ["authorizing_device_id"] = normalizedDeviceId,
+                    ["wallet_key_id"] = normalizedWalletKeyId,
+                    ["wallet_binding_record_path"] = ToWorkspaceRelativePath(resolvedWorkspaceRoot, binding.Value.RecordPath),
+                    ["reason_code"] = normalizedReasonCode,
+                    ["freeze_pending_escrow"] = freezePendingEscrow,
+                    ["ai_approved"] = false,
+                    ["summary"] = "Passport identity/device signed revocation of a wallet key. AI is not an approval authority."
+                };
+                File.WriteAllText(revocationRecordPath, JsonSerializer.Serialize(revocationRecord, JsonOptions), Encoding.UTF8);
+
+                var revocationBytes = File.ReadAllBytes(revocationRecordPath);
+                var signatureBytes = PassportDeviceKeyStore.SignData(normalizedDeviceKeyReferencePath, revocationBytes);
+                var verified = VerifySignature(devicePublicKeyPath, revocationBytes, signatureBytes);
+                var signaturePath = Path.Combine(revocationsRoot, timestamp + "-" + normalizedWalletKeyId + ".signature.json");
+                var signatureRecord = new Dictionary<string, object?>
+                {
+                    ["schema_version"] = 1,
+                    ["record_type"] = "passport_wallet_key_revocation_signature",
+                    ["record_id"] = timestamp + "-" + normalizedWalletKeyId + "-signature",
+                    ["created_utc"] = createdUtc,
+                    ["release_lane"] = releaseLane.Lane,
+                    ["ledger_namespace"] = releaseLane.LedgerNamespace,
+                    ["archrealms_identity_id"] = normalizedIdentityId,
+                    ["authorizing_device_id"] = normalizedDeviceId,
+                    ["wallet_key_id"] = normalizedWalletKeyId,
+                    ["revocation_record_path"] = ToWorkspaceRelativePath(resolvedWorkspaceRoot, revocationRecordPath),
+                    ["revocation_record_sha256"] = ComputeSha256(revocationBytes),
+                    ["signature_algorithm"] = "RSA_PKCS1_SHA256",
+                    ["signature_base64"] = Convert.ToBase64String(signatureBytes),
+                    ["device_public_key_path"] = ToWorkspaceRelativePath(resolvedWorkspaceRoot, devicePublicKeyPath),
+                    ["verified_with_device_key"] = verified,
+                    ["summary"] = "Identity/device signature authorizing the Passport wallet key revocation."
+                };
+                File.WriteAllText(signaturePath, JsonSerializer.Serialize(signatureRecord, JsonOptions), Encoding.UTF8);
+
+                return new PassportWalletKeyRevocationResult
+                {
+                    Succeeded = true,
+                    Message = "Wallet key revoked.",
+                    WalletKeyId = normalizedWalletKeyId,
+                    RevocationRecordPath = revocationRecordPath,
+                    RevocationSignaturePath = signaturePath,
+                    VerifiedWithDeviceKey = verified
+                };
+            }
+            catch (Exception ex)
+            {
+                return FailedRevocation("Wallet key revocation failed: " + ex.Message);
+            }
+        }
+
+        public PassportWalletKeyRotationResult RotateWalletKey(
+            string workspaceRoot,
+            string identityId,
+            string authorizingDeviceId,
+            string authorizingDeviceKeyReferencePath,
+            string currentWalletKeyId,
+            bool freezePendingEscrow)
+        {
+            var revocation = RevokeWalletKey(
+                workspaceRoot,
+                identityId,
+                authorizingDeviceId,
+                authorizingDeviceKeyReferencePath,
+                currentWalletKeyId,
+                "wallet_rotation",
+                freezePendingEscrow);
+
+            if (!revocation.Succeeded)
+            {
+                return FailedRotation(revocation.Message);
+            }
+
+            var binding = CreateAndBindWalletKey(
+                workspaceRoot,
+                identityId,
+                authorizingDeviceId,
+                authorizingDeviceKeyReferencePath);
+
+            if (!binding.Succeeded)
+            {
+                return FailedRotation(binding.Message, revocation);
+            }
+
+            return new PassportWalletKeyRotationResult
+            {
+                Succeeded = true,
+                Message = "Wallet key rotated.",
+                Revocation = revocation,
+                Binding = binding
+            };
+        }
+
+        public bool IsWalletKeyActive(string workspaceRoot, string identityId, string walletKeyId)
+        {
+            try
+            {
+                var resolvedWorkspaceRoot = PassportEnvironment.ResolveWorkspaceRoot(workspaceRoot);
+                var normalizedIdentityId = NormalizeRequired(identityId, "identity ID");
+                var normalizedWalletKeyId = NormalizeRequired(walletKeyId, "wallet key ID");
+                var binding = FindLatestWalletBinding(resolvedWorkspaceRoot, normalizedIdentityId, normalizedWalletKeyId);
+                if (binding == null)
+                {
+                    return false;
+                }
+
+                if (!MatchesCurrentReleaseLane(binding.Value.RootElement))
+                {
+                    return false;
+                }
+
+                var bindingCreatedUtc = ReadString(binding.Value.RootElement, "created_utc");
+                return !EnumerateWalletRevocations(resolvedWorkspaceRoot, normalizedIdentityId, normalizedWalletKeyId)
+                    .Any(revocation => IsSameOrAfter(ReadString(revocation.RootElement, "created_utc"), bindingCreatedUtc));
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        public bool IsWalletKeyAuthorizedAt(string workspaceRoot, string identityId, string walletKeyId, string eventCreatedUtc)
+        {
+            try
+            {
+                var resolvedWorkspaceRoot = PassportEnvironment.ResolveWorkspaceRoot(workspaceRoot);
+                var normalizedIdentityId = NormalizeRequired(identityId, "identity ID");
+                var normalizedWalletKeyId = NormalizeRequired(walletKeyId, "wallet key ID");
+                var binding = FindLatestWalletBinding(resolvedWorkspaceRoot, normalizedIdentityId, normalizedWalletKeyId);
+                if (binding == null || !MatchesCurrentReleaseLane(binding.Value.RootElement))
+                {
+                    return false;
+                }
+
+                var bindingCreatedUtc = ReadString(binding.Value.RootElement, "created_utc");
+                if (!IsSameOrAfter(eventCreatedUtc, bindingCreatedUtc))
+                {
+                    return false;
+                }
+
+                return !EnumerateWalletRevocations(resolvedWorkspaceRoot, normalizedIdentityId, normalizedWalletKeyId)
+                    .Any(revocation => IsAfter(eventCreatedUtc, ReadString(revocation.RootElement, "created_utc")));
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         private static (string RecordPath, JsonElement RootElement)? FindLatestDeviceRecord(
             string workspaceRoot,
             string identityId,
@@ -219,6 +431,63 @@ namespace ArchrealmsPassport.Windows.Services
             return null;
         }
 
+        private (string RecordPath, JsonElement RootElement)? FindLatestWalletBinding(
+            string workspaceRoot,
+            string identityId,
+            string walletKeyId)
+        {
+            var bindingsRoot = Path.Combine(workspaceRoot, "records", "passport", "wallet", "bindings");
+            if (!Directory.Exists(bindingsRoot))
+            {
+                return null;
+            }
+
+            foreach (var file in Directory.GetFiles(bindingsRoot, "*.json").OrderByDescending(Path.GetFileName))
+            {
+                if (file.EndsWith(".signature.json", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                using var document = JsonDocument.Parse(File.ReadAllText(file));
+                var root = document.RootElement.Clone();
+                if (Matches(root, "record_type", "passport_wallet_key_binding")
+                    && Matches(root, "archrealms_identity_id", identityId)
+                    && Matches(root, "wallet_key_id", walletKeyId))
+                {
+                    return (file, root);
+                }
+            }
+
+            return null;
+        }
+
+        private IEnumerable<(string RecordPath, JsonElement RootElement)> EnumerateWalletRevocations(
+            string workspaceRoot,
+            string identityId,
+            string walletKeyId)
+        {
+            var revocationsRoot = Path.Combine(workspaceRoot, "records", "passport", "wallet", "revocations");
+            if (!Directory.Exists(revocationsRoot))
+            {
+                return Array.Empty<(string RecordPath, JsonElement RootElement)>();
+            }
+
+            return Directory.GetFiles(revocationsRoot, "*.json")
+                .Where(file => !file.EndsWith(".signature.json", StringComparison.OrdinalIgnoreCase))
+                .OrderBy(Path.GetFileName)
+                .Select(file =>
+                {
+                    using var document = JsonDocument.Parse(File.ReadAllText(file));
+                    return (RecordPath: file, RootElement: document.RootElement.Clone());
+                })
+                .Where(item => Matches(item.RootElement, "record_type", "passport_wallet_key_revocation")
+                    && Matches(item.RootElement, "archrealms_identity_id", identityId)
+                    && Matches(item.RootElement, "wallet_key_id", walletKeyId)
+                    && MatchesCurrentReleaseLane(item.RootElement))
+                .ToArray();
+        }
+
         private static string ResolvePublicKeyPath(string workspaceRoot, JsonElement deviceRecord)
         {
             if (!TryGetString(deviceRecord, "public_key_path", out var publicKeyRelative))
@@ -227,6 +496,12 @@ namespace ArchrealmsPassport.Windows.Services
             }
 
             return Path.Combine(workspaceRoot, publicKeyRelative.Replace('/', Path.DirectorySeparatorChar));
+        }
+
+        private bool MatchesCurrentReleaseLane(JsonElement root)
+        {
+            return Matches(root, "release_lane", releaseLane.Lane)
+                && Matches(root, "ledger_namespace", releaseLane.LedgerNamespace);
         }
 
         private static bool VerifySignature(string publicKeyPath, byte[] data, byte[] signatureBytes)
@@ -254,6 +529,11 @@ namespace ArchrealmsPassport.Windows.Services
             return false;
         }
 
+        private static string ReadString(JsonElement root, string propertyName)
+        {
+            return TryGetString(root, propertyName, out var value) ? value : string.Empty;
+        }
+
         private static string NormalizeRequired(string value, string label)
         {
             var normalized = (value ?? string.Empty).Trim();
@@ -263,6 +543,36 @@ namespace ArchrealmsPassport.Windows.Services
             }
 
             return normalized;
+        }
+
+        private static string NormalizeReasonCode(string reasonCode)
+        {
+            var normalized = NormalizeRequired(reasonCode, "reason code").Trim().ToLowerInvariant().Replace(" ", "_").Replace("-", "_");
+            return normalized switch
+            {
+                "wallet_rotation" => normalized,
+                "wallet_loss" => normalized,
+                "wallet_compromise" => normalized,
+                "device_loss" => normalized,
+                "device_compromise" => normalized,
+                "user_request" => normalized,
+                "recovery" => normalized,
+                _ => "user_request"
+            };
+        }
+
+        private static bool IsSameOrAfter(string value, string baseline)
+        {
+            return DateTime.TryParse(value, out var valueTime)
+                && DateTime.TryParse(baseline, out var baselineTime)
+                && valueTime.ToUniversalTime() >= baselineTime.ToUniversalTime();
+        }
+
+        private static bool IsAfter(string value, string baseline)
+        {
+            return DateTime.TryParse(value, out var valueTime)
+                && DateTime.TryParse(baseline, out var baselineTime)
+                && valueTime.ToUniversalTime() > baselineTime.ToUniversalTime();
         }
 
         private static string ToWorkspaceRelativePath(string workspaceRoot, string path)
@@ -287,12 +597,33 @@ namespace ArchrealmsPassport.Windows.Services
             };
         }
 
+        private static PassportWalletKeyRevocationResult FailedRevocation(string message)
+        {
+            return new PassportWalletKeyRevocationResult
+            {
+                Succeeded = false,
+                Message = message
+            };
+        }
+
         private static PassportWalletSignatureResult FailedSignature(string message)
         {
             return new PassportWalletSignatureResult
             {
                 Succeeded = false,
                 Message = message
+            };
+        }
+
+        private static PassportWalletKeyRotationResult FailedRotation(
+            string message,
+            PassportWalletKeyRevocationResult? revocation = null)
+        {
+            return new PassportWalletKeyRotationResult
+            {
+                Succeeded = false,
+                Message = message,
+                Revocation = revocation ?? new PassportWalletKeyRevocationResult()
             };
         }
     }

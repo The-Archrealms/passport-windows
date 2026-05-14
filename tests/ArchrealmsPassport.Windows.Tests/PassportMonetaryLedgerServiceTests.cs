@@ -268,6 +268,61 @@ public sealed class PassportMonetaryLedgerServiceTests
         Assert.False(string.IsNullOrWhiteSpace(PassportTestWorkspace.GetString(ledgerEvent, "signed_event_hash_sha256")));
     }
 
+    [Fact]
+    public void ProductionLedgerBlocksNewEventsFromRevokedWalletKeys()
+    {
+        using var workspace = PassportTestWorkspace.Create();
+        var releaseLane = PassportReleaseLane.CreateDefault("production-mvp");
+        var walletService = new PassportWalletKeyService(releaseLane);
+        var wallet = walletService.CreateAndBindWalletKey(
+            workspace.Root,
+            workspace.IdentityId,
+            workspace.DeviceId,
+            workspace.KeyReferencePath);
+        Assert.True(wallet.Succeeded, wallet.Message);
+
+        var ledgerService = new PassportMonetaryLedgerService(releaseLane);
+        var append = ledgerService.AppendEvent(
+            workspace.Root,
+            "account-test",
+            workspace.IdentityId,
+            wallet.WalletKeyId,
+            PassportMonetaryLedgerService.EventCrownCreditIssue,
+            PassportMonetaryLedgerService.AssetCrownCredit,
+            100,
+            walletKeyReferencePath: wallet.WalletKeyReferencePath,
+            walletPublicKeyPath: wallet.WalletPublicKeyPath);
+        AssertAppend(append);
+
+        var revocation = walletService.RevokeWalletKey(
+            workspace.Root,
+            workspace.IdentityId,
+            workspace.DeviceId,
+            workspace.KeyReferencePath,
+            wallet.WalletKeyId,
+            "wallet_compromise",
+            true);
+        Assert.True(revocation.Succeeded, revocation.Message);
+
+        var blocked = ledgerService.AppendEvent(
+            workspace.Root,
+            "account-test",
+            workspace.IdentityId,
+            wallet.WalletKeyId,
+            PassportMonetaryLedgerService.EventCrownCreditIssue,
+            PassportMonetaryLedgerService.AssetCrownCredit,
+            25,
+            walletKeyReferencePath: wallet.WalletKeyReferencePath,
+            walletPublicKeyPath: wallet.WalletPublicKeyPath);
+
+        Assert.False(blocked.Succeeded);
+        Assert.Contains("wallet key is not active", blocked.Message, System.StringComparison.OrdinalIgnoreCase);
+
+        var replay = ledgerService.Replay(workspace.Root);
+        Assert.True(replay.Succeeded, string.Join("; ", replay.Failures));
+        Assert.Equal(1, replay.EventCount);
+    }
+
     private static void AssertAppend(PassportMonetaryLedgerAppendResult result)
     {
         Assert.True(result.Succeeded, result.Message);

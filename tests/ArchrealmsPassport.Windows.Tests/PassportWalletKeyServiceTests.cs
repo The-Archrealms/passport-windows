@@ -60,4 +60,66 @@ public sealed class PassportWalletKeyServiceTests
         Assert.False(string.IsNullOrWhiteSpace(signature.SignatureBase64));
         Assert.False(string.IsNullOrWhiteSpace(signature.PayloadSha256));
     }
+
+    [Fact]
+    public void RevokeWalletKeyWritesSignedRevocationAndMarksKeyInactive()
+    {
+        using var workspace = PassportTestWorkspace.Create();
+        var service = new PassportWalletKeyService(PassportReleaseLane.CreateDefault("staging"));
+        var binding = service.CreateAndBindWalletKey(
+            workspace.Root,
+            workspace.IdentityId,
+            workspace.DeviceId,
+            workspace.KeyReferencePath);
+        Assert.True(binding.Succeeded, binding.Message);
+        Assert.True(service.IsWalletKeyActive(workspace.Root, workspace.IdentityId, binding.WalletKeyId));
+
+        var revocation = service.RevokeWalletKey(
+            workspace.Root,
+            workspace.IdentityId,
+            workspace.DeviceId,
+            workspace.KeyReferencePath,
+            binding.WalletKeyId,
+            "wallet_compromise",
+            true);
+
+        Assert.True(revocation.Succeeded, revocation.Message);
+        Assert.True(revocation.VerifiedWithDeviceKey);
+        Assert.True(File.Exists(revocation.RevocationRecordPath));
+        Assert.True(File.Exists(revocation.RevocationSignaturePath));
+        Assert.False(service.IsWalletKeyActive(workspace.Root, workspace.IdentityId, binding.WalletKeyId));
+
+        var record = PassportTestWorkspace.ReadJson(revocation.RevocationRecordPath);
+        Assert.Equal("passport_wallet_key_revocation", PassportTestWorkspace.GetString(record, "record_type"));
+        Assert.Equal("wallet_compromise", PassportTestWorkspace.GetString(record, "reason_code"));
+        Assert.True(record.GetProperty("freeze_pending_escrow").GetBoolean());
+        Assert.False(record.GetProperty("ai_approved").GetBoolean());
+    }
+
+    [Fact]
+    public void RotateWalletKeyRevokesOldKeyAndBindsNewKey()
+    {
+        using var workspace = PassportTestWorkspace.Create();
+        var service = new PassportWalletKeyService(PassportReleaseLane.CreateDefault("staging"));
+        var binding = service.CreateAndBindWalletKey(
+            workspace.Root,
+            workspace.IdentityId,
+            workspace.DeviceId,
+            workspace.KeyReferencePath);
+        Assert.True(binding.Succeeded, binding.Message);
+
+        var rotation = service.RotateWalletKey(
+            workspace.Root,
+            workspace.IdentityId,
+            workspace.DeviceId,
+            workspace.KeyReferencePath,
+            binding.WalletKeyId,
+            true);
+
+        Assert.True(rotation.Succeeded, rotation.Message);
+        Assert.Equal(binding.WalletKeyId, rotation.Revocation.WalletKeyId);
+        Assert.NotEqual(binding.WalletKeyId, rotation.Binding.WalletKeyId);
+        Assert.False(service.IsWalletKeyActive(workspace.Root, workspace.IdentityId, binding.WalletKeyId));
+        Assert.True(service.IsWalletKeyActive(workspace.Root, workspace.IdentityId, rotation.Binding.WalletKeyId));
+    }
 }

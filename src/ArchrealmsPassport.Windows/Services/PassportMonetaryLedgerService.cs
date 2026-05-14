@@ -112,6 +112,12 @@ namespace ArchrealmsPassport.Windows.Services
 
                 if (!string.IsNullOrWhiteSpace(walletKeyReferencePath))
                 {
+                    var walletAuthority = new PassportWalletKeyService(releaseLane);
+                    if (!walletAuthority.IsWalletKeyActive(resolvedWorkspaceRoot, normalizedIdentityId, normalizedWalletKeyId))
+                    {
+                        return FailedAppend("The wallet key is not active for this Passport identity.");
+                    }
+
                     var resolvedWalletPublicKeyPath = ResolveWorkspaceRelativePath(resolvedWorkspaceRoot, NormalizeRequired(walletPublicKeyPath, "wallet public key path"));
                     if (!File.Exists(resolvedWalletPublicKeyPath))
                     {
@@ -592,6 +598,12 @@ namespace ArchrealmsPassport.Windows.Services
                 if (!VerifySignature(publicKeyPath, Encoding.UTF8.GetBytes(ledgerEvent.SignedEventHashSha256), signatureBytes))
                 {
                     failures.Add("Wallet signature verification failed for event " + ledgerEvent.EventId + ".");
+                }
+
+                var walletAuthority = new PassportWalletKeyService(releaseLane);
+                if (!walletAuthority.IsWalletKeyAuthorizedAt(workspaceRoot, ledgerEvent.IdentityId, ledgerEvent.WalletKeyId, ledgerEvent.CreatedUtc))
+                {
+                    failures.Add("Wallet key " + ledgerEvent.WalletKeyId + " was not authorized for event " + ledgerEvent.EventId + ".");
                 }
             }
             catch (Exception ex)
