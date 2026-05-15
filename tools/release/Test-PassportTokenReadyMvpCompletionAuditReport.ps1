@@ -540,6 +540,34 @@ foreach ($item in $checklist) {
             $itemFailures += "$id references unknown evidence id: $evidenceId"
         }
     }
+
+    $operatorActions = Get-ObjectArray -Object $item -Name "operator_actions"
+    $operatorCommandCount = 0
+    foreach ($operatorAction in $operatorActions) {
+        if ([string]::IsNullOrWhiteSpace([string]$operatorAction.id)) {
+            $itemFailures += "$id operator action has a blank id"
+        }
+        if ([string]::IsNullOrWhiteSpace([string]$operatorAction.action)) {
+            $itemFailures += "$id operator action text is missing"
+        }
+
+        $operatorCommands = Get-ObjectArray -Object $operatorAction -Name "commands"
+        $operatorCommandCount += $operatorCommands.Count
+        foreach ($operatorCommand in $operatorCommands) {
+            if ([string]::IsNullOrWhiteSpace([string]$operatorCommand)) {
+                $itemFailures += "$id operator action includes a blank command"
+            }
+        }
+    }
+
+    if ([string]$item.status -ne "passed") {
+        if ($operatorActions.Count -eq 0) {
+            $itemFailures += "$id is not passed but has no operator actions"
+        }
+        elseif ($operatorCommandCount -eq 0) {
+            $itemFailures += "$id is not passed but has no operator action commands"
+        }
+    }
 }
 
 $checks += New-Check -Id "checklist_item_contract" -Passed ($itemFailures.Count -eq 0) -Failures $itemFailures

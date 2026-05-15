@@ -152,6 +152,53 @@ function Get-OutstandingGateFailures {
     return @($gate.missing | ForEach-Object { ConvertTo-AuditText -Value $_ })
 }
 
+function Get-OutstandingGateAction {
+    param(
+        [object]$OutstandingReport,
+        [string]$Id
+    )
+
+    if ($null -eq $OutstandingReport -or -not $OutstandingReport.PSObject.Properties["failed_readiness_gates"]) {
+        return @()
+    }
+
+    $gateMatches = @($OutstandingReport.failed_readiness_gates | Where-Object { [string]$_.id -eq $Id } | Select-Object -First 1)
+    if ($gateMatches.Count -eq 0) {
+        return @()
+    }
+
+    $gate = $gateMatches[0]
+    if (-not $gate.PSObject.Properties["operator_action"] -or $null -eq $gate.operator_action) {
+        return @()
+    }
+
+    $action = $gate.operator_action
+    return ,([pscustomobject][ordered]@{
+        gate_id = $Id
+        id = ConvertTo-AuditText -Value $action.id
+        title = ConvertTo-AuditText -Value $action.title
+        action = ConvertTo-AuditText -Value $action.action
+        commands = @($action.commands | ForEach-Object { ConvertTo-AuditText -Value $_ })
+    })
+}
+
+function New-ManualAction {
+    param(
+        [string]$Id,
+        [string]$Title,
+        [string]$Action,
+        [string[]]$Commands = @()
+    )
+
+    return [pscustomobject][ordered]@{
+        gate_id = $Id
+        id = $Id
+        title = $Title
+        action = $Action
+        commands = @($Commands)
+    }
+}
+
 function New-AuditItem {
     param(
         [string]$Id,
@@ -160,7 +207,8 @@ function New-AuditItem {
         [string]$Status,
         [string[]]$EvidenceIds = @(),
         [string[]]$EvidenceNotes = @(),
-        [string[]]$Blockers = @()
+        [string[]]$Blockers = @(),
+        [object[]]$OperatorActions = @()
     )
 
     return [pscustomobject][ordered]@{
@@ -171,6 +219,7 @@ function New-AuditItem {
         evidence_ids = @($EvidenceIds)
         evidence_notes = @($EvidenceNotes | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
         blockers = @($Blockers | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
+        operator_actions = @($OperatorActions)
     }
 }
 
@@ -256,7 +305,8 @@ $items += New-AuditItem `
     -Status $(if ($null -eq $preMvp) { "missing" } elseif ($preMvp.passed -eq $true -and $preMvp.fake_balance_migration_blocked -eq $true) { "passed" } else { "blocked" }) `
     -EvidenceIds @("pre_mvp_internal_verification") `
     -EvidenceNotes @("fake_balance_migration_blocked=$($preMvp.fake_balance_migration_blocked)") `
-    -Blockers $preMvpBlockers
+    -Blockers $preMvpBlockers `
+    -OperatorActions (Get-OutstandingGateAction -OutstandingReport $outstanding -Id "pre_mvp_internal_verification")
 
 $items += New-AuditItem `
     -Id "prd_success_staging_readiness" `
@@ -264,7 +314,8 @@ $items += New-AuditItem `
     -Requirement "Staging readiness has passed with isolated staging records, production-candidate package identity, production-like endpoints, rollback evidence, signed promotion approval, and no staging-to-production balance migration." `
     -Status $(if ($null -eq $staging) { "missing" } elseif ($staging.ready -eq $true) { "passed" } else { "blocked" }) `
     -EvidenceIds @("staging_readiness", "production_mvp_outstanding_work") `
-    -Blockers (Get-OutstandingGateFailures -OutstandingReport $outstanding -Id "staging_readiness")
+    -Blockers (Get-OutstandingGateFailures -OutstandingReport $outstanding -Id "staging_readiness") `
+    -OperatorActions (Get-OutstandingGateAction -OutstandingReport $outstanding -Id "staging_readiness")
 
 $items += New-AuditItem `
     -Id "prd_success_canary_readiness" `
@@ -272,7 +323,8 @@ $items += New-AuditItem `
     -Requirement "Canary readiness has passed with controlled real-token policy limits, reconciliation, support readiness, signed production-promotion approval, and no synthetic canary evidence." `
     -Status $(if ($null -eq $canary) { "missing" } elseif ($canary.ready -eq $true) { "passed" } else { "blocked" }) `
     -EvidenceIds @("canary_mvp_readiness", "production_mvp_outstanding_work") `
-    -Blockers (Get-OutstandingGateFailures -OutstandingReport $outstanding -Id "canary_mvp_readiness")
+    -Blockers (Get-OutstandingGateFailures -OutstandingReport $outstanding -Id "canary_mvp_readiness") `
+    -OperatorActions (Get-OutstandingGateAction -OutstandingReport $outstanding -Id "canary_mvp_readiness")
 
 $items += New-AuditItem `
     -Id "prd_success_installable_passport" `
@@ -281,7 +333,8 @@ $items += New-AuditItem `
     -Status $(if ((Get-Gate -Report $productionReadiness -Id "package_signing").passed -eq $true) { "passed" } else { "blocked" }) `
     -EvidenceIds @("production_mvp_readiness", "production_mvp_outstanding_work") `
     -EvidenceNotes @("Production package installation depends on the package_signing readiness gate and release artifact validation.") `
-    -Blockers (Get-OutstandingGateFailures -OutstandingReport $outstanding -Id "package_signing")
+    -Blockers (Get-OutstandingGateFailures -OutstandingReport $outstanding -Id "package_signing") `
+    -OperatorActions (Get-OutstandingGateAction -OutstandingReport $outstanding -Id "package_signing")
 
 $identityStatus = Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds @("windows_tests")
 $items += New-AuditItem -Id "prd_success_identity_recovery" -Source "PRD Success Criteria" -Requirement "A citizen can create or recover a Passport identity." -Status $identityStatus -EvidenceIds @("pre_mvp_internal_verification") -EvidenceNotes @("Covered by Windows Passport automated tests in the pre-MVP report.")
@@ -296,7 +349,8 @@ $items += New-AuditItem `
     -Status $(if ((Get-Gate -Report $productionReadiness -Id "issuer_capacity_genesis_secrets").passed -eq $true) { "passed" } else { "blocked" }) `
     -EvidenceIds @("pre_mvp_internal_verification", "production_mvp_readiness", "production_mvp_outstanding_work") `
     -EvidenceNotes @("Implementation tests pass, but production ARCH requires the approved genesis manifest and ledger namespace.") `
-    -Blockers $issuerBlockers
+    -Blockers $issuerBlockers `
+    -OperatorActions (Get-OutstandingGateAction -OutstandingReport $outstanding -Id "issuer_capacity_genesis_secrets")
 
 $items += New-AuditItem `
     -Id "prd_success_real_cc" `
@@ -305,12 +359,16 @@ $items += New-AuditItem `
     -Status $(if ((Get-Gate -Report $productionReadiness -Id "issuer_capacity_genesis_secrets").passed -eq $true) { "passed" } else { "blocked" }) `
     -EvidenceIds @("pre_mvp_internal_verification", "production_mvp_readiness", "production_mvp_outstanding_work") `
     -EvidenceNotes @("Implementation tests pass, but production CC requires issuer/capacity/genesis and production ledger namespace values.") `
-    -Blockers $issuerBlockers
+    -Blockers $issuerBlockers `
+    -OperatorActions (Get-OutstandingGateAction -OutstandingReport $outstanding -Id "issuer_capacity_genesis_secrets")
 
 $storageStatus = Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds @("windows_tests")
 $storageBlockers = @()
 $storageBlockers += @(Get-OutstandingGateFailures -OutstandingReport $outstanding -Id "managed_storage_status")
 $storageBlockers += @(Get-OutstandingGateFailures -OutstandingReport $outstanding -Id "managed_storage_backups")
+$storageActions = @()
+$storageActions += @(Get-OutstandingGateAction -OutstandingReport $outstanding -Id "managed_storage_status")
+$storageActions += @(Get-OutstandingGateAction -OutstandingReport $outstanding -Id "managed_storage_backups")
 $items += New-AuditItem `
     -Id "prd_success_storage_redemption" `
     -Source "PRD Success Criteria" `
@@ -318,7 +376,8 @@ $items += New-AuditItem `
     -Status $(if ($storageStatus -eq "passed" -and $storageBlockers.Count -eq 0) { "passed" } elseif ($storageStatus -eq "passed") { "partial" } else { $storageStatus }) `
     -EvidenceIds @("pre_mvp_internal_verification", "production_mvp_readiness", "production_mvp_outstanding_work") `
     -EvidenceNotes @("Storage redemption implementation is covered by Windows tests; production service delivery remains gated on managed storage provisioning/status.") `
-    -Blockers $storageBlockers
+    -Blockers $storageBlockers `
+    -OperatorActions $storageActions
 
 $items += New-AuditItem `
     -Id "prd_success_storage_escrow_burn_refund_recredit" `
@@ -327,7 +386,8 @@ $items += New-AuditItem `
     -Status $(if ($storageStatus -eq "passed" -and $storageBlockers.Count -eq 0) { "passed" } elseif ($storageStatus -eq "passed") { "partial" } else { $storageStatus }) `
     -EvidenceIds @("pre_mvp_internal_verification", "production_mvp_readiness", "production_mvp_outstanding_work") `
     -EvidenceNotes @("Proof-linked redemption and remedy paths are covered by Windows tests; production storage status is still blocked.") `
-    -Blockers $storageBlockers
+    -Blockers $storageBlockers `
+    -OperatorActions $storageActions
 
 $items += New-AuditItem -Id "prd_success_resource_contribution" -Source "PRD Success Criteria" -Requirement "Resource contribution is optional, revocable, and disclosed." -Status $storageStatus -EvidenceIds @("pre_mvp_internal_verification") -EvidenceNotes @("Covered by Windows storage contribution tests and lane artifact validation.")
 $items += New-AuditItem -Id "prd_success_arch_cc_conversion" -Source "PRD Success Criteria" -Requirement "ARCH/CC conversion is available only where floating-rate liquidity exists and is disclosed." -Status (Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds @("windows_tests", "core_tests")) -EvidenceIds @("pre_mvp_internal_verification") -EvidenceNotes @("Conversion quote/execution validation is covered by Core and Windows tests; external liquidity is not required by the MVP unless configured.")
@@ -339,6 +399,9 @@ $items += New-AuditItem -Id "prd_success_ledger_export_auditability" -Source "PR
 $aiBlockers = @()
 $aiBlockers += @(Get-OutstandingGateFailures -OutstandingReport $outstanding -Id "open_weight_ai_runtime")
 $aiBlockers += @(Get-OutstandingGateFailures -OutstandingReport $outstanding -Id "hosted_ai_runtime_probe")
+$aiActions = @()
+$aiActions += @(Get-OutstandingGateAction -OutstandingReport $outstanding -Id "open_weight_ai_runtime")
+$aiActions += @(Get-OutstandingGateAction -OutstandingReport $outstanding -Id "hosted_ai_runtime_probe")
 $items += New-AuditItem `
     -Id "prd_success_hosted_ai" `
     -Source "PRD Success Criteria" `
@@ -346,7 +409,8 @@ $items += New-AuditItem `
     -Status $(if ((Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds @("hosted_service_tests", "windows_tests", "open_weight_ai_runtime_deployment_validation")) -eq "passed" -and $aiBlockers.Count -eq 0) { "passed" } else { "partial" }) `
     -EvidenceIds @("pre_mvp_internal_verification", "production_mvp_readiness", "production_mvp_outstanding_work") `
     -EvidenceNotes @("Hosted/Windows implementation tests pass; production open-weight model runtime and live probe remain blocked until provisioned.") `
-    -Blockers $aiBlockers
+    -Blockers $aiBlockers `
+    -OperatorActions $aiActions
 
 $releaseApprovalBlockers = Get-OutstandingGateFailures -OutstandingReport $outstanding -Id "production_release_approvals"
 $items += New-AuditItem `
@@ -355,7 +419,17 @@ $items += New-AuditItem `
     -Requirement "Legal, tax, accounting, custody, privacy, and security reviews are complete for citizen-facing real ARCH and real CC." `
     -Status $(if ((Get-Gate -Report $productionReadiness -Id "production_release_approvals").passed -eq $true) { "passed" } else { "blocked" }) `
     -EvidenceIds @("production_mvp_readiness", "production_mvp_outstanding_work") `
-    -Blockers $releaseApprovalBlockers
+    -Blockers $releaseApprovalBlockers `
+    -OperatorActions (Get-OutstandingGateAction -OutstandingReport $outstanding -Id "production_release_approvals")
+
+$closeoutActions = @()
+if ($null -ne $outstanding -and $outstanding.PSObject.Properties["next_closeout_command"] -and -not [string]::IsNullOrWhiteSpace([string]$outstanding.next_closeout_command)) {
+    $closeoutActions += New-ManualAction `
+        -Id "production_mvp_closeout" `
+        -Title "Rerun Production MVP closeout" `
+        -Action "Resolve the closeout, readiness, provisioning, and release-evidence failures, then rerun the fail-closed ProductionMvp closeout." `
+        -Commands @([string]$outstanding.next_closeout_command)
+}
 
 $items += New-AuditItem `
     -Id "production_mvp_closeout" `
@@ -363,7 +437,8 @@ $items += New-AuditItem `
     -Requirement "Production MVP closeout has passed with filled production provisioning, ready ProductionMvp report, and RequireReady release evidence." `
     -Status $(if ($null -eq $closeout) { "missing" } elseif ($closeout.passed -eq $true) { "passed" } else { "blocked" }) `
     -EvidenceIds @("production_mvp_closeout", "production_mvp_readiness", "production_mvp_outstanding_work") `
-    -Blockers @($closeout.failures | ForEach-Object { ConvertTo-AuditText -Value $_ })
+    -Blockers @($closeout.failures | ForEach-Object { ConvertTo-AuditText -Value $_ }) `
+    -OperatorActions $closeoutActions
 
 $statusGroups = $items | Group-Object -Property status
 $statusCounts = [ordered]@{}
@@ -435,6 +510,17 @@ if (-not [string]::IsNullOrWhiteSpace($MarkdownOutputPath)) {
         }
         if (@($item.blockers).Count -gt 3) {
             $lines.Add("  - ...$(@($item.blockers).Count - 3) more blockers in JSON report")
+        }
+        foreach ($action in @($item.operator_actions | Select-Object -First 2)) {
+            if (-not [string]::IsNullOrWhiteSpace([string]$action.action)) {
+                $lines.Add("  - Next: $($action.action)")
+            }
+            foreach ($command in @($action.commands | Select-Object -First 2)) {
+                $lines.Add("  - Command: ``$command``")
+            }
+        }
+        if (@($item.operator_actions).Count -gt 2) {
+            $lines.Add("  - ...$(@($item.operator_actions).Count - 2) more operator actions in JSON report")
         }
     }
 
