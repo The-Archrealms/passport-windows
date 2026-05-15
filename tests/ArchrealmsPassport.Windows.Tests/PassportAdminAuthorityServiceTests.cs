@@ -150,6 +150,120 @@ public sealed class PassportAdminAuthorityServiceTests
         Assert.Contains("target record hash", validation.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void ProductionAdminAuthorityRequiresConfiguredCrownAuthorityIdentity()
+    {
+        using var workspace = PassportTestWorkspace.Create();
+        var secondDeviceId = AddSecondActiveDevice(workspace);
+        var service = new PassportAdminAuthorityService(PassportReleaseLane.CreateDefault("production-mvp"));
+
+        var result = service.CreateDualControlAction(
+            workspace.Root,
+            workspace.IdentityId,
+            workspace.DeviceId,
+            workspace.KeyReferencePath,
+            secondDeviceId,
+            workspace.KeyReferencePath,
+            "cc_issue",
+            "mvp_cc_issuance",
+            "capacity_authorized",
+            "capacity-record-test",
+            new string('a', 64),
+            new string('b', 64));
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("crown_authority_identity_id", result.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ProductionAdminAuthorityRequiresRoleMembershipForBothApprovers()
+    {
+        using var workspace = PassportTestWorkspace.Create();
+        var secondDeviceId = AddSecondActiveDevice(workspace);
+        var service = new PassportAdminAuthorityService(CreateProductionLane(workspace.IdentityId));
+
+        var result = service.CreateDualControlAction(
+            workspace.Root,
+            workspace.IdentityId,
+            workspace.DeviceId,
+            workspace.KeyReferencePath,
+            secondDeviceId,
+            workspace.KeyReferencePath,
+            "cc_issue",
+            "mvp_cc_issuance",
+            "capacity_authorized",
+            "capacity-record-test",
+            new string('a', 64),
+            new string('b', 64));
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("role", result.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ProductionAdminAuthorityAcceptsSignedRoleMemberships()
+    {
+        using var workspace = PassportTestWorkspace.Create();
+        var secondDeviceId = AddSecondActiveDevice(workspace);
+        var service = new PassportAdminAuthorityService(CreateProductionLane(workspace.IdentityId));
+
+        var requesterRole = service.CreateRoleMembership(
+            workspace.Root,
+            workspace.IdentityId,
+            workspace.DeviceId,
+            workspace.KeyReferencePath,
+            workspace.DeviceId,
+            "crown_admin",
+            new[] { "cc_issue" },
+            new[] { "mvp_cc_issuance" },
+            "bootstrap_authority");
+        var approverRole = service.CreateRoleMembership(
+            workspace.Root,
+            workspace.IdentityId,
+            workspace.DeviceId,
+            workspace.KeyReferencePath,
+            secondDeviceId,
+            "crown_admin",
+            new[] { "cc_issue" },
+            new[] { "mvp_cc_issuance" },
+            "bootstrap_authority");
+        Assert.True(requesterRole.Succeeded, requesterRole.Message);
+        Assert.True(approverRole.Succeeded, approverRole.Message);
+
+        var targetHash = new string('a', 64);
+        var payloadHash = new string('b', 64);
+        var result = service.CreateDualControlAction(
+            workspace.Root,
+            workspace.IdentityId,
+            workspace.DeviceId,
+            workspace.KeyReferencePath,
+            secondDeviceId,
+            workspace.KeyReferencePath,
+            "cc_issue",
+            "mvp_cc_issuance",
+            "capacity_authorized",
+            "capacity-record-test",
+            targetHash,
+            payloadHash);
+
+        Assert.True(result.Succeeded, result.Message);
+
+        var validation = service.ValidateDualControlActionEvidence(
+            workspace.Root,
+            new Dictionary<string, string>
+            {
+                ["admin_authority_record_path"] = result.RecordPath,
+                ["admin_authority_record_sha256"] = PassportAdminAuthorityService.ComputeFileSha256(result.RecordPath),
+                ["admin_authority_requester_signature_path"] = result.RequesterSignaturePath,
+                ["admin_authority_approver_signature_path"] = result.ApproverSignaturePath
+            },
+            "cc_issue",
+            targetHash,
+            payloadHash);
+
+        Assert.True(validation.Succeeded, validation.Message);
+    }
+
     private static string AddSecondActiveDevice(PassportTestWorkspace workspace)
     {
         var secondDeviceId = workspace.DeviceId + "-second";
@@ -187,5 +301,12 @@ public sealed class PassportAdminAuthorityServiceTests
         };
         File.WriteAllText(recordPath, JsonSerializer.Serialize(record, new JsonSerializerOptions { WriteIndented = true }));
         return secondDeviceId;
+    }
+
+    private static PassportReleaseLane CreateProductionLane(string crownAuthorityIdentityId)
+    {
+        var lane = PassportReleaseLane.CreateDefault("production-mvp");
+        lane.CrownAuthorityIdentityId = crownAuthorityIdentityId;
+        return lane;
     }
 }

@@ -23,6 +23,119 @@ namespace ArchrealmsPassport.Windows.Services
             this.releaseLane = releaseLane ?? PassportEnvironment.GetReleaseLane();
         }
 
+        public PassportAdminRoleMembershipResult CreateRoleMembership(
+            string workspaceRoot,
+            string authorityIdentityId,
+            string issuerDeviceId,
+            string issuerDeviceKeyReferencePath,
+            string subjectDeviceId,
+            string roleName,
+            IEnumerable<string> authorizedActionTypes,
+            IEnumerable<string> authorizedAuthorityScopes,
+            string reasonCode)
+        {
+            try
+            {
+                var resolvedWorkspaceRoot = PassportEnvironment.ResolveWorkspaceRoot(workspaceRoot);
+                var normalizedIdentityId = NormalizeRequired(authorityIdentityId, "authority identity ID");
+                var normalizedIssuerDeviceId = NormalizeRequired(issuerDeviceId, "issuer device ID");
+                var normalizedSubjectDeviceId = NormalizeRequired(subjectDeviceId, "subject device ID");
+                var normalizedRoleName = NormalizeRequired(roleName, "role name").Trim().ToLowerInvariant().Replace(" ", "_").Replace("-", "_");
+                var normalizedReasonCode = NormalizeReasonCode(reasonCode);
+                var actionTypes = NormalizeAuthorizationList(authorizedActionTypes, NormalizeActionAuthorization);
+                var authorityScopes = NormalizeAuthorizationList(authorizedAuthorityScopes, NormalizeScopeAuthorization);
+
+                var identityGate = ValidateCrownAuthorityIdentity(normalizedIdentityId);
+                if (!identityGate.Succeeded)
+                {
+                    return FailedRoleMembership(identityGate.Message);
+                }
+
+                var issuerDevice = FindLatestDeviceRecord(resolvedWorkspaceRoot, normalizedIdentityId, normalizedIssuerDeviceId, "active");
+                var subjectDevice = FindLatestDeviceRecord(resolvedWorkspaceRoot, normalizedIdentityId, normalizedSubjectDeviceId, "active");
+                if (issuerDevice == null)
+                {
+                    return FailedRoleMembership("The admin role issuer device credential record could not be found.");
+                }
+
+                if (subjectDevice == null)
+                {
+                    return FailedRoleMembership("The admin role subject device credential record could not be found.");
+                }
+
+                var recovery = new PassportRecoveryService(releaseLane);
+                if (recovery.IsDeviceDeauthorized(resolvedWorkspaceRoot, normalizedIdentityId, normalizedIssuerDeviceId)
+                    || recovery.IsDeviceDeauthorized(resolvedWorkspaceRoot, normalizedIdentityId, normalizedSubjectDeviceId))
+                {
+                    return FailedRoleMembership("Admin role membership cannot be issued by or assigned to deauthorized devices.");
+                }
+
+                var issuerPublicKeyPath = ResolvePublicKeyPath(resolvedWorkspaceRoot, issuerDevice.Value.RootElement);
+                if (string.IsNullOrWhiteSpace(issuerPublicKeyPath) || !File.Exists(issuerPublicKeyPath))
+                {
+                    return FailedRoleMembership("The admin role issuer public key could not be resolved.");
+                }
+
+                var timestamp = DateTime.UtcNow.ToString("yyyyMMddTHHmmssZ");
+                var createdUtc = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
+                var root = Path.Combine(resolvedWorkspaceRoot, "records", "passport", "admin-authority", "roles");
+                Directory.CreateDirectory(root);
+                var recordPath = Path.Combine(root, timestamp + "-" + normalizedSubjectDeviceId + "-" + normalizedRoleName + ".json");
+                var record = new Dictionary<string, object?>
+                {
+                    ["schema_version"] = 1,
+                    ["record_type"] = "passport_admin_authority_role_membership",
+                    ["record_id"] = timestamp + "-" + normalizedSubjectDeviceId + "-" + normalizedRoleName,
+                    ["created_utc"] = createdUtc,
+                    ["effective_utc"] = createdUtc,
+                    ["release_lane"] = releaseLane.Lane,
+                    ["ledger_namespace"] = releaseLane.LedgerNamespace,
+                    ["policy_version"] = releaseLane.PolicyVersion,
+                    ["status"] = "active",
+                    ["authority_identity_id"] = normalizedIdentityId,
+                    ["device_id"] = normalizedSubjectDeviceId,
+                    ["role_name"] = normalizedRoleName,
+                    ["dual_control_eligible"] = true,
+                    ["authorized_action_types"] = actionTypes,
+                    ["authorized_authority_scopes"] = authorityScopes,
+                    ["reason_code"] = normalizedReasonCode,
+                    ["issued_by_identity_id"] = normalizedIdentityId,
+                    ["issued_by_device_id"] = normalizedIssuerDeviceId,
+                    ["expires_utc"] = string.Empty,
+                    ["ai_approved"] = false,
+                    ["summary"] = "Passport admin role membership for dual-control authority. AI is not an approval authority."
+                };
+                File.WriteAllText(recordPath, JsonSerializer.Serialize(record, JsonOptions), Encoding.UTF8);
+
+                var recordBytes = File.ReadAllBytes(recordPath);
+                var signature = WriteRoleMembershipSignature(
+                    root,
+                    timestamp + "-" + normalizedSubjectDeviceId + "-" + normalizedRoleName + ".signature.json",
+                    resolvedWorkspaceRoot,
+                    recordPath,
+                    recordBytes,
+                    normalizedIdentityId,
+                    normalizedIssuerDeviceId,
+                    issuerDeviceKeyReferencePath,
+                    issuerPublicKeyPath);
+
+                return new PassportAdminRoleMembershipResult
+                {
+                    Succeeded = signature.Verified,
+                    Message = signature.Verified
+                        ? "Admin authority role membership created."
+                        : "Admin authority role membership signature verification failed.",
+                    RecordPath = recordPath,
+                    SignaturePath = signature.Path,
+                    SignatureVerified = signature.Verified
+                };
+            }
+            catch (Exception ex)
+            {
+                return FailedRoleMembership("Admin authority role membership failed: " + ex.Message);
+            }
+        }
+
         public PassportAdminAuthorityResult CreateDualControlAction(
             string workspaceRoot,
             string authorityIdentityId,
@@ -79,6 +192,18 @@ namespace ArchrealmsPassport.Windows.Services
                 if (string.IsNullOrWhiteSpace(approverPublicKeyPath) || !File.Exists(approverPublicKeyPath))
                 {
                     return Failed("The approver public key could not be resolved.");
+                }
+
+                var authorityPolicy = ValidateProductionAuthorityPolicy(
+                    resolvedWorkspaceRoot,
+                    normalizedIdentityId,
+                    normalizedRequesterDeviceId,
+                    normalizedApproverDeviceId,
+                    normalizedActionType,
+                    NormalizeRequired(authorityScope, "authority scope"));
+                if (!authorityPolicy.Succeeded)
+                {
+                    return authorityPolicy;
                 }
 
                 var timestamp = DateTime.UtcNow.ToString("yyyyMMddTHHmmssZ");
@@ -241,6 +366,18 @@ namespace ArchrealmsPassport.Windows.Services
                     return Failed("The admin authority record includes a deauthorized device.");
                 }
 
+                var authorityPolicy = ValidateProductionAuthorityPolicy(
+                    resolvedWorkspaceRoot,
+                    authorityIdentityId,
+                    requesterDeviceId,
+                    approverDeviceId,
+                    normalizedExpectedActionType,
+                    ReadString(root, "authority_scope"));
+                if (!authorityPolicy.Succeeded)
+                {
+                    return authorityPolicy;
+                }
+
                 var requesterSignaturePath = ResolveEvidenceSignaturePath(
                     resolvedWorkspaceRoot,
                     actionRecordPath,
@@ -335,6 +472,225 @@ namespace ArchrealmsPassport.Windows.Services
             };
             File.WriteAllText(signaturePath, JsonSerializer.Serialize(signatureRecord, JsonOptions), Encoding.UTF8);
             return (signaturePath, verified);
+        }
+
+        private static (string Path, bool Verified) WriteRoleMembershipSignature(
+            string outputRoot,
+            string fileName,
+            string workspaceRoot,
+            string roleMembershipRecordPath,
+            byte[] roleMembershipRecordBytes,
+            string identityId,
+            string issuerDeviceId,
+            string issuerDeviceKeyReferencePath,
+            string issuerDevicePublicKeyPath)
+        {
+            var timestamp = DateTime.UtcNow.ToString("yyyyMMddTHHmmssZ");
+            var createdUtc = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
+            var signatureBytes = PassportDeviceKeyStore.SignData(issuerDeviceKeyReferencePath, roleMembershipRecordBytes);
+            var verified = VerifySignature(issuerDevicePublicKeyPath, roleMembershipRecordBytes, signatureBytes);
+            var signaturePath = Path.Combine(outputRoot, fileName);
+            var signatureRecord = new Dictionary<string, object?>
+            {
+                ["schema_version"] = 1,
+                ["record_type"] = "passport_admin_authority_role_membership_signature",
+                ["record_id"] = timestamp + "-passport_admin_authority_role_membership_signature",
+                ["created_utc"] = createdUtc,
+                ["archrealms_identity_id"] = identityId,
+                ["issuer_device_id"] = issuerDeviceId,
+                ["role_membership_record_path"] = ToWorkspaceRelativePath(workspaceRoot, roleMembershipRecordPath),
+                ["role_membership_record_sha256"] = ComputeSha256(roleMembershipRecordBytes),
+                ["signature_algorithm"] = "RSA_PKCS1_SHA256",
+                ["signature_base64"] = Convert.ToBase64String(signatureBytes),
+                ["issuer_device_public_key_path"] = ToWorkspaceRelativePath(workspaceRoot, issuerDevicePublicKeyPath),
+                ["verified_with_device_key"] = verified,
+                ["summary"] = "Signature for a Passport admin authority role membership record."
+            };
+            File.WriteAllText(signaturePath, JsonSerializer.Serialize(signatureRecord, JsonOptions), Encoding.UTF8);
+            return (signaturePath, verified);
+        }
+
+        private PassportAdminAuthorityResult ValidateProductionAuthorityPolicy(
+            string workspaceRoot,
+            string authorityIdentityId,
+            string requesterDeviceId,
+            string approverDeviceId,
+            string actionType,
+            string authorityScope)
+        {
+            if (!releaseLane.ProductionLedger)
+            {
+                return new PassportAdminAuthorityResult
+                {
+                    Succeeded = true,
+                    Message = "Non-production admin role policy is advisory."
+                };
+            }
+
+            var identityGate = ValidateCrownAuthorityIdentity(authorityIdentityId);
+            if (!identityGate.Succeeded)
+            {
+                return identityGate;
+            }
+
+            var requesterRole = FindActiveAdminRoleMembership(
+                workspaceRoot,
+                authorityIdentityId,
+                requesterDeviceId,
+                actionType,
+                authorityScope);
+            if (!requesterRole.Succeeded)
+            {
+                return Failed("Requester device is not assigned an active admin authority role for this action: " + requesterRole.Message);
+            }
+
+            var approverRole = FindActiveAdminRoleMembership(
+                workspaceRoot,
+                authorityIdentityId,
+                approverDeviceId,
+                actionType,
+                authorityScope);
+            if (!approverRole.Succeeded)
+            {
+                return Failed("Approver device is not assigned an active admin authority role for this action: " + approverRole.Message);
+            }
+
+            return new PassportAdminAuthorityResult
+            {
+                Succeeded = true,
+                Message = "Production admin authority role policy is valid."
+            };
+        }
+
+        private PassportAdminAuthorityResult ValidateCrownAuthorityIdentity(string authorityIdentityId)
+        {
+            if (!releaseLane.ProductionLedger)
+            {
+                return new PassportAdminAuthorityResult
+                {
+                    Succeeded = true,
+                    Message = "Non-production Crown authority identity policy is advisory."
+                };
+            }
+
+            if (string.IsNullOrWhiteSpace(releaseLane.CrownAuthorityIdentityId))
+            {
+                return Failed("Production admin authority requires crown_authority_identity_id in the release-lane manifest.");
+            }
+
+            if (!string.Equals(
+                (authorityIdentityId ?? string.Empty).Trim(),
+                releaseLane.CrownAuthorityIdentityId.Trim(),
+                StringComparison.Ordinal))
+            {
+                return Failed("Production admin authority must be issued by the configured Crown authority identity.");
+            }
+
+            return new PassportAdminAuthorityResult
+            {
+                Succeeded = true,
+                Message = "Crown authority identity policy is valid."
+            };
+        }
+
+        private PassportAdminAuthorityResult FindActiveAdminRoleMembership(
+            string workspaceRoot,
+            string authorityIdentityId,
+            string deviceId,
+            string actionType,
+            string authorityScope)
+        {
+            var roleRoot = Path.Combine(workspaceRoot, "records", "passport", "admin-authority", "roles");
+            if (!Directory.Exists(roleRoot))
+            {
+                return Failed("No admin role membership records were found.");
+            }
+
+            foreach (var candidate in Directory.GetFiles(roleRoot, "*.json").OrderByDescending(Path.GetFileName))
+            {
+                using var document = JsonDocument.Parse(File.ReadAllText(candidate));
+                var root = document.RootElement.Clone();
+                if (!Matches(root, "record_type", "passport_admin_authority_role_membership")
+                    || !Matches(root, "status", "active")
+                    || !Matches(root, "release_lane", releaseLane.Lane)
+                    || !Matches(root, "ledger_namespace", releaseLane.LedgerNamespace)
+                    || !Matches(root, "authority_identity_id", authorityIdentityId)
+                    || !Matches(root, "device_id", deviceId)
+                    || !ReadBool(root, "dual_control_eligible")
+                    || ReadBool(root, "ai_approved")
+                    || IsExpired(root)
+                    || !AuthorizedArrayContains(root, "authorized_action_types", NormalizeActionAuthorization(actionType))
+                    || !AuthorizedArrayContains(root, "authorized_authority_scopes", NormalizeScopeAuthorization(authorityScope)))
+                {
+                    continue;
+                }
+
+                var signature = ValidateRoleMembershipSignature(workspaceRoot, candidate, File.ReadAllBytes(candidate), ReadString(root, "issued_by_device_id"));
+                if (!signature.Succeeded)
+                {
+                    return signature;
+                }
+
+                return new PassportAdminAuthorityResult
+                {
+                    Succeeded = true,
+                    Message = "Admin role membership is active."
+                };
+            }
+
+            return Failed("No active role membership permits " + actionType + " for " + authorityScope + ".");
+        }
+
+        private PassportAdminAuthorityResult ValidateRoleMembershipSignature(
+            string workspaceRoot,
+            string roleMembershipRecordPath,
+            byte[] roleMembershipRecordBytes,
+            string expectedIssuerDeviceId)
+        {
+            var roleMembershipHash = ComputeSha256(roleMembershipRecordBytes);
+            var signatureRoot = Path.GetDirectoryName(roleMembershipRecordPath) ?? workspaceRoot;
+            foreach (var candidate in Directory.GetFiles(signatureRoot, "*.json").OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
+            {
+                if (string.Equals(candidate, roleMembershipRecordPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                using var document = JsonDocument.Parse(File.ReadAllText(candidate));
+                var root = document.RootElement.Clone();
+                if (!Matches(root, "record_type", "passport_admin_authority_role_membership_signature")
+                    || !Matches(root, "issuer_device_id", expectedIssuerDeviceId)
+                    || !string.Equals(ReadString(root, "role_membership_record_sha256"), roleMembershipHash, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var publicKeyPath = ResolveWorkspaceRelativePath(workspaceRoot, ReadString(root, "issuer_device_public_key_path"));
+                if (!File.Exists(publicKeyPath))
+                {
+                    return Failed("The admin role membership issuer public key could not be found.");
+                }
+
+                var signatureBase64 = ReadString(root, "signature_base64");
+                if (string.IsNullOrWhiteSpace(signatureBase64))
+                {
+                    return Failed("The admin role membership signature is missing.");
+                }
+
+                var signatureBytes = Convert.FromBase64String(signatureBase64);
+                if (!VerifySignature(publicKeyPath, roleMembershipRecordBytes, signatureBytes))
+                {
+                    return Failed("The admin role membership signature verification failed.");
+                }
+
+                return new PassportAdminAuthorityResult
+                {
+                    Succeeded = true,
+                    Message = "Admin role membership signature verified."
+                };
+            }
+
+            return Failed("An admin role membership signature could not be found.");
         }
 
         private static string ResolveEvidenceSignaturePath(
@@ -529,10 +885,79 @@ namespace ArchrealmsPassport.Windows.Services
             };
         }
 
+        private static string[] NormalizeAuthorizationList(
+            IEnumerable<string> values,
+            Func<string, string> normalize)
+        {
+            var normalized = (values ?? Array.Empty<string>())
+                .Select(normalize)
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+
+            if (normalized.Length == 0)
+            {
+                throw new InvalidOperationException("At least one admin role authorization value is required.");
+            }
+
+            return normalized;
+        }
+
+        private static string NormalizeActionAuthorization(string actionType)
+        {
+            var normalized = (actionType ?? string.Empty).Trim();
+            return string.Equals(normalized, "*", StringComparison.Ordinal)
+                ? "*"
+                : NormalizeActionType(normalized);
+        }
+
+        private static string NormalizeScopeAuthorization(string authorityScope)
+        {
+            var normalized = NormalizeRequired(authorityScope, "authority scope").Trim().ToLowerInvariant().Replace(" ", "_").Replace("-", "_");
+            return normalized.Length > 96 ? normalized[..96] : normalized;
+        }
+
         private static string NormalizeReasonCode(string reasonCode)
         {
             var normalized = NormalizeRequired(reasonCode, "reason code").Trim().ToLowerInvariant().Replace(" ", "_").Replace("-", "_");
             return normalized.Length > 64 ? normalized[..64] : normalized;
+        }
+
+        private static bool AuthorizedArrayContains(JsonElement root, string propertyName, string expected)
+        {
+            if (!root.TryGetProperty(propertyName, out var property) || property.ValueKind != JsonValueKind.Array)
+            {
+                return false;
+            }
+
+            foreach (var item in property.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.String)
+                {
+                    continue;
+                }
+
+                var value = item.GetString() ?? string.Empty;
+                if (string.Equals(value, "*", StringComparison.Ordinal)
+                    || string.Equals(value, expected, StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool IsExpired(JsonElement root)
+        {
+            var expiresUtc = ReadString(root, "expires_utc");
+            if (string.IsNullOrWhiteSpace(expiresUtc))
+            {
+                return false;
+            }
+
+            return DateTime.TryParse(expiresUtc, out var expires)
+                && expires.ToUniversalTime() <= DateTime.UtcNow;
         }
 
         private static string ToWorkspaceRelativePath(string workspaceRoot, string path)
@@ -564,6 +989,15 @@ namespace ArchrealmsPassport.Windows.Services
         private static PassportAdminAuthorityResult Failed(string message)
         {
             return new PassportAdminAuthorityResult
+            {
+                Succeeded = false,
+                Message = message
+            };
+        }
+
+        private static PassportAdminRoleMembershipResult FailedRoleMembership(string message)
+        {
+            return new PassportAdminRoleMembershipResult
             {
                 Succeeded = false,
                 Message = message

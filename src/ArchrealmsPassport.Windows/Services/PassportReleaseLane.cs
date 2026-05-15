@@ -18,6 +18,7 @@ namespace ArchrealmsPassport.Windows.Services
         public string IssuerKeyScope { get; set; } = "passport-dev";
         public string FeatureFlagScope { get; set; } = "passport-dev";
         public string PolicyVersion { get; set; } = "passport-release-lanes-v1";
+        public string CrownAuthorityIdentityId { get; set; } = string.Empty;
         public bool AllowProductionTokenRecords { get; set; }
         public bool AllowStagingRecords { get; set; }
         public bool ProductionLedger { get; set; }
@@ -74,6 +75,7 @@ namespace ArchrealmsPassport.Windows.Services
                 IssuerKeyScope = ReadString(root, "issuer_key_scope", defaults.IssuerKeyScope),
                 FeatureFlagScope = ReadString(root, "feature_flag_scope", defaults.FeatureFlagScope),
                 PolicyVersion = ReadString(root, "policy_version", defaults.PolicyVersion),
+                CrownAuthorityIdentityId = ReadString(root, "crown_authority_identity_id", defaults.CrownAuthorityIdentityId),
                 AllowProductionTokenRecords = ReadBool(root, "allow_production_token_records", defaults.AllowProductionTokenRecords),
                 AllowStagingRecords = ReadBool(root, "allow_staging_records", defaults.AllowStagingRecords),
                 ProductionLedger = ReadBool(root, "production_ledger", defaults.ProductionLedger)

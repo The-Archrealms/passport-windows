@@ -542,6 +542,13 @@ public sealed class PassportMonetaryLedgerServiceTests
     {
         var evidence = CreateCapacityEvidence(workspace.Root, releaseLane, maxIssuanceBaseUnits);
         var secondDeviceId = AddSecondActiveDevice(workspace);
+        if (releaseLane.ProductionLedger)
+        {
+            releaseLane.CrownAuthorityIdentityId = workspace.IdentityId;
+        }
+
+        var adminService = new PassportAdminAuthorityService(releaseLane);
+        EnsureProductionAdminRoles(workspace, adminService, releaseLane, secondDeviceId, "cc_issue", "mvp_cc_issuance");
         var intentHash = PassportMonetaryLedgerService.ComputeCrownCreditIssueIntentHash(
             releaseLane,
             accountId,
@@ -549,7 +556,7 @@ public sealed class PassportMonetaryLedgerServiceTests
             walletKeyId,
             amountBaseUnits,
             evidence);
-        var adminAuthority = new PassportAdminAuthorityService(releaseLane).CreateDualControlAction(
+        var adminAuthority = adminService.CreateDualControlAction(
             workspace.Root,
             workspace.IdentityId,
             workspace.DeviceId,
@@ -608,5 +615,42 @@ public sealed class PassportMonetaryLedgerServiceTests
         };
         File.WriteAllText(recordPath, JsonSerializer.Serialize(record, new JsonSerializerOptions { WriteIndented = true }));
         return secondDeviceId;
+    }
+
+    private static void EnsureProductionAdminRoles(
+        PassportTestWorkspace workspace,
+        PassportAdminAuthorityService service,
+        PassportReleaseLane releaseLane,
+        string secondDeviceId,
+        string actionType,
+        string authorityScope)
+    {
+        if (!releaseLane.ProductionLedger)
+        {
+            return;
+        }
+
+        var requesterRole = service.CreateRoleMembership(
+            workspace.Root,
+            workspace.IdentityId,
+            workspace.DeviceId,
+            workspace.KeyReferencePath,
+            workspace.DeviceId,
+            "crown_admin",
+            new[] { actionType },
+            new[] { authorityScope },
+            "test_role_bootstrap");
+        var approverRole = service.CreateRoleMembership(
+            workspace.Root,
+            workspace.IdentityId,
+            workspace.DeviceId,
+            workspace.KeyReferencePath,
+            secondDeviceId,
+            "crown_admin",
+            new[] { actionType },
+            new[] { authorityScope },
+            "test_role_bootstrap");
+        Assert.True(requesterRole.Succeeded, requesterRole.Message);
+        Assert.True(approverRole.Succeeded, approverRole.Message);
     }
 }

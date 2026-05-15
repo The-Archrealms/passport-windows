@@ -420,7 +420,14 @@ public sealed class PassportStorageRedemptionServiceTests
         string intentHash)
     {
         var secondDeviceId = AddSecondActiveDevice(workspace);
-        var admin = new PassportAdminAuthorityService(releaseLane).CreateDualControlAction(
+        if (releaseLane.ProductionLedger)
+        {
+            releaseLane.CrownAuthorityIdentityId = workspace.IdentityId;
+        }
+
+        var service = new PassportAdminAuthorityService(releaseLane);
+        EnsureProductionAdminRoles(workspace, service, releaseLane, secondDeviceId, actionType, authorityScope);
+        var admin = service.CreateDualControlAction(
             workspace.Root,
             workspace.IdentityId,
             workspace.DeviceId,
@@ -480,5 +487,42 @@ public sealed class PassportStorageRedemptionServiceTests
         };
         File.WriteAllText(recordPath, JsonSerializer.Serialize(record, new JsonSerializerOptions { WriteIndented = true }));
         return secondDeviceId;
+    }
+
+    private static void EnsureProductionAdminRoles(
+        PassportTestWorkspace workspace,
+        PassportAdminAuthorityService service,
+        PassportReleaseLane releaseLane,
+        string secondDeviceId,
+        string actionType,
+        string authorityScope)
+    {
+        if (!releaseLane.ProductionLedger)
+        {
+            return;
+        }
+
+        var requesterRole = service.CreateRoleMembership(
+            workspace.Root,
+            workspace.IdentityId,
+            workspace.DeviceId,
+            workspace.KeyReferencePath,
+            workspace.DeviceId,
+            "crown_admin",
+            new[] { actionType },
+            new[] { authorityScope },
+            "test_role_bootstrap");
+        var approverRole = service.CreateRoleMembership(
+            workspace.Root,
+            workspace.IdentityId,
+            workspace.DeviceId,
+            workspace.KeyReferencePath,
+            secondDeviceId,
+            "crown_admin",
+            new[] { actionType },
+            new[] { authorityScope },
+            "test_role_bootstrap");
+        Assert.True(requesterRole.Succeeded, requesterRole.Message);
+        Assert.True(approverRole.Succeeded, approverRole.Message);
     }
 }
