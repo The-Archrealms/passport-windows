@@ -20,3 +20,6 @@ passport-smoke-report.json
 *.pkcs8.protected
 *.pfx
 *.p12
+.env
+.env.*
+!.env.template

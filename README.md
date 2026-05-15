@@ -370,6 +370,16 @@ Run the gate directly:
   -OutputPath .\artifacts\release\production-mvp-readiness-report.json
 ```
 
+Generate a production MVP environment template before wiring secrets or deployment variables:
+
+```powershell
+.\tools\release\New-PassportProductionMvpEnvironmentTemplate.ps1 `
+  -Format PowerShell `
+  -OutputPath .\artifacts\release\production-mvp-env.template.ps1
+```
+
+The template lists each readiness-gate variable, whether it is secret, and the gate it satisfies. Populate values only in a secure shell, CI secret store, or deployment environment; populated `.env` files are ignored by git.
+
 Create and install a stable release-signing certificate:
 
 ```powershell
