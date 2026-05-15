@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text.Json;
+using ArchrealmsPassport.Core.Protocol;
 using ArchrealmsPassport.Windows.Models;
 using ArchrealmsPassport.Windows.Services;
 using ArchrealmsPassport.Windows.Tests.Infrastructure;
@@ -21,7 +22,7 @@ public sealed class PassportMonetaryLedgerServiceTests
         var accountId = "account-" + workspace.IdentityId;
         var walletKeyId = "wallet-key-test";
 
-        AssertAppend(service.AppendEvent(
+        var genesisAppend = service.AppendEvent(
             workspace.Root,
             accountId,
             workspace.IdentityId,
@@ -29,7 +30,12 @@ public sealed class PassportMonetaryLedgerServiceTests
             PassportMonetaryLedgerService.EventArchGenesisAllocation,
             PassportMonetaryLedgerService.AssetArch,
             1_000,
-            new Dictionary<string, string> { ["arch_genesis_hash"] = "genesis-test" }));
+            new Dictionary<string, string> { ["arch_genesis_hash"] = "genesis-test" });
+        AssertAppend(genesisAppend);
+
+        var inspection = PassportRegistryRecordInspector.Inspect(File.ReadAllBytes(genesisAppend.EventPath), genesisAppend.EventPath);
+        Assert.True(inspection.IsEnvelopeValid, string.Join("; ", inspection.ValidationFailures));
+
         AssertAppend(service.AppendEvent(
             workspace.Root,
             accountId,
