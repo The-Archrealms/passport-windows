@@ -794,6 +794,15 @@ To produce a concise redacted list of remaining production work from the latest 
 
 The report writes JSON and Markdown under `artifacts\release\`, groups failed readiness gates, provisioning packet checks, provisioning child-check failures, release-evidence checks, and a redacted operator input matrix of required environment variables and evidence files. It includes gate-specific readiness, provisioning, release-evidence, readiness-evidence, and release-evidence-item next commands plus the next closeout command, and it does not serialize secret values.
 
+To produce a prompt-to-artifact completion audit for the Token-Ready MVP PRD/ARD, generate the completion audit report:
+
+```powershell
+.\tools\release\New-PassportTokenReadyMvpCompletionAuditReport.ps1 `
+  -NoFail
+```
+
+The report writes JSON and Markdown under `artifacts\release\`, maps PRD success criteria and ARD release gates to concrete evidence files, and separates passed, partial, blocked, and missing requirements. It is not a substitute for the final closeout gate; it makes the remaining blockers reviewable without treating a proxy report as production approval.
+
 Validate the package-signing provisioning packet before loading production signing secrets:
 
 ```powershell
