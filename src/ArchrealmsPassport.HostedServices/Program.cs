@@ -6,9 +6,11 @@ var app = builder.Build();
 
 var store = PassportHostedFileStore.FromEnvironment();
 var registryStore = PassportHostedRegistryStore.FromDataRoot(store.Root);
+var knowledgeStore = PassportHostedKnowledgeStore.FromDataRoot(store.Root);
 var signer = PassportHostedServiceSigner.FromDataRoot(store.Root);
 var operatorGate = PassportHostedOperatorGate.FromEnvironment();
 var rateLimiter = new PassportHostedRateLimiter();
+var aiInferenceGateway = PassportHostedAiInferenceGateway.FromEnvironment();
 
 app.MapGet("/health", () => Results.Json(new
 {
@@ -36,7 +38,7 @@ app.MapPost("/ai/session", (HttpRequest httpRequest, PassportAiSessionAuthorizat
     return Results.Json(result);
 });
 
-app.MapPost("/ai/chat", (HttpRequest httpRequest, PassportAiChatRequest request) =>
+app.MapPost("/ai/chat", async (HttpRequest httpRequest, PassportAiChatRequest request, CancellationToken cancellationToken) =>
 {
     var rateLimit = AuthorizeRate(httpRequest, rateLimiter, "ai-chat:" + request.SessionId, maxRequests: 60, window: TimeSpan.FromMinutes(1));
     if (rateLimit != null)
@@ -45,7 +47,13 @@ app.MapPost("/ai/chat", (HttpRequest httpRequest, PassportAiChatRequest request)
     }
 
     var bearerToken = PassportHostedPolicy.ReadBearerToken(httpRequest.Headers.Authorization.ToString());
-    var result = PassportHostedPolicy.CreateAiChatResponse(request, bearerToken, store);
+    var result = await PassportHostedPolicy.CreateAiChatResponseAsync(
+        request,
+        bearerToken,
+        store,
+        knowledgeStore,
+        aiInferenceGateway,
+        cancellationToken);
     return result.Succeeded ? Results.Json(result) : Results.BadRequest(result);
 });
 

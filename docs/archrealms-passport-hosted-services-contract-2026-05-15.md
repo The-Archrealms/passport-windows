@@ -14,7 +14,7 @@ The hosted services project provides the production-facing API boundary that Win
 |---|---|---|
 | `GET /health` | Liveness and contract version | Returns `passport-hosted-services-v1` |
 | `POST /ai/session` | Authorize a Passport-signed AI session request | Verifies request hash, device signature evidence, token/key separation, expiry, and non-authority boundaries |
-| `POST /ai/chat` | Authenticated AI guide response | Requires matching bearer session token; blocks private key, seed, and recovery-secret prompts; returns source-grounded gateway response shape |
+| `POST /ai/chat` | Authenticated AI guide response | Requires matching bearer session token; blocks private key, seed, and recovery-secret prompts; retrieves approved knowledge-pack chunks; calls an OpenAI-compatible open-weight runtime when configured; otherwise returns the deterministic gateway-contract fallback |
 | `POST /capacity/reports/cc` | Create conservative CC capacity reports | Enforces positive conservative capacity, no thin-market issuance, qualified independent volume, reserve exclusion, haircut range, and authority hash evidence |
 | `POST /arch/genesis/manifests` | Create sealed ARCH genesis manifests | Enforces fixed supply, base-unit precision, unique allocation IDs, allocation total equals supply, no post-genesis minting, and authority hash evidence |
 | `POST /admin/authority/validate` | Validate dual-control admin authority evidence | Checks action/scope/hash binding, distinct requester and approver devices, non-AI approval, and requester/approver signature record types |
@@ -27,6 +27,7 @@ The hosted services project provides the production-facing API boundary that Win
 - Set `ARCHREALMS_PASSPORT_HOSTED_DATA_ROOT` to control the hosted data root.
 - AI session records are written without bearer tokens.
 - Hosted records are written with SHA-256 sidecars and append-log entries under `append-log/*.jsonl`.
+- Approved AI knowledge-pack chunks can be stored under `records/ai/knowledge-packs/{knowledge_pack_id}/chunks.jsonl` with source IDs, hashes, approval status, and chunk text.
 
 ## Operator And Signing Controls
 
@@ -40,6 +41,14 @@ The hosted services project provides the production-facing API boundary that Win
 - Hosted role-membership records are verified with issuer signatures and hosted registry public keys.
 - The telemetry access endpoint returns redacted append-log metadata only; it blocks personal data, raw AI prompts, and storage payload details.
 
+## Hosted AI Runtime
+
+- Set `ARCHREALMS_PASSPORT_AI_INFERENCE_BASE_URL` to a private vLLM/TGI OpenAI-compatible `/v1` endpoint.
+- Set `ARCHREALMS_PASSPORT_AI_MODEL_ID` to the approved model ID for the release lane.
+- Set `ARCHREALMS_PASSPORT_AI_INFERENCE_API_KEY` when the runtime endpoint requires bearer authentication.
+- Optional controls: `ARCHREALMS_PASSPORT_AI_SYSTEM_PROMPT`, `ARCHREALMS_PASSPORT_AI_MAX_OUTPUT_TOKENS`, and `ARCHREALMS_PASSPORT_AI_TEMPERATURE`.
+- Passport clients call only the hosted gateway. They do not receive model runtime credentials and do not call vLLM/TGI directly.
+
 ## Release-Lane Configuration
 
 - `passport-release-lane.json` supports `ai_gateway_url`.
@@ -49,7 +58,7 @@ The hosted services project provides the production-facing API boundary that Win
 ## Current Limits
 
 - Production deployment still needs managed durable storage, backups, managed signing-key custody, incident logging, and managed release-lane deployment configuration.
-- The AI chat endpoint currently returns a gateway-contract response; production still needs the open-weight model runtime and vector store behind the gateway.
+- Production still needs final model endpoint selection, model artifact/license approval, managed vector store deployment, and production knowledge-pack approval workflow.
 - The service does not make fiat, exchange, external wallet, staking, yield, governance, or public stable-value claims.
 
 ## Verification

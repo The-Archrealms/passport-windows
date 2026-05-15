@@ -119,6 +119,19 @@ public static class PassportHostedPolicy
         string bearerToken,
         IPassportHostedSessionStore sessionStore)
     {
+        return CreateAiChatResponseAsync(request, bearerToken, sessionStore, null, null)
+            .GetAwaiter()
+            .GetResult();
+    }
+
+    public static async Task<PassportAiChatResponse> CreateAiChatResponseAsync(
+        PassportAiChatRequest request,
+        string bearerToken,
+        IPassportHostedSessionStore sessionStore,
+        PassportHostedKnowledgeStore? knowledgeStore,
+        IPassportHostedAiInferenceGateway? inferenceGateway,
+        CancellationToken cancellationToken = default)
+    {
         if (string.IsNullOrWhiteSpace(bearerToken))
         {
             return FailedChat("AI chat requires a bearer session token.");
@@ -150,19 +163,38 @@ public static class PassportHostedPolicy
             return FailedChat("AI chat rejected private key, seed, or recovery-secret material.");
         }
 
-        var sources = request.ClientApprovedContextRefs.Take(3).ToArray();
+        var retrievedChunks = knowledgeStore?.Retrieve(request.KnowledgePackId, request.Message, maxChunks: 3) ?? Array.Empty<PassportHostedKnowledgeChunk>();
+        var sources = retrievedChunks.Length == 0
+            ? request.ClientApprovedContextRefs.Take(3).ToArray()
+            : retrievedChunks.Select(chunk => chunk.Source).ToArray();
         var sourceSummary = sources.Length == 0
             ? "No approved source references were supplied by Passport."
             : "Sources: " + string.Join(", ", sources.Select(source => string.IsNullOrWhiteSpace(source.Title) ? source.SourceId : source.Title));
-        var answer = "Archrealms AI guide response from the hosted gateway contract. "
+        var fallbackAnswer = "Archrealms AI guide response from the hosted gateway contract. "
             + sourceSummary
             + " AI cannot approve recovery, issue or burn credits, release escrow, mark service delivered, change registry authority, execute wallet operations, or approve admin authority.";
+
+        if (inferenceGateway is { IsConfigured: true })
+        {
+            var inference = await inferenceGateway.CreateAnswerAsync(request, session.Session, retrievedChunks, cancellationToken).ConfigureAwait(false);
+            if (!inference.Succeeded)
+            {
+                return FailedChat("AI model runtime failed: " + inference.Message);
+            }
+
+            fallbackAnswer = inference.AnswerText
+                + Environment.NewLine
+                + Environment.NewLine
+                + "Runtime: " + inference.ModelId + ". " + sourceSummary;
+        }
 
         return new PassportAiChatResponse
         {
             Succeeded = true,
-            Message = "AI chat response created.",
-            AnswerText = answer,
+            Message = inferenceGateway is { IsConfigured: true }
+                ? "AI chat response created by hosted open-weight model runtime."
+                : "AI chat response created by hosted gateway contract fallback.",
+            AnswerText = fallbackAnswer,
             QuotaSummary = session.MessageQuota + " messages; " + session.TokenQuota + " tokens.",
             Sources = sources
         };
