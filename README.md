@@ -537,7 +537,7 @@ Pre-MVP internal verification has its own gate. Run it after building an `Intern
   -OutputPath .\artifacts\release\pre-mvp-internal-verification-report.json
 ```
 
-Staging readiness has its own gate so canary and production releases cannot skip the PRD staging-exit criterion. Generate a staging environment template after validating a `Staging` artifact with `Test-PassportWindowsReleaseArtifact.ps1`, then fill the staging endpoint, rollback-drill, and promotion-approval evidence:
+Staging readiness has its own gate so canary and production releases cannot skip the PRD staging-exit criterion. Generate a staging environment template after validating a `Staging` artifact with `Test-PassportWindowsReleaseArtifact.ps1`, then fill the staging endpoint, operational-drill, rollback-drill, and promotion-approval evidence:
 
 ```powershell
 .\tools\release\New-PassportStagingEnvironmentTemplate.ps1 `
@@ -548,7 +548,7 @@ Staging readiness has its own gate so canary and production releases cannot skip
   -OutputPath .\artifacts\release\staging.env
 ```
 
-The rollback drill and promotion approval values are not free-form notes. Copy and complete the templates under `deploy/staging-readiness/`, record their paths and SHA-256 hashes in the staging environment, and keep the completed evidence in the controlled staging document system.
+The operational drill, rollback drill, and promotion approval values are not free-form notes. Copy and complete the templates under `deploy/staging-readiness/`, record their paths and SHA-256 hashes in the staging environment, and keep the completed evidence in the controlled staging document system. The operational drill proves production-candidate upgrade, endpoint failover, signing verification, ledger export replay, recovery/revocation, storage proof, dry-run storage redemption, conversion disclosure, telemetry/privacy, incident response, support-access controls, AI gateway auth/privacy, and prohibited monetary-claim blocking.
 
 Then run:
 

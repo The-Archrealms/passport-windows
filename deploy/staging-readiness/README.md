@@ -9,11 +9,13 @@ Staging is not the MVP. It is a production-candidate lane with isolated staging 
 Copy these templates into the controlled staging document system, fill every placeholder, approve them, then load the paths and SHA-256 hashes into `artifacts/release/staging.env` or the staging secret store:
 
 - `staging-rollback-drill-report.template.json`
+- `staging-operational-drill-report.template.json`
 - `staging-promotion-approval-record.template.json`
 
 The readiness gate validates:
 
+- operational drill schema, lane, matching operational drill ID, endpoint/ledger/telemetry values, package version, policy version, operator, incident owner, evidence references, upgrade validation, endpoint failover, signing verification, ledger export replay, recovery/revocation, storage proof, storage redemption dry-run, conversion disclosure dry-run, telemetry/privacy, incident response, support access controls, AI gateway auth/privacy, and prohibited monetary claim blocking;
 - rollback report schema, lane, matching rollback drill ID, completion status, operation routing, ledger preservation, no mutation/backdating, pending escrow handling, export preservation, production-record isolation, approvers, affected services/assets, reason code, package version, policy version, and user-facing status;
-- promotion approval schema, lane, matching signoff IDs, matching pre-MVP/staging artifact/rollback hashes, and signed product, engineering, security/privacy, and Crown monetary authority approvals.
+- promotion approval schema, lane, matching signoff IDs, matching pre-MVP/staging artifact/operational-drill/rollback hashes, and signed product, engineering, security/privacy, and Crown monetary authority approvals.
 
 Synthetic staging readiness reports are valid only for validator self-tests. ProductionMvp readiness rejects synthetic staging reports.

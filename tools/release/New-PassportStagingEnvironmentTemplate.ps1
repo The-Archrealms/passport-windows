@@ -85,6 +85,10 @@ $variables = @(
     New-Variable -Gate "staging_ledger_telemetry" -Name "ARCHREALMS_PASSPORT_STAGING_LEDGER_NAMESPACE" -Description "Staging ledger namespace; must be distinct from production." -Example "archrealms-passport-staging"
     New-Variable -Gate "staging_ledger_telemetry" -Name "ARCHREALMS_PASSPORT_STAGING_TELEMETRY_DESTINATION" -Description "Staging telemetry destination; must be distinct from production." -Example "staging-managed-telemetry"
 
+    New-Variable -Gate "staging_operational_drill" -Name "ARCHREALMS_PASSPORT_STAGING_OPERATIONAL_DRILL_ID" -Description "Controlled evidence ID for the completed staging operational drill."
+    New-Variable -Gate "staging_operational_drill" -Name "ARCHREALMS_PASSPORT_STAGING_OPERATIONAL_DRILL_REPORT_PATH" -Description "Path to the staging operational drill report using schema archrealms.passport.staging_operational_drill.v1."
+    New-Variable -Gate "staging_operational_drill" -Name "ARCHREALMS_PASSPORT_STAGING_OPERATIONAL_DRILL_REPORT_SHA256" -Description "SHA-256 hex digest of the staging operational drill report."
+
     New-Variable -Gate "staging_rollback_drill" -Name "ARCHREALMS_PASSPORT_STAGING_ROLLBACK_DRILL_ID" -Description "Controlled evidence ID for the completed staging rollback drill."
     New-Variable -Gate "staging_rollback_drill" -Name "ARCHREALMS_PASSPORT_STAGING_ROLLBACK_DRILL_REPORT_PATH" -Description "Path to the staging rollback drill report using schema archrealms.passport.staging_rollback_drill.v1."
     New-Variable -Gate "staging_rollback_drill" -Name "ARCHREALMS_PASSPORT_STAGING_ROLLBACK_DRILL_REPORT_SHA256" -Description "SHA-256 hex digest of the staging rollback drill report."

@@ -241,6 +241,7 @@ if ($UseSyntheticFixtures) {
             [pscustomobject][ordered]@{ id = "staging_package_artifact"; passed = $true; missing = @() },
             [pscustomobject][ordered]@{ id = "staging_lane_endpoints"; passed = $true; missing = @() },
             [pscustomobject][ordered]@{ id = "staging_ledger_telemetry"; passed = $true; missing = @() },
+            [pscustomobject][ordered]@{ id = "staging_operational_drill"; passed = $true; missing = @() },
             [pscustomobject][ordered]@{ id = "staging_rollback_drill"; passed = $true; missing = @() },
             [pscustomobject][ordered]@{ id = "staging_promotion_approvals"; passed = $true; missing = @() },
             [pscustomobject][ordered]@{ id = "no_staging_to_production_migration"; passed = $true; missing = @() }

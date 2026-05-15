@@ -1,0 +1,33 @@
+{
+  "schema": "archrealms.passport.staging_operational_drill.v1",
+  "created_utc": "<yyyy-mm-ddThh:mm:ssZ>",
+  "lane": "staging",
+  "operational_drill_id": "<ARCHREALMS_PASSPORT_STAGING_OPERATIONAL_DRILL_ID>",
+  "completed": true,
+  "package_version": "<staging package version or artifact hash>",
+  "policy_version": "<staging policy version>",
+  "api_base_url": "<PASSPORT_WINDOWS_STAGING_API_BASE_URL>",
+  "ai_gateway_url": "<PASSPORT_WINDOWS_STAGING_AI_GATEWAY_URL>",
+  "ledger_namespace": "<ARCHREALMS_PASSPORT_STAGING_LEDGER_NAMESPACE>",
+  "telemetry_destination": "<ARCHREALMS_PASSPORT_STAGING_TELEMETRY_DESTINATION>",
+  "operator": "<staging drill operator>",
+  "incident_response_owner": "<staging incident response owner>",
+  "evidence_references": [
+    "<upgrade validation evidence ID or URI>",
+    "<endpoint failover evidence ID or URI>",
+    "<ledger export replay evidence ID or URI>"
+  ],
+  "production_candidate_upgrade_validated": true,
+  "endpoint_failover_validated": true,
+  "signing_verification_validated": true,
+  "ledger_export_replay_validated": true,
+  "recovery_revocation_validated": true,
+  "storage_proof_validation_completed": true,
+  "storage_redemption_dry_run_completed": true,
+  "conversion_disclosure_dry_run_completed": true,
+  "telemetry_privacy_validated": true,
+  "incident_response_validated": true,
+  "support_access_controls_validated": true,
+  "ai_gateway_auth_privacy_validated": true,
+  "prohibited_claims_blocked": true
+}

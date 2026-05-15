@@ -377,6 +377,85 @@ function Test-StagingLedgerTelemetry {
     return $failures
 }
 
+function Test-StagingOperationalDrill {
+    $failures = Test-ReportPathAndHash `
+        -PathEnvironment "ARCHREALMS_PASSPORT_STAGING_OPERATIONAL_DRILL_REPORT_PATH" `
+        -HashEnvironment "ARCHREALMS_PASSPORT_STAGING_OPERATIONAL_DRILL_REPORT_SHA256"
+    if ($failures.Count -gt 0) {
+        return $failures
+    }
+
+    $path = Get-EnvironmentValue -Name "ARCHREALMS_PASSPORT_STAGING_OPERATIONAL_DRILL_REPORT_PATH"
+    if ([string]::IsNullOrWhiteSpace($path)) {
+        return $failures
+    }
+
+    try {
+        $report = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
+    }
+    catch {
+        return @("staging operational drill report is not valid JSON: $($_.Exception.Message)")
+    }
+
+    $expectedId = Get-EnvironmentValue -Name "ARCHREALMS_PASSPORT_STAGING_OPERATIONAL_DRILL_ID"
+    if ((Read-ObjectString -Object $report -Name "schema") -ne "archrealms.passport.staging_operational_drill.v1") {
+        $failures += "staging operational drill report has unexpected schema"
+    }
+
+    if ((Read-ObjectString -Object $report -Name "lane") -ne "staging") {
+        $failures += "staging operational drill report must be for the staging lane"
+    }
+
+    if ((Read-ObjectString -Object $report -Name "operational_drill_id") -ne $expectedId) {
+        $failures += "staging operational drill report ID must match ARCHREALMS_PASSPORT_STAGING_OPERATIONAL_DRILL_ID"
+    }
+
+    foreach ($match in @(
+        @("api_base_url", "PASSPORT_WINDOWS_STAGING_API_BASE_URL"),
+        @("ai_gateway_url", "PASSPORT_WINDOWS_STAGING_AI_GATEWAY_URL"),
+        @("ledger_namespace", "ARCHREALMS_PASSPORT_STAGING_LEDGER_NAMESPACE"),
+        @("telemetry_destination", "ARCHREALMS_PASSPORT_STAGING_TELEMETRY_DESTINATION")
+    )) {
+        if ((Read-ObjectString -Object $report -Name $match[0]) -ne (Get-EnvironmentValue -Name $match[1])) {
+            $failures += "staging operational drill report field $($match[0]) must match $($match[1])"
+        }
+    }
+
+    foreach ($check in @(
+        @("completed", "staging operational drill completed"),
+        @("production_candidate_upgrade_validated", "production-candidate upgrade validation"),
+        @("endpoint_failover_validated", "endpoint failover validation"),
+        @("signing_verification_validated", "signing verification"),
+        @("ledger_export_replay_validated", "ledger export replay validation"),
+        @("recovery_revocation_validated", "recovery and revocation validation"),
+        @("storage_proof_validation_completed", "storage proof validation"),
+        @("storage_redemption_dry_run_completed", "storage redemption dry-run"),
+        @("conversion_disclosure_dry_run_completed", "conversion disclosure dry-run"),
+        @("telemetry_privacy_validated", "telemetry/privacy validation"),
+        @("incident_response_validated", "incident response validation"),
+        @("support_access_controls_validated", "support access control validation"),
+        @("ai_gateway_auth_privacy_validated", "AI gateway authentication/privacy validation"),
+        @("prohibited_claims_blocked", "prohibited monetary claim blocking")
+    )) {
+        $failure = Test-RequiredTrueField -Object $report -Name $check[0] -Description $check[1]
+        if ($failure) {
+            $failures += $failure
+        }
+    }
+
+    foreach ($field in @("package_version", "policy_version", "operator", "incident_response_owner")) {
+        if ([string]::IsNullOrWhiteSpace((Read-ObjectString -Object $report -Name $field))) {
+            $failures += "staging operational drill report must include $field"
+        }
+    }
+
+    if (@($report.evidence_references).Count -lt 3) {
+        $failures += "staging operational drill report must include at least three evidence references"
+    }
+
+    return $failures
+}
+
 function Test-StagingRollbackDrill {
     $failures = Test-ReportPathAndHash `
         -PathEnvironment "ARCHREALMS_PASSPORT_STAGING_ROLLBACK_DRILL_REPORT_PATH" `
@@ -489,6 +568,7 @@ function Test-StagingPromotionApprovals {
     foreach ($hashMatch in @(
         @("pre_mvp_report_sha256", "ARCHREALMS_PASSPORT_PRE_MVP_VERIFICATION_REPORT_SHA256"),
         @("staging_artifact_validation_report_sha256", "ARCHREALMS_PASSPORT_STAGING_ARTIFACT_VALIDATION_REPORT_SHA256"),
+        @("operational_drill_report_sha256", "ARCHREALMS_PASSPORT_STAGING_OPERATIONAL_DRILL_REPORT_SHA256"),
         @("rollback_drill_report_sha256", "ARCHREALMS_PASSPORT_STAGING_ROLLBACK_DRILL_REPORT_SHA256")
     )) {
         if ((Read-ObjectString -Object $record -Name $hashMatch[0]) -ne (Get-EnvironmentValue -Name $hashMatch[1])) {
@@ -599,6 +679,42 @@ function New-SyntheticFixtureReport {
     }
     $artifactReport | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $artifactPath -Encoding UTF8
 
+    $operationalPath = Join-Path $OutputDirectory "synthetic-staging-operational-drill-report.json"
+    $operational = [pscustomobject][ordered]@{
+        schema = "archrealms.passport.staging_operational_drill.v1"
+        created_utc = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
+        lane = "staging"
+        operational_drill_id = "staging-operational-drill-synthetic"
+        completed = $true
+        package_version = "synthetic-staging"
+        policy_version = "passport-token-ready-mvp-v1"
+        api_base_url = "http://127.0.0.1:18080"
+        ai_gateway_url = "http://127.0.0.1:18081"
+        ledger_namespace = "archrealms-passport-staging"
+        telemetry_destination = "staging-managed-telemetry"
+        operator = "synthetic-staging-operator"
+        incident_response_owner = "synthetic-incident-owner"
+        evidence_references = @(
+            "synthetic-upgrade-report",
+            "synthetic-endpoint-failover-report",
+            "synthetic-export-replay-report"
+        )
+        production_candidate_upgrade_validated = $true
+        endpoint_failover_validated = $true
+        signing_verification_validated = $true
+        ledger_export_replay_validated = $true
+        recovery_revocation_validated = $true
+        storage_proof_validation_completed = $true
+        storage_redemption_dry_run_completed = $true
+        conversion_disclosure_dry_run_completed = $true
+        telemetry_privacy_validated = $true
+        incident_response_validated = $true
+        support_access_controls_validated = $true
+        ai_gateway_auth_privacy_validated = $true
+        prohibited_claims_blocked = $true
+    }
+    $operational | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $operationalPath -Encoding UTF8
+
     $rollbackPath = Join-Path $OutputDirectory "synthetic-staging-rollback-drill-report.json"
     $rollback = [pscustomobject][ordered]@{
         schema = "archrealms.passport.staging_rollback_drill.v1"
@@ -624,6 +740,7 @@ function New-SyntheticFixtureReport {
 
     $preMvpHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $preMvpPath).Hash.ToLowerInvariant()
     $artifactHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $artifactPath).Hash.ToLowerInvariant()
+    $operationalHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $operationalPath).Hash.ToLowerInvariant()
     $rollbackHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $rollbackPath).Hash.ToLowerInvariant()
     $promotionPath = Join-Path $OutputDirectory "synthetic-staging-promotion-approval-record.json"
     $promotion = [pscustomobject][ordered]@{
@@ -637,6 +754,7 @@ function New-SyntheticFixtureReport {
         rollback_drill_id = "staging-rollback-drill-synthetic"
         pre_mvp_report_sha256 = $preMvpHash
         staging_artifact_validation_report_sha256 = $artifactHash
+        operational_drill_report_sha256 = $operationalHash
         rollback_drill_report_sha256 = $rollbackHash
         approve_canary_or_production_release = $true
         product_approval_signed = $true
@@ -654,6 +772,9 @@ function New-SyntheticFixtureReport {
     [System.Environment]::SetEnvironmentVariable("PASSPORT_WINDOWS_STAGING_AI_GATEWAY_URL", "http://127.0.0.1:18081", "Process")
     [System.Environment]::SetEnvironmentVariable("ARCHREALMS_PASSPORT_STAGING_LEDGER_NAMESPACE", "archrealms-passport-staging", "Process")
     [System.Environment]::SetEnvironmentVariable("ARCHREALMS_PASSPORT_STAGING_TELEMETRY_DESTINATION", "staging-managed-telemetry", "Process")
+    [System.Environment]::SetEnvironmentVariable("ARCHREALMS_PASSPORT_STAGING_OPERATIONAL_DRILL_ID", "staging-operational-drill-synthetic", "Process")
+    [System.Environment]::SetEnvironmentVariable("ARCHREALMS_PASSPORT_STAGING_OPERATIONAL_DRILL_REPORT_PATH", $operationalPath, "Process")
+    [System.Environment]::SetEnvironmentVariable("ARCHREALMS_PASSPORT_STAGING_OPERATIONAL_DRILL_REPORT_SHA256", $operationalHash, "Process")
     [System.Environment]::SetEnvironmentVariable("ARCHREALMS_PASSPORT_STAGING_ROLLBACK_DRILL_ID", "staging-rollback-drill-synthetic", "Process")
     [System.Environment]::SetEnvironmentVariable("ARCHREALMS_PASSPORT_STAGING_ROLLBACK_DRILL_REPORT_PATH", $rollbackPath, "Process")
     [System.Environment]::SetEnvironmentVariable("ARCHREALMS_PASSPORT_STAGING_ROLLBACK_DRILL_REPORT_SHA256", $rollbackHash, "Process")
@@ -667,6 +788,7 @@ function New-SyntheticFixtureReport {
     return [pscustomobject][ordered]@{
         pre_mvp_report_path = $preMvpPath
         staging_artifact_validation_report_path = $artifactPath
+        staging_operational_drill_report_path = $operationalPath
         staging_rollback_drill_report_path = $rollbackPath
         staging_promotion_approval_record_path = $promotionPath
     }
@@ -715,6 +837,16 @@ $gates = @(
             "ARCHREALMS_PASSPORT_STAGING_TELEMETRY_DESTINATION"
         ) `
         -ExtraCheck ${function:Test-StagingLedgerTelemetry}
+
+    New-Gate `
+        -Id "staging_operational_drill" `
+        -Description "Staging validates upgrade, endpoint failover, signing verification, export replay, support access, incident response, and dry-run service flows." `
+        -RequiredEnvironment @(
+            "ARCHREALMS_PASSPORT_STAGING_OPERATIONAL_DRILL_ID",
+            "ARCHREALMS_PASSPORT_STAGING_OPERATIONAL_DRILL_REPORT_PATH",
+            "ARCHREALMS_PASSPORT_STAGING_OPERATIONAL_DRILL_REPORT_SHA256"
+        ) `
+        -ExtraCheck ${function:Test-StagingOperationalDrill}
 
     New-Gate `
         -Id "staging_rollback_drill" `

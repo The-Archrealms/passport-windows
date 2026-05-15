@@ -930,6 +930,7 @@ function Test-StagingReadinessReport {
         "staging_package_artifact",
         "staging_lane_endpoints",
         "staging_ledger_telemetry",
+        "staging_operational_drill",
         "staging_rollback_drill",
         "staging_promotion_approvals",
         "no_staging_to_production_migration"

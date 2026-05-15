@@ -9,6 +9,7 @@
   "rollback_drill_id": "<ARCHREALMS_PASSPORT_STAGING_ROLLBACK_DRILL_ID>",
   "pre_mvp_report_sha256": "<ARCHREALMS_PASSPORT_PRE_MVP_VERIFICATION_REPORT_SHA256>",
   "staging_artifact_validation_report_sha256": "<ARCHREALMS_PASSPORT_STAGING_ARTIFACT_VALIDATION_REPORT_SHA256>",
+  "operational_drill_report_sha256": "<ARCHREALMS_PASSPORT_STAGING_OPERATIONAL_DRILL_REPORT_SHA256>",
   "rollback_drill_report_sha256": "<ARCHREALMS_PASSPORT_STAGING_ROLLBACK_DRILL_REPORT_SHA256>",
   "approve_canary_or_production_release": true,
   "product_approval_signed": true,
