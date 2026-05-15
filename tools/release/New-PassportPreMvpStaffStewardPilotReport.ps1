@@ -6,6 +6,7 @@ param(
     [int]$ParticipantCount,
     [string[]]$EvidenceReference,
     [string[]]$EvidenceFilePath,
+    [string]$EvidencePacketPath,
     [switch]$ConfirmCompleted,
     [switch]$ConfirmStaffOrStewardParticipants,
     [switch]$ConfirmCrownOwnedDevices,
@@ -87,6 +88,25 @@ if ($ParticipantCount -lt 1) {
     throw "ParticipantCount must be at least 1."
 }
 
+$packetEvidenceFiles = @()
+if (-not [string]::IsNullOrWhiteSpace($EvidencePacketPath)) {
+    $resolvedPacketPath = Resolve-RepoPath -Path $EvidencePacketPath
+    $validatorPath = Join-Path $scriptRoot "Test-PassportPreMvpStaffStewardPilotEvidencePacket.ps1"
+    if (-not (Test-Path -LiteralPath $validatorPath -PathType Leaf)) {
+        throw "Pilot evidence packet validator was not found: $validatorPath"
+    }
+
+    $validationJson = & $validatorPath -PacketRoot $resolvedPacketPath -RequireNoPlaceholders -NoFail -OutputPath ""
+    $validation = ($validationJson -join [Environment]::NewLine) | ConvertFrom-Json
+    if (-not [bool]$validation.passed) {
+        $failures = @($validation.checks | ForEach-Object { @($_.failures) } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+        throw "Pilot evidence packet did not pass validation: $($failures -join '; ')"
+    }
+
+    $packetEvidenceFiles = @($validation.evidence_files | ForEach-Object { $_.path })
+}
+
+$allEvidenceFilePaths = @($EvidenceFilePath) + @($packetEvidenceFiles)
 $references = @($EvidenceReference | ForEach-Object { ([string]$_).Trim() } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
 for ($index = 0; $index -lt $references.Count; $index++) {
     $failure = Test-NotPlaceholder -Name "EvidenceReference[$index]" -Value $references[$index]
@@ -96,7 +116,7 @@ for ($index = 0; $index -lt $references.Count; $index++) {
 }
 
 $evidenceFiles = @()
-foreach ($path in @($EvidenceFilePath)) {
+foreach ($path in @($allEvidenceFilePaths)) {
     $trimmedPath = ([string]$path).Trim()
     if ([string]::IsNullOrWhiteSpace($trimmedPath)) {
         continue

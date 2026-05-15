@@ -287,6 +287,63 @@ function Test-ReportEvidenceFiles {
     return $failures
 }
 
+function Test-StaffStewardPilotEvidencePacketContent {
+    param(
+        [object]$Object,
+        [string]$Name
+    )
+
+    $failures = @()
+    $files = @($Object.evidence_files)
+    if ($files.Count -lt 3) {
+        return $failures
+    }
+
+    $paths = @()
+    foreach ($file in $files) {
+        $path = Read-ObjectString -Object $file -Name "path"
+        if (-not [string]::IsNullOrWhiteSpace($path) -and (Test-Path -LiteralPath $path -PathType Leaf)) {
+            $paths += [System.IO.Path]::GetFullPath($path)
+        }
+    }
+
+    if ($paths.Count -lt 3) {
+        return $failures
+    }
+
+    $packetRoots = @($paths | ForEach-Object { Split-Path -Parent $_ } | Select-Object -Unique)
+    if ($packetRoots.Count -ne 1) {
+        $failures += "$Name evidence files must come from one pilot evidence packet folder"
+        return $failures
+    }
+
+    $validatorPath = Join-Path $PSScriptRoot "Test-PassportPreMvpStaffStewardPilotEvidencePacket.ps1"
+    if (-not (Test-Path -LiteralPath $validatorPath -PathType Leaf)) {
+        $failures += "$Name packet validator was not found: $validatorPath"
+        return $failures
+    }
+
+    try {
+        $validationJson = & $validatorPath -PacketRoot $packetRoots[0] -RequireNoPlaceholders -NoFail -OutputPath ""
+        $validation = ($validationJson -join [Environment]::NewLine) | ConvertFrom-Json
+        if (-not [bool]$validation.passed) {
+            $validationFailures = @($validation.checks | ForEach-Object { @($_.failures) } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+            if ($validationFailures.Count -eq 0) {
+                $validationFailures += "$Name packet validation did not pass"
+            }
+
+            foreach ($failure in $validationFailures) {
+                $failures += "$Name packet validation: $failure"
+            }
+        }
+    }
+    catch {
+        $failures += "$Name packet validation failed: $($_.Exception.Message)"
+    }
+
+    return $failures
+}
+
 function Test-SimulationCommandEvidence {
     param(
         [object]$Object,
@@ -514,6 +571,7 @@ function Test-PreMvpStaffStewardPilotEvidence {
 
     $failures += Test-EvidenceReferences -Object $report -Name "Pre-MVP staff/steward pilot report" -MinimumCount 3
     $failures += Test-ReportEvidenceFiles -Object $report -Name "Pre-MVP staff/steward pilot report" -MinimumCount 3
+    $failures += Test-StaffStewardPilotEvidencePacketContent -Object $report -Name "Pre-MVP staff/steward pilot report"
 
     return [pscustomobject][ordered]@{
         passed = ($failures.Count -eq 0)

@@ -17,7 +17,31 @@ Generate the simulation-run report from the local test harness, then record the 
 $simulationHash = (Get-FileHash -Algorithm SHA256 .\artifacts\release\pre-mvp-simulation-run-report.json).Hash.ToLowerInvariant()
 ```
 
-After the staff/steward pilot is complete, generate the pilot report from explicit operator confirmations. Use at least three evidence files from the controlled pilot session record, participant signoff, and issue/blocker review; do not use placeholders:
+Create a staff/steward pilot evidence packet before the controlled pilot, then fill the generated JSON records after the pilot is complete:
+
+```powershell
+.\tools\release\New-PassportPreMvpStaffStewardPilotEvidencePacket.ps1 `
+  -OutputDirectory C:\secure\passport-pilot `
+  -PilotId <pre-mvp-staff-steward-pilot-id> `
+  -PilotOwner <pilot-owner> `
+  -ParticipantCount 1
+```
+
+The packet contains:
+
+- `pilot-session-record.json`;
+- `participant-signoff.json`;
+- `pilot-issue-review.json`.
+
+Validate the filled packet before generating the pilot report:
+
+```powershell
+.\tools\release\Test-PassportPreMvpStaffStewardPilotEvidencePacket.ps1 `
+  -PacketRoot C:\secure\passport-pilot `
+  -RequireNoPlaceholders
+```
+
+After the staff/steward pilot is complete, generate the pilot report from explicit operator confirmations. Use the validated evidence packet; do not use placeholders:
 
 ```powershell
 .\tools\release\New-PassportPreMvpStaffStewardPilotReport.ps1 `
@@ -25,11 +49,7 @@ After the staff/steward pilot is complete, generate the pilot report from explic
   -PilotId <pre-mvp-staff-steward-pilot-id> `
   -PilotOwner <pilot-owner> `
   -ParticipantCount 1 `
-  -EvidenceFilePath @(
-    "C:\secure\passport-pilot\pilot-session-record.json",
-    "C:\secure\passport-pilot\participant-signoff.json",
-    "C:\secure\passport-pilot\pilot-issue-review.json"
-  ) `
+  -EvidencePacketPath C:\secure\passport-pilot `
   -ConfirmCompleted `
   -ConfirmStaffOrStewardParticipants `
   -ConfirmCrownOwnedDevices `
@@ -43,7 +63,7 @@ After the staff/steward pilot is complete, generate the pilot report from explic
   -ConfirmNoProductionRecordsCreated
 ```
 
-The template remains available for controlled document-system review. The generated report includes hashed `evidence_files`; `Test-PassportPreMvpInternalVerification.ps1` verifies those files exist and match their recorded SHA-256 values. Pass both evidence report paths and SHA-256 hashes to the verifier:
+The templates remain available for controlled document-system review. The generated report includes hashed `evidence_files`; `Test-PassportPreMvpInternalVerification.ps1` verifies those files exist, match their recorded SHA-256 values, and pass the staff/steward pilot evidence packet schema validation. Pass both evidence report paths and SHA-256 hashes to the verifier:
 
 ```powershell
 .\tools\release\Test-PassportPreMvpInternalVerification.ps1 `
@@ -63,4 +83,4 @@ ARCHREALMS_PASSPORT_PRE_MVP_STAFF_STEWARD_PILOT_REPORT_PATH
 ARCHREALMS_PASSPORT_PRE_MVP_STAFF_STEWARD_PILOT_REPORT_SHA256
 ```
 
-The reports must use the `internal-verification` lane, include real non-placeholder evidence references, and prove that no production ARCH, production CC, Crown reserve balance, citizen production account history, or production service-liability record was created.
+The reports must use the `internal-verification` lane, include real non-placeholder evidence references and evidence files, and prove that no production ARCH, production CC, Crown reserve balance, citizen production account history, or production service-liability record was created.

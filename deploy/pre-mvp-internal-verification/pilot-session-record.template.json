@@ -1,0 +1,62 @@
+{
+  "schema": "archrealms.passport.pre_mvp_staff_steward_pilot_session.v1",
+  "created_utc": "<yyyy-mm-ddThh:mm:ssZ>",
+  "lane": "internal-verification",
+  "pilot_id": "<pre-mvp-staff-steward-pilot-id>",
+  "pilot_owner": "<pilot owner>",
+  "policy_version": "token-ready-passport-mvp-pre-mvp-internal-verification-v1",
+  "app_commit": "<passport-windows-commit>",
+  "artifact_manifest_path": "<internal-verification-artifact-manifest-path>",
+  "artifact_manifest_sha256": "<sha256>",
+  "session_started_utc": "<yyyy-mm-ddThh:mm:ssZ>",
+  "session_ended_utc": "<yyyy-mm-ddThh:mm:ssZ>",
+  "pilot_participant_count": 1,
+  "crown_owned_device_ids": [
+    "<controlled-device-id>"
+  ],
+  "synthetic_or_fake_balances_used": true,
+  "no_citizen_production_tokens_used": true,
+  "no_production_records_created": true,
+  "scenarios": [
+    {
+      "id": "identity_create_or_recover",
+      "passed": true,
+      "evidence_reference": "<evidence-id-or-uri>"
+    },
+    {
+      "id": "device_authorization",
+      "passed": true,
+      "evidence_reference": "<evidence-id-or-uri>"
+    },
+    {
+      "id": "wallet_key_binding",
+      "passed": true,
+      "evidence_reference": "<evidence-id-or-uri>"
+    },
+    {
+      "id": "recovery_revocation",
+      "passed": true,
+      "evidence_reference": "<evidence-id-or-uri>"
+    },
+    {
+      "id": "storage_contribution_opt_in_revocation",
+      "passed": true,
+      "evidence_reference": "<evidence-id-or-uri>"
+    },
+    {
+      "id": "ledger_export_verification",
+      "passed": true,
+      "evidence_reference": "<evidence-id-or-uri>"
+    },
+    {
+      "id": "hosted_ai_privacy",
+      "passed": true,
+      "evidence_reference": "<evidence-id-or-uri>"
+    },
+    {
+      "id": "production_blocker_review",
+      "passed": true,
+      "evidence_reference": "<evidence-id-or-uri>"
+    }
+  ]
+}

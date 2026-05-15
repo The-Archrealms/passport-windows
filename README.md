@@ -526,7 +526,7 @@ The packaging script accepts a stable signing certificate through either:
 
 If those are not provided, the script falls back to a generated self-signed test certificate. That fallback is suitable for preview and sideload testing, but a stable certificate should be configured before treating public sideload `MSIX` upgrades as production-grade.
 
-Pre-MVP internal verification has its own gate. Run it after building an `InternalVerification` lane artifact, generating the simulation-run evidence, and copying/filling the staff/steward pilot evidence template under `deploy/pre-mvp-internal-verification/` into the controlled verification evidence system. The report must prove the named PRD/ARD pre-MVP checks ran and that synthetic/fake records cannot migrate into production balances:
+Pre-MVP internal verification has its own gate. Run it after building an `InternalVerification` lane artifact, generating the simulation-run evidence, and generating/filling the staff/steward pilot evidence packet in the controlled verification evidence system. The report must prove the named PRD/ARD pre-MVP checks ran and that synthetic/fake records cannot migrate into production balances:
 
 ```powershell
 .\tools\release\Publish-PassportWindows.ps1 `
@@ -537,16 +537,22 @@ Pre-MVP internal verification has its own gate. Run it after building an `Intern
   -OutputPath .\artifacts\release\pre-mvp-simulation-run-report.json `
   -EvidenceRoot .\artifacts\release\pre-mvp-simulation-run-evidence
 
+.\tools\release\New-PassportPreMvpStaffStewardPilotEvidencePacket.ps1 `
+  -OutputDirectory C:\secure\passport-pilot `
+  -PilotId <pre-mvp-staff-steward-pilot-id> `
+  -PilotOwner <pilot-owner> `
+  -ParticipantCount 1
+
+.\tools\release\Test-PassportPreMvpStaffStewardPilotEvidencePacket.ps1 `
+  -PacketRoot C:\secure\passport-pilot `
+  -RequireNoPlaceholders
+
 .\tools\release\New-PassportPreMvpStaffStewardPilotReport.ps1 `
   -OutputPath .\artifacts\release\pre-mvp-staff-steward-pilot-report.json `
   -PilotId <pre-mvp-staff-steward-pilot-id> `
   -PilotOwner <pilot-owner> `
   -ParticipantCount 1 `
-  -EvidenceFilePath @(
-    "C:\secure\passport-pilot\pilot-session-record.json",
-    "C:\secure\passport-pilot\participant-signoff.json",
-    "C:\secure\passport-pilot\pilot-issue-review.json"
-  ) `
+  -EvidencePacketPath C:\secure\passport-pilot `
   -ConfirmCompleted `
   -ConfirmStaffOrStewardParticipants `
   -ConfirmCrownOwnedDevices `

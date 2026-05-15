@@ -21,5 +21,22 @@
     "<pilot-session-record-id-or-uri>",
     "<participant-signoff-id-or-uri>",
     "<pilot-issue-review-id-or-uri>"
+  ],
+  "evidence_files": [
+    {
+      "id": "pilot-session-record",
+      "path": "<controlled-path-to-pilot-session-record.json>",
+      "sha256": "<sha256>"
+    },
+    {
+      "id": "participant-signoff",
+      "path": "<controlled-path-to-participant-signoff.json>",
+      "sha256": "<sha256>"
+    },
+    {
+      "id": "pilot-issue-review",
+      "path": "<controlled-path-to-pilot-issue-review.json>",
+      "sha256": "<sha256>"
+    }
   ]
 }

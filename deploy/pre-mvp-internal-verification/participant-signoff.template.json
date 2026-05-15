@@ -1,0 +1,20 @@
+{
+  "schema": "archrealms.passport.pre_mvp_staff_steward_participant_signoff.v1",
+  "created_utc": "<yyyy-mm-ddThh:mm:ssZ>",
+  "lane": "internal-verification",
+  "pilot_id": "<pre-mvp-staff-steward-pilot-id>",
+  "pilot_owner": "<pilot owner>",
+  "policy_version": "token-ready-passport-mvp-pre-mvp-internal-verification-v1",
+  "signoffs": [
+    {
+      "participant_id": "<staff-or-steward-id>",
+      "participant_role": "<staff-or-steward-role>",
+      "staff_or_steward_participant": true,
+      "crown_owned_device_used": true,
+      "no_citizen_production_tokens_used": true,
+      "no_production_records_created": true,
+      "signed_utc": "<yyyy-mm-ddThh:mm:ssZ>",
+      "signoff_reference": "<signature-or-controlled-approval-id>"
+    }
+  ]
+}
