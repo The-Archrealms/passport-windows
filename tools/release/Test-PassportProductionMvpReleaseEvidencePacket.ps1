@@ -233,10 +233,37 @@ if ($UseSyntheticFixtures) {
             },
             [pscustomobject][ordered]@{
                 id = "package_signing"
+                passed = $true
+                missing = @()
+            },
+            [pscustomobject][ordered]@{
+                id = "production_release_approvals"
                 passed = $false
-                missing = @("production package signing certificate is not configured")
+                missing = @("ARCHREALMS_PASSPORT_PRODUCTION_RELEASE_APPROVAL_ID")
             }
         )
+        package_signing_certificate = [pscustomobject][ordered]@{
+            source = "pfx-base64"
+            expected_publisher = "CN=The Archrealms"
+            timestamp_url = "https://timestamp.example.invalid"
+            minimum_days_valid = 30
+            disallow_self_signed = $false
+            certificate = [pscustomobject][ordered]@{
+                subject = "CN=The Archrealms"
+                issuer = "CN=Example Issuing CA"
+                thumbprint = "0123456789ABCDEF0123456789ABCDEF01234567"
+                not_before_utc = "2026-01-01T00:00:00Z"
+                not_after_utc = "2027-01-01T00:00:00Z"
+                days_remaining = 200
+                has_private_key = $true
+                code_signing_eku_present = $true
+                enhanced_key_usage_oids = @("1.3.6.1.5.5.7.3.3")
+                self_signed = $false
+            }
+            warnings = @()
+            failures = @()
+            passed = $true
+        }
     })
 
     Write-JsonFile -Path $StagingReadinessReportPath -Value ([pscustomobject][ordered]@{
@@ -368,6 +395,42 @@ if ($null -ne $manifest) {
     $checks += Add-Check -Id "reviewable_for_signoff" -Condition ($manifest.approval_packet_status.reviewable_for_signoff -eq $true) -Failure "release evidence packet is not reviewable for signoff"
     $checks += Add-Check -Id "completion_matches_readiness" -Condition ($manifest.approval_packet_status.complete_for_production_testing -eq $manifest.production_mvp_readiness.ready) -Failure "complete_for_production_testing must match readiness"
 
+    $packageSigningGate = @($manifest.production_mvp_readiness.gates) | Where-Object { $_.id -eq "package_signing" } | Select-Object -First 1
+    $packageSigningGatePassed = ($null -ne $packageSigningGate -and $packageSigningGate.passed -eq $true)
+    $packageSigningCertificate = $null
+    if ($manifest.PSObject.Properties["package_signing_certificate"]) {
+        $packageSigningCertificate = $manifest.package_signing_certificate
+    }
+
+    if ($packageSigningGatePassed -or $RequireReady) {
+        $certificate = $null
+        if ($null -ne $packageSigningCertificate) {
+            $certificate = $packageSigningCertificate.certificate
+        }
+
+        $timestampUrl = ""
+        if ($null -ne $packageSigningCertificate) {
+            $timestampUrl = [string]$packageSigningCertificate.timestamp_url
+        }
+
+        $timestampUri = $null
+        $timestampUrlIsAbsolute = (
+            -not [string]::IsNullOrWhiteSpace($timestampUrl) -and
+            [System.Uri]::TryCreate($timestampUrl.Trim(), [System.UriKind]::Absolute, [ref]$timestampUri) -and
+            $timestampUri.Scheme -in @("http", "https")
+        )
+
+        $checks += Add-Check -Id "package_signing_certificate_included_when_gate_passes" -Condition ($null -ne $packageSigningCertificate -and $packageSigningCertificate.included -eq $true) -Failure "package signing certificate summary must be included when the package_signing gate passes or readiness is required"
+        $checks += Add-Check -Id "package_signing_certificate_passed_when_gate_passes" -Condition ($null -ne $packageSigningCertificate -and $packageSigningCertificate.passed -eq $true) -Failure "package signing certificate summary must show passed=true when the package_signing gate passes or readiness is required"
+        $checks += Add-Check -Id "package_signing_certificate_material" -Condition ($null -ne $certificate) -Failure "package signing certificate details are missing"
+        $checks += Add-Check -Id "package_signing_certificate_subject" -Condition ($null -ne $certificate -and -not [string]::IsNullOrWhiteSpace([string]$certificate.subject)) -Failure "package signing certificate subject is missing"
+        $checks += Add-Check -Id "package_signing_certificate_thumbprint" -Condition ($null -ne $certificate -and [string]$certificate.thumbprint -match '^[0-9A-Fa-f]{40,}$') -Failure "package signing certificate thumbprint is missing or invalid"
+        $checks += Add-Check -Id "package_signing_certificate_private_key" -Condition ($null -ne $certificate -and $certificate.has_private_key -eq $true) -Failure "package signing certificate must include private-key availability evidence"
+        $checks += Add-Check -Id "package_signing_certificate_code_signing_eku" -Condition ($null -ne $certificate -and $certificate.code_signing_eku_present -eq $true) -Failure "package signing certificate must include Code Signing EKU evidence"
+        $checks += Add-Check -Id "package_signing_certificate_timestamp_url" -Condition $timestampUrlIsAbsolute -Failure "package signing certificate timestamp URL must be an absolute HTTP or HTTPS URL"
+        $checks += Add-Check -Id "package_signing_expected_publisher" -Condition ($null -ne $packageSigningCertificate -and -not [string]::IsNullOrWhiteSpace([string]$packageSigningCertificate.expected_publisher)) -Failure "package signing expected publisher is missing"
+    }
+
     if ($RequireReady) {
         $checks += Add-Check -Id "readiness_ready" -Condition ($manifest.production_mvp_readiness.ready -eq $true -and $manifest.production_mvp_readiness.failed_gate_count -eq 0) -Failure "production readiness is not ready"
     }
@@ -434,6 +497,7 @@ if ($null -ne $manifest) {
 
 if (-not [string]::IsNullOrWhiteSpace($summaryText)) {
     $checks += Add-Check -Id "summary_states_secret_posture" -Condition ($summaryText -match "Secrets included: false") -Failure "release evidence summary does not state that secrets are excluded"
+    $checks += Add-Check -Id "summary_states_package_signing_certificate" -Condition ($summaryText -match "Package signing certificate included:") -Failure "release evidence summary does not state package-signing certificate posture"
     if ($summaryText -match [regex]::Escape($syntheticSecret)) {
         $checks += New-Check -Id "summary_secret_leak_check" -Passed $false -Failures @("synthetic secret appeared in release evidence summary")
     }

@@ -198,6 +198,74 @@ function Get-EnvironmentFileValue {
     return ""
 }
 
+function Get-ObjectPropertyValue {
+    param(
+        [object]$Object,
+        [string]$Name,
+        [object]$DefaultValue = $null
+    )
+
+    if ($null -eq $Object) {
+        return $DefaultValue
+    }
+
+    $property = $Object.PSObject.Properties[$Name]
+    if ($null -eq $property -or $null -eq $property.Value) {
+        return $DefaultValue
+    }
+
+    return $property.Value
+}
+
+function New-PackageSigningCertificateSummary {
+    param([object]$ReadinessReport)
+
+    $certificateReport = Get-ObjectPropertyValue -Object $ReadinessReport -Name "package_signing_certificate"
+    if ($null -eq $certificateReport) {
+        return [pscustomobject][ordered]@{
+            included = $false
+            passed = $false
+            source = ""
+            expected_publisher = ""
+            timestamp_url = ""
+            minimum_days_valid = $null
+            disallow_self_signed = $false
+            warnings = @()
+            failures = @()
+            certificate = $null
+        }
+    }
+
+    $certificate = Get-ObjectPropertyValue -Object $certificateReport -Name "certificate"
+    $certificateSummary = $null
+    if ($null -ne $certificate) {
+        $certificateSummary = [pscustomobject][ordered]@{
+            subject = [string](Get-ObjectPropertyValue -Object $certificate -Name "subject" -DefaultValue "")
+            issuer = [string](Get-ObjectPropertyValue -Object $certificate -Name "issuer" -DefaultValue "")
+            thumbprint = [string](Get-ObjectPropertyValue -Object $certificate -Name "thumbprint" -DefaultValue "")
+            not_before_utc = [string](Get-ObjectPropertyValue -Object $certificate -Name "not_before_utc" -DefaultValue "")
+            not_after_utc = [string](Get-ObjectPropertyValue -Object $certificate -Name "not_after_utc" -DefaultValue "")
+            days_remaining = Get-ObjectPropertyValue -Object $certificate -Name "days_remaining"
+            has_private_key = [bool](Get-ObjectPropertyValue -Object $certificate -Name "has_private_key" -DefaultValue $false)
+            code_signing_eku_present = [bool](Get-ObjectPropertyValue -Object $certificate -Name "code_signing_eku_present" -DefaultValue $false)
+            self_signed = [bool](Get-ObjectPropertyValue -Object $certificate -Name "self_signed" -DefaultValue $false)
+        }
+    }
+
+    return [pscustomobject][ordered]@{
+        included = $true
+        passed = [bool](Get-ObjectPropertyValue -Object $certificateReport -Name "passed" -DefaultValue $false)
+        source = [string](Get-ObjectPropertyValue -Object $certificateReport -Name "source" -DefaultValue "")
+        expected_publisher = [string](Get-ObjectPropertyValue -Object $certificateReport -Name "expected_publisher" -DefaultValue "")
+        timestamp_url = [string](Get-ObjectPropertyValue -Object $certificateReport -Name "timestamp_url" -DefaultValue "")
+        minimum_days_valid = Get-ObjectPropertyValue -Object $certificateReport -Name "minimum_days_valid"
+        disallow_self_signed = [bool](Get-ObjectPropertyValue -Object $certificateReport -Name "disallow_self_signed" -DefaultValue $false)
+        warnings = @(Get-ObjectPropertyValue -Object $certificateReport -Name "warnings" -DefaultValue @())
+        failures = @(Get-ObjectPropertyValue -Object $certificateReport -Name "failures" -DefaultValue @())
+        certificate = $certificateSummary
+    }
+}
+
 $resolvedOutput = Resolve-RepoPath -Path $OutputDirectory
 if ((Test-Path -LiteralPath $resolvedOutput) -and -not $Force) {
     throw "OutputDirectory already exists. Use -Force to update it: $resolvedOutput"
@@ -259,6 +327,7 @@ $canaryMvpReadiness = Read-JsonFile -Path $resolvedCanaryMvpReadinessReport
 $provisioning = Read-JsonFile -Path $resolvedProvisioningPacketReport
 $packetManifest = Read-JsonFile -Path $resolvedProvisioningPacketManifest
 $environment = Import-RedactedEnvironmentFile -Path $resolvedEnvironmentFile
+$packageSigningCertificate = New-PackageSigningCertificateSummary -ReadinessReport $readiness
 
 $readinessGates = @()
 if ($null -ne $readiness -and $null -ne $readiness.gates) {
@@ -341,6 +410,7 @@ $manifest = [pscustomobject][ordered]@{
         failed_gate_count = $readinessFailedGateCount
         gates = $readinessGates
     }
+    package_signing_certificate = $packageSigningCertificate
     approval_packet_status = [pscustomobject][ordered]@{
         complete_for_production_testing = ($null -ne $readiness -and [bool]$readiness.ready)
         reviewable_for_signoff = (
@@ -382,6 +452,8 @@ $summaryLines = @(
     "- Production provisioning packet passed: $($manifest.production_provisioning_packet.passed)",
     "- Production readiness ready: $($manifest.production_mvp_readiness.ready)",
     "- Production readiness failed gates: $($manifest.production_mvp_readiness.failed_gate_count)",
+    "- Package signing certificate included: $($manifest.package_signing_certificate.included)",
+    "- Package signing certificate passed: $($manifest.package_signing_certificate.passed)",
     "",
     "## Evidence Hashes",
     ""
@@ -389,6 +461,19 @@ $summaryLines = @(
 foreach ($file in $evidenceFiles) {
     $summaryLines += "- ``$($file.id)``: exists=$($file.exists); sha256=``$($file.sha256)``"
 }
+
+if ($manifest.package_signing_certificate.included -eq $true -and $null -ne $manifest.package_signing_certificate.certificate) {
+    $summaryLines += ""
+    $summaryLines += "## Package Signing Certificate"
+    $summaryLines += ""
+    $summaryLines += "- Subject: ``$($manifest.package_signing_certificate.certificate.subject)``"
+    $summaryLines += "- Issuer: ``$($manifest.package_signing_certificate.certificate.issuer)``"
+    $summaryLines += "- Thumbprint: ``$($manifest.package_signing_certificate.certificate.thumbprint)``"
+    $summaryLines += "- Not after UTC: ``$($manifest.package_signing_certificate.certificate.not_after_utc)``"
+    $summaryLines += "- Code signing EKU present: $($manifest.package_signing_certificate.certificate.code_signing_eku_present)"
+    $summaryLines += "- Self-signed: $($manifest.package_signing_certificate.certificate.self_signed)"
+}
+
 $summaryLines += ""
 $summaryLines += "## Blocking Gates"
 $summaryLines += ""
