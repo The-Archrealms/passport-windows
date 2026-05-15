@@ -490,68 +490,27 @@ namespace ArchrealmsPassport.Windows.Services
                     return result;
                 }
 
-                using var manifestDocument = JsonDocument.Parse(File.ReadAllText(manifestPath));
-                var manifest = manifestDocument.RootElement;
-                if (!Matches(manifest, "record_type", "passport_monetary_account_export"))
-                {
-                    result.Failures.Add("Invalid account export manifest record type.");
-                }
-
-                if (!Matches(manifest, "release_lane", releaseLane.Lane))
-                {
-                    result.Failures.Add("Export release lane does not match verifier release lane.");
-                }
-
-                if (!Matches(manifest, "ledger_namespace", releaseLane.LedgerNamespace))
-                {
-                    result.Failures.Add("Export ledger namespace does not match verifier ledger namespace.");
-                }
-
-                var transparencyRootPath = ResolveWorkspaceRelativePath(
+                var coreVerification = PassportMonetaryLedgerExportVerifier.Verify(
                     resolvedExportRoot,
-                    ReadString(manifest, "transparency_root_export_path"));
-                if (!File.Exists(transparencyRootPath))
-                {
-                    result.Failures.Add("Missing exported transparency root.");
-                }
-                else
-                {
-                    VerifyTransparencyRoot(transparencyRootPath, ReadString(manifest, "transparency_root_sha256"), result.Failures);
-                }
-
-                var eventCount = 0;
-                if (manifest.TryGetProperty("events", out var events) && events.ValueKind == JsonValueKind.Array)
-                {
-                    foreach (var eventRow in events.EnumerateArray())
+                    new PassportMonetaryLedgerReplayOptions
                     {
-                        eventCount++;
-                        VerifyExportedEvent(resolvedExportRoot, manifest, eventRow, result.Failures);
-                    }
-                }
-                else
-                {
-                    result.Failures.Add("Manifest does not contain an events array.");
-                }
-
-                VerifyManifestAccountHashChain(manifest, result.Failures);
-
-                if (manifest.TryGetProperty("key_history", out var keyHistory) && keyHistory.ValueKind == JsonValueKind.Array)
-                {
-                    VerifyKeyHistory(resolvedExportRoot, keyHistory, result.Failures);
-                }
+                        ExpectedReleaseLane = releaseLane.Lane,
+                        ExpectedLedgerNamespace = releaseLane.LedgerNamespace,
+                        ProductionLedger = releaseLane.ProductionLedger,
+                        AllowProductionTokenRecords = releaseLane.AllowProductionTokenRecords,
+                        AllowStagingRecords = releaseLane.AllowStagingRecords,
+                        EnforceUniqueArchGenesisAllocationIds = releaseLane.ProductionLedger
+                    });
+                result.Failures.AddRange(coreVerification.Failures);
 
                 var replay = Replay(resolvedExportRoot);
                 if (!replay.Succeeded)
                 {
                     result.Failures.AddRange(replay.Failures.Select(failure => "Replay failed: " + failure));
                 }
-                else
-                {
-                    VerifyManifestBalances(manifest, replay, result.Failures);
-                }
 
-                result.EventCount = eventCount;
-                result.ExportRootSha256 = ComputeDirectoryHash(resolvedExportRoot);
+                result.EventCount = coreVerification.EventCount;
+                result.ExportRootSha256 = coreVerification.ExportRootSha256;
                 result.Succeeded = result.Failures.Count == 0;
                 result.Message = result.Succeeded
                     ? "Monetary ledger account export verification succeeded."

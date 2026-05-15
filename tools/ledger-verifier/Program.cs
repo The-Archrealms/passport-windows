@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
-using ArchrealmsPassport.Windows.Services;
+using ArchrealmsPassport.Core.Protocol;
 
 namespace Archrealms.LedgerVerifier;
 
@@ -33,14 +33,20 @@ internal static class Program
             var releaseLaneName = args.Length > 2 && !string.IsNullOrWhiteSpace(args[2])
                 ? args[2]
                 : ReadManifestString(manifestPath, "release_lane", "staging");
-            var releaseLane = PassportReleaseLane.CreateDefault(releaseLaneName);
-            var verification = new PassportMonetaryLedgerService(releaseLane).VerifyAccountExport(exportRoot);
+            var ledgerNamespace = ReadManifestString(manifestPath, "ledger_namespace", string.Empty);
+            var verification = PassportMonetaryLedgerExportVerifier.Verify(
+                exportRoot,
+                new PassportMonetaryLedgerReplayOptions
+                {
+                    ExpectedReleaseLane = releaseLaneName,
+                    ExpectedLedgerNamespace = ledgerNamespace
+                });
             var report = new Dictionary<string, object?>
             {
                 ["verified_utc"] = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
                 ["export_root"] = exportRoot,
-                ["release_lane"] = releaseLane.Lane,
-                ["ledger_namespace"] = releaseLane.LedgerNamespace,
+                ["release_lane"] = verification.ReleaseLane,
+                ["ledger_namespace"] = verification.LedgerNamespace,
                 ["event_count"] = verification.EventCount,
                 ["export_root_sha256"] = verification.ExportRootSha256,
                 ["verified"] = verification.Succeeded,
