@@ -682,6 +682,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
             _fetchReadOnlyIpfsFileCommand.RaiseCanExecuteChanged();
             _exportCarCommand.RaiseCanExecuteChanged();
             _createAiSessionCommand.RaiseCanExecuteChanged();
+            _askAiQuestionCommand.RaiseCanExecuteChanged();
             _createStorageRedemptionQuoteCommand.RaiseCanExecuteChanged();
             _acceptStorageRedemptionQuoteCommand.RaiseCanExecuteChanged();
             _burnStorageRedemptionEpochCommand.RaiseCanExecuteChanged();

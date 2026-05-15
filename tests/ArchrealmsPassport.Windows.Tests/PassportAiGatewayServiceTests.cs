@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using System.Threading.Tasks;
 using ArchrealmsPassport.Windows.Services;
 using ArchrealmsPassport.Windows.Tests.Infrastructure;
 using Xunit;
@@ -110,5 +111,82 @@ public sealed class PassportAiGatewayServiceTests
 
         Assert.False(session.Succeeded);
         Assert.Contains("hash", session.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task AiGuideAnswersFromApprovedKnowledgePackWithoutStoringBearerTokenOrPrompt()
+    {
+        using var workspace = PassportTestWorkspace.Create();
+        var releaseLane = PassportReleaseLane.CreateDefault("production-mvp");
+        var gateway = new PassportAiGatewayService(releaseLane);
+        var request = gateway.CreateSessionRequest(
+            workspace.Root,
+            workspace.IdentityId,
+            workspace.DeviceId,
+            workspace.KeyReferencePath,
+            "https://ai.archrealms.local",
+            "archrealms-mvp-approved-knowledge",
+            diagnosticsUploadOptIn: false);
+        Assert.True(request.Succeeded, request.Message);
+
+        var session = gateway.CreateLocalGatewaySession(
+            workspace.Root,
+            request.RequestPath,
+            request.RequestSha256,
+            messageQuota: 25,
+            tokenQuota: 10000,
+            ttl: TimeSpan.FromMinutes(15));
+        Assert.True(session.Succeeded, session.Message);
+
+        var question = "Can the AI approve recovery or move wallet assets?";
+        var guide = await new PassportAiGuideService(releaseLane).AskAsync(
+            workspace.Root,
+            AppContext.BaseDirectory,
+            workspace.IdentityId,
+            workspace.DeviceId,
+            "https://ai.archrealms.local",
+            "archrealms-mvp-approved-knowledge",
+            session.SessionPath,
+            session.SessionToken,
+            question,
+            diagnosticsUploadOptIn: false);
+
+        Assert.True(guide.Succeeded, guide.Message);
+        Assert.Contains("cannot approve recovery", guide.AnswerText, StringComparison.OrdinalIgnoreCase);
+        Assert.NotEmpty(guide.Sources);
+        Assert.True(File.Exists(guide.ChatRecordPath));
+
+        var chatJson = File.ReadAllText(guide.ChatRecordPath);
+        Assert.DoesNotContain(session.SessionToken, chatJson);
+        Assert.DoesNotContain(question, chatJson);
+        Assert.Contains(session.SessionTokenSha256, chatJson);
+
+        var chatRecord = PassportTestWorkspace.ReadJson(guide.ChatRecordPath);
+        Assert.Equal("passport_ai_chat_record", PassportTestWorkspace.GetString(chatRecord, "record_type"));
+        Assert.False(chatRecord.GetProperty("model_training_allowed").GetBoolean());
+        Assert.False(chatRecord.GetProperty("authority_boundaries").GetProperty("can_execute_wallet_operations").GetBoolean());
+    }
+
+    [Fact]
+    public async Task AiGuideBlocksPrivateKeyMaterialBeforeChatRecordIsCreated()
+    {
+        using var workspace = PassportTestWorkspace.Create();
+        var releaseLane = PassportReleaseLane.CreateDefault("production-mvp");
+
+        var guide = await new PassportAiGuideService(releaseLane).AskAsync(
+            workspace.Root,
+            AppContext.BaseDirectory,
+            workspace.IdentityId,
+            workspace.DeviceId,
+            "https://ai.archrealms.local",
+            "archrealms-mvp-approved-knowledge",
+            sessionPath: string.Empty,
+            sessionToken: string.Empty,
+            question: "wallet private key: abc123",
+            diagnosticsUploadOptIn: false);
+
+        Assert.False(guide.Succeeded);
+        Assert.Contains("blocked", guide.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(Directory.Exists(Path.Combine(workspace.Root, "records", "passport", "ai", "chats")));
     }
 }

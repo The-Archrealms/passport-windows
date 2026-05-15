@@ -42,18 +42,69 @@ namespace ArchrealmsPassport.Windows.ViewModels
             }
 
             LatestAiSessionRecordText = session.SessionPath;
+            _activeAiSessionToken = session.SessionToken;
+            _activeAiSessionId = session.SessionId;
             AiSessionStatusText = "AI session active until " + session.ExpiresUtc + ".";
             AiQuotaSummaryText = session.MessageQuota + " messages; " + session.TokenQuota + " tokens.";
             AppendLog(request.Message);
             AppendLog("AI request: " + request.RequestPath);
             AppendLog(session.Message);
             AppendLog("AI session: " + session.SessionPath);
+            RaiseCommandAvailability();
             return Task.CompletedTask;
+        }
+
+        private async Task AskAiQuestionAsync()
+        {
+            _settingsStore.Save(CreateSettingsSnapshot());
+
+            AiSessionStatusText = "Asking AI guide...";
+            var service = new PassportAiGuideService(_releaseLane);
+            var result = await service.AskAsync(
+                WorkspaceRoot,
+                _toolRoot,
+                ActiveIdentityId,
+                ActiveDeviceId,
+                AiGatewayUrl,
+                AiKnowledgePackId,
+                LatestAiSessionRecordText,
+                _activeAiSessionToken,
+                AiQuestionText,
+                AiDiagnosticsUploadOptIn);
+
+            if (!result.Succeeded)
+            {
+                AiSessionStatusText = result.Message;
+                AiAnswerText = result.AnswerText;
+                AppendLog(result.Message);
+                return;
+            }
+
+            AiAnswerText = result.AnswerText;
+            LatestAiChatRecordText = result.ChatRecordPath;
+            AiSessionStatusText = string.IsNullOrWhiteSpace(_activeAiSessionId)
+                ? "AI answer ready."
+                : "AI answer ready for session " + _activeAiSessionId + ".";
+            if (!string.IsNullOrWhiteSpace(result.QuotaSummary))
+            {
+                AiQuotaSummaryText = result.QuotaSummary;
+            }
+
+            AppendLog(result.Message);
+            AppendLog("AI chat record: " + result.ChatRecordPath);
         }
 
         private bool CanCreateAiSession()
         {
             return CanUseActiveDeviceCredential();
+        }
+
+        private bool CanAskAiQuestion()
+        {
+            return !string.IsNullOrWhiteSpace(_activeAiSessionToken)
+                && !string.IsNullOrWhiteSpace(LatestAiSessionRecordText)
+                && !string.Equals(LatestAiSessionRecordText, "No AI session yet.", StringComparison.Ordinal)
+                && !string.IsNullOrWhiteSpace(AiQuestionText);
         }
     }
 }

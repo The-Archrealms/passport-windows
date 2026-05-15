@@ -343,6 +343,9 @@ namespace ArchrealmsPassport.Windows.ViewModels
         public string AiQuotaSummaryText { get { return _aiQuotaSummaryText; } private set { SetField(ref _aiQuotaSummaryText, value); } }
         public string LatestAiSessionRequestText { get { return _latestAiSessionRequestText; } private set { SetField(ref _latestAiSessionRequestText, value); } }
         public string LatestAiSessionRecordText { get { return _latestAiSessionRecordText; } private set { SetField(ref _latestAiSessionRecordText, value); } }
+        public string LatestAiChatRecordText { get { return _latestAiChatRecordText; } private set { SetField(ref _latestAiChatRecordText, value); } }
+        public string AiQuestionText { get { return _aiQuestionText; } set { SetField(ref _aiQuestionText, value); } }
+        public string AiAnswerText { get { return _aiAnswerText; } private set { SetField(ref _aiAnswerText, value); } }
         public double StorageRedemptionGb { get { return _storageRedemptionGb; } set { SetField(ref _storageRedemptionGb, value); } }
         public int StorageRedemptionEpochCount { get { return _storageRedemptionEpochCount; } set { SetField(ref _storageRedemptionEpochCount, value); } }
         public long StorageRedemptionCcPerGbEpoch { get { return _storageRedemptionCcPerGbEpoch; } set { SetField(ref _storageRedemptionCcPerGbEpoch, value); } }

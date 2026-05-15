@@ -236,6 +236,32 @@
                                            Style="{StaticResource StatusValueStyle}"
                                            Text="{Binding AiQuotaSummaryText}" />
 
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Question" />
+                                <TextBox AutomationProperties.AutomationId="AiQuestionTextBox"
+                                         Style="{StaticResource InputTextBoxStyle}"
+                                         MinHeight="72"
+                                         AcceptsReturn="True"
+                                         TextWrapping="Wrap"
+                                         VerticalScrollBarVisibility="Auto"
+                                         Text="{Binding AiQuestionText, UpdateSourceTrigger=PropertyChanged}" />
+
+                                <WrapPanel Margin="0,16,0,0">
+                                    <Button AutomationProperties.AutomationId="AskAiQuestionButton"
+                                            Style="{StaticResource SecondaryButtonStyle}"
+                                            Command="{Binding AskAiQuestionCommand}"
+                                            Content="Ask AI" />
+                                </WrapPanel>
+
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Answer" />
+                                <TextBox AutomationProperties.AutomationId="AiAnswerTextBox"
+                                         Style="{StaticResource CodeTextBoxStyle}"
+                                         MinHeight="160"
+                                         AcceptsReturn="True"
+                                         TextWrapping="Wrap"
+                                         VerticalScrollBarVisibility="Auto"
+                                         IsReadOnly="True"
+                                         Text="{Binding AiAnswerText, Mode=OneWay}" />
+
                                 <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Session Request" />
                                 <TextBox Style="{StaticResource CodeTextBoxStyle}"
                                          IsReadOnly="True"
@@ -245,6 +271,11 @@
                                 <TextBox Style="{StaticResource CodeTextBoxStyle}"
                                          IsReadOnly="True"
                                          Text="{Binding LatestAiSessionRecordText, Mode=OneWay}" />
+
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Chat Record" />
+                                <TextBox Style="{StaticResource CodeTextBoxStyle}"
+                                         IsReadOnly="True"
+                                         Text="{Binding LatestAiChatRecordText, Mode=OneWay}" />
                             </StackPanel>
                         </Border>
                     </Grid>

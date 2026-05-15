@@ -43,6 +43,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
         private readonly AsyncRelayCommand _fetchReadOnlyIpfsFileCommand;
         private readonly AsyncRelayCommand _exportCarCommand;
         private readonly AsyncRelayCommand _createAiSessionCommand;
+        private readonly AsyncRelayCommand _askAiQuestionCommand;
         private readonly AsyncRelayCommand _createStorageRedemptionQuoteCommand;
         private readonly AsyncRelayCommand _acceptStorageRedemptionQuoteCommand;
         private readonly AsyncRelayCommand _burnStorageRedemptionEpochCommand;
@@ -129,6 +130,11 @@ namespace ArchrealmsPassport.Windows.ViewModels
         private string _aiQuotaSummaryText = "No AI quota loaded.";
         private string _latestAiSessionRequestText = "No AI session request yet.";
         private string _latestAiSessionRecordText = "No AI session yet.";
+        private string _latestAiChatRecordText = "No AI chat record yet.";
+        private string _aiQuestionText = string.Empty;
+        private string _aiAnswerText = "No AI answer yet.";
+        private string _activeAiSessionToken = string.Empty;
+        private string _activeAiSessionId = string.Empty;
         private double _storageRedemptionGb = 1;
         private int _storageRedemptionEpochCount = 1;
         private long _storageRedemptionCcPerGbEpoch = 1;
@@ -219,6 +225,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
             _fetchReadOnlyIpfsFileCommand = new AsyncRelayCommand(FetchReadOnlyIpfsFileAsync, CanReadOnlyAccessIpfsFile);
             _exportCarCommand = new AsyncRelayCommand(ExportCarAsync, CanReadOnlyAccessIpfsFile);
             _createAiSessionCommand = new AsyncRelayCommand(CreateAiSessionAsync, CanCreateAiSession);
+            _askAiQuestionCommand = new AsyncRelayCommand(AskAiQuestionAsync, CanAskAiQuestion);
             _createStorageRedemptionQuoteCommand = new AsyncRelayCommand(CreateStorageRedemptionQuoteAsync, CanCreateStorageRedemptionQuote);
             _acceptStorageRedemptionQuoteCommand = new AsyncRelayCommand(AcceptStorageRedemptionQuoteAsync, CanAcceptStorageRedemptionQuote);
             _burnStorageRedemptionEpochCommand = new AsyncRelayCommand(BurnStorageRedemptionEpochAsync, CanBurnStorageRedemptionEpoch);
@@ -263,6 +270,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
             FetchReadOnlyIpfsFileCommand = _fetchReadOnlyIpfsFileCommand;
             ExportCarCommand = _exportCarCommand;
             CreateAiSessionCommand = _createAiSessionCommand;
+            AskAiQuestionCommand = _askAiQuestionCommand;
             CreateStorageRedemptionQuoteCommand = _createStorageRedemptionQuoteCommand;
             AcceptStorageRedemptionQuoteCommand = _acceptStorageRedemptionQuoteCommand;
             BurnStorageRedemptionEpochCommand = _burnStorageRedemptionEpochCommand;
@@ -314,6 +322,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
         public ICommand FetchReadOnlyIpfsFileCommand { get; private set; }
         public ICommand ExportCarCommand { get; private set; }
         public ICommand CreateAiSessionCommand { get; private set; }
+        public ICommand AskAiQuestionCommand { get; private set; }
         public ICommand CreateStorageRedemptionQuoteCommand { get; private set; }
         public ICommand AcceptStorageRedemptionQuoteCommand { get; private set; }
         public ICommand BurnStorageRedemptionEpochCommand { get; private set; }
