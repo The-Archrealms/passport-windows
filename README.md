@@ -584,7 +584,19 @@ Staging readiness has its own gate so canary and production releases cannot skip
   -OutputPath .\artifacts\release\staging.env
 ```
 
-The operational drill, rollback drill, and promotion approval values are not free-form notes. Copy and complete the templates under `deploy/staging-readiness/`, record their paths and SHA-256 hashes in the staging environment, and keep the completed evidence in the controlled staging document system. The operational drill proves production-candidate upgrade, endpoint failover, signing verification, ledger export replay, recovery/revocation, storage proof, dry-run storage redemption, conversion disclosure, telemetry/privacy, incident response, support-access controls, AI gateway auth/privacy, and prohibited monetary-claim blocking.
+The operational drill, rollback drill, and promotion approval values are not free-form notes. Generate a staging readiness evidence packet, complete it in the controlled staging document system, validate it, then record the paths and SHA-256 hashes in the staging environment. The operational drill proves production-candidate upgrade, endpoint failover, signing verification, ledger export replay, recovery/revocation, storage proof, dry-run storage redemption, conversion disclosure, telemetry/privacy, incident response, support-access controls, AI gateway auth/privacy, and prohibited monetary-claim blocking.
+
+```powershell
+.\tools\release\New-PassportStagingReadinessEvidencePacket.ps1 `
+  -OutputDirectory C:\secure\passport-staging `
+  -OperationalDrillId <staging-operational-drill-id> `
+  -RollbackDrillId <staging-rollback-drill-id> `
+  -PromotionApprovalId <staging-promotion-approval-id>
+
+.\tools\release\Test-PassportStagingReadinessEvidencePacket.ps1 `
+  -PacketRoot C:\secure\passport-staging `
+  -RequireNoPlaceholders
+```
 
 Then run:
 

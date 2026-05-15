@@ -6,11 +6,27 @@ Staging is not the MVP. It is a production-candidate lane with isolated staging 
 
 ## Required Evidence
 
-Copy these templates into the controlled staging document system, fill every placeholder, approve them, then load the paths and SHA-256 hashes into `artifacts/release/staging.env` or the staging secret store:
+Generate a controlled staging evidence packet, fill every placeholder, approve the records, then load the paths and SHA-256 hashes into `artifacts/release/staging.env` or the staging secret store:
 
 - `staging-rollback-drill-report.template.json`
 - `staging-operational-drill-report.template.json`
 - `staging-promotion-approval-record.template.json`
+
+```powershell
+.\tools\release\New-PassportStagingReadinessEvidencePacket.ps1 `
+  -OutputDirectory C:\secure\passport-staging `
+  -OperationalDrillId <staging-operational-drill-id> `
+  -RollbackDrillId <staging-rollback-drill-id> `
+  -PromotionApprovalId <staging-promotion-approval-id>
+```
+
+Validate the filled packet before running the staging readiness gate:
+
+```powershell
+.\tools\release\Test-PassportStagingReadinessEvidencePacket.ps1 `
+  -PacketRoot C:\secure\passport-staging `
+  -RequireNoPlaceholders
+```
 
 The readiness gate validates:
 
