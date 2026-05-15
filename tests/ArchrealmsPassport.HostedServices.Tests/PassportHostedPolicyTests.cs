@@ -251,6 +251,70 @@ public sealed class PassportHostedPolicyTests
         Assert.Equal("passport_storage_delivery_acceptance", deliveryResult.Record!["record_type"]);
     }
 
+    [Fact]
+    public void AdminAuthorityValidatesAgainstHostedRegistryRolesAndSignatures()
+    {
+        using var workspace = TemporaryDirectory.Create();
+        using var issuer = RSA.Create(2048);
+        using var requester = RSA.Create(2048);
+        using var approver = RSA.Create(2048);
+        var registry = new PassportHostedRegistryStore(workspace.Path);
+        registry.SavePublicKey("issuer-device", issuer.ExportSubjectPublicKeyInfo());
+        registry.SavePublicKey("requester-device", requester.ExportSubjectPublicKeyInfo());
+        registry.SavePublicKey("approver-device", approver.ExportSubjectPublicKeyInfo());
+        AddRole(registry, issuer, "role-requester", "authority-identity", "requester-device", "cc_issuance", "production_mvp");
+        AddRole(registry, issuer, "role-approver", "authority-identity", "approver-device", "cc_issuance", "production_mvp");
+
+        var request = CreateSignedAdminRequest(
+            requester,
+            approver,
+            "authority-identity",
+            "requester-device",
+            "approver-device",
+            "cc_issuance",
+            "production_mvp");
+
+        var result = PassportHostedPolicy.ValidateAdminAuthority(request, registry);
+
+        Assert.True(result.Succeeded, result.Message);
+        Assert.Contains("hosted registry", result.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void AdminAuthorityRejectsHostedRegistryRoleOrSignatureGaps()
+    {
+        using var workspace = TemporaryDirectory.Create();
+        using var issuer = RSA.Create(2048);
+        using var requester = RSA.Create(2048);
+        using var approver = RSA.Create(2048);
+        var registry = new PassportHostedRegistryStore(workspace.Path);
+        registry.SavePublicKey("issuer-device", issuer.ExportSubjectPublicKeyInfo());
+        registry.SavePublicKey("requester-device", requester.ExportSubjectPublicKeyInfo());
+        registry.SavePublicKey("approver-device", approver.ExportSubjectPublicKeyInfo());
+        AddRole(registry, issuer, "role-requester", "authority-identity", "requester-device", "cc_issuance", "production_mvp");
+        var request = CreateSignedAdminRequest(
+            requester,
+            approver,
+            "authority-identity",
+            "requester-device",
+            "approver-device",
+            "cc_issuance",
+            "production_mvp");
+
+        var missingRole = PassportHostedPolicy.ValidateAdminAuthority(request, registry);
+        Assert.False(missingRole.Succeeded);
+        Assert.Contains("Approver", missingRole.Message, StringComparison.OrdinalIgnoreCase);
+
+        AddRole(registry, issuer, "role-approver", "authority-identity", "approver-device", "cc_issuance", "production_mvp");
+        var tamperedSignature = request with
+        {
+            ApproverSignatureRecord = JsonDocument.Parse(request.ApproverSignatureRecord.GetRawText().Replace("approver-device", "requester-device")).RootElement.Clone()
+        };
+        var badSignature = PassportHostedPolicy.ValidateAdminAuthority(tamperedSignature, registry);
+        Assert.False(badSignature.Succeeded);
+        Assert.Contains("unexpected device", badSignature.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static PassportAiSessionAuthorizationRequest CreateAiSessionRequest(RSA rsa)
     {
         var record = new Dictionary<string, object?>
@@ -315,6 +379,106 @@ public sealed class PassportHostedPolicyTests
         };
     }
 
+    private static PassportAdminAuthorityValidationRequest CreateSignedAdminRequest(
+        RSA requester,
+        RSA approver,
+        string authorityIdentityId,
+        string requesterDeviceId,
+        string approverDeviceId,
+        string actionType,
+        string authorityScope)
+    {
+        var targetHash = new string('e', 64);
+        var payloadHash = new string('f', 64);
+        var action = new Dictionary<string, object?>
+        {
+            ["schema_version"] = 1,
+            ["record_type"] = "passport_admin_dual_control_action",
+            ["record_id"] = "authority-1",
+            ["created_utc"] = DateTimeOffset.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+            ["authority_identity_id"] = authorityIdentityId,
+            ["action_type"] = actionType,
+            ["authority_scope"] = authorityScope,
+            ["reason_code"] = "test",
+            ["target_record_sha256"] = targetHash,
+            ["requested_payload_sha256"] = payloadHash,
+            ["requester_device_id"] = requesterDeviceId,
+            ["approver_device_id"] = approverDeviceId,
+            ["required_approval_count"] = 2,
+            ["approval_count"] = 2,
+            ["ai_approved"] = false
+        };
+        var actionBytes = JsonSerializer.SerializeToUtf8Bytes(action, JsonOptions);
+        var actionElement = JsonDocument.Parse(actionBytes).RootElement.Clone();
+        return new PassportAdminAuthorityValidationRequest
+        {
+            ActionType = actionType,
+            AuthorityScope = authorityScope,
+            TargetRecordSha256 = targetHash,
+            RequestedPayloadSha256 = payloadHash,
+            AdminAuthorityRecord = actionElement,
+            AdminAuthorityRecordPayloadBase64 = Convert.ToBase64String(actionBytes),
+            RequesterSignatureRecord = CreateAdminSignatureRecord(
+                requester,
+                "passport_admin_dual_control_requester_signature",
+                requesterDeviceId,
+                actionBytes).RootElement.Clone(),
+            ApproverSignatureRecord = CreateAdminSignatureRecord(
+                approver,
+                "passport_admin_dual_control_approver_signature",
+                approverDeviceId,
+                actionBytes).RootElement.Clone()
+        };
+    }
+
+    private static JsonDocument CreateAdminSignatureRecord(RSA rsa, string recordType, string deviceId, byte[] actionBytes)
+    {
+        return JsonDocument.Parse(JsonSerializer.Serialize(new Dictionary<string, object?>
+        {
+            ["schema_version"] = 1,
+            ["record_type"] = recordType,
+            ["record_id"] = recordType + "-" + deviceId,
+            ["device_id"] = deviceId,
+            ["admin_action_record_sha256"] = ComputeSha256(actionBytes),
+            ["signature_algorithm"] = "RSA_PKCS1_SHA256",
+            ["signature_base64"] = Convert.ToBase64String(rsa.SignData(actionBytes, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1))
+        }, JsonOptions));
+    }
+
+    private static void AddRole(
+        PassportHostedRegistryStore registry,
+        RSA issuer,
+        string roleId,
+        string authorityIdentityId,
+        string deviceId,
+        string actionType,
+        string authorityScope)
+    {
+        var role = new Dictionary<string, object?>
+        {
+            ["schema_version"] = 1,
+            ["record_type"] = "passport_admin_authority_role_membership",
+            ["record_id"] = roleId,
+            ["created_utc"] = DateTimeOffset.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+            ["status"] = "active",
+            ["authority_identity_id"] = authorityIdentityId,
+            ["device_id"] = deviceId,
+            ["role_name"] = "crown_admin",
+            ["dual_control_eligible"] = true,
+            ["authorized_action_types"] = new[] { actionType },
+            ["authorized_authority_scopes"] = new[] { authorityScope },
+            ["issued_by_device_id"] = "issuer-device",
+            ["expires_utc"] = string.Empty,
+            ["ai_approved"] = false
+        };
+        var roleBytes = JsonSerializer.SerializeToUtf8Bytes(role, JsonOptions);
+        registry.SaveRoleMembership(
+            roleId,
+            roleBytes,
+            "issuer-device",
+            issuer.SignData(roleBytes, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1));
+    }
+
     private static object ReadNested(Dictionary<string, object?> record, string objectName, string propertyName)
     {
         var child = Assert.IsType<Dictionary<string, object?>>(record[objectName]);
@@ -329,5 +493,35 @@ public sealed class PassportHostedPolicyTests
     private static string ComputeSha256(byte[] value)
     {
         return Convert.ToHexString(SHA256.HashData(value)).ToLowerInvariant();
+    }
+
+    private sealed class TemporaryDirectory : IDisposable
+    {
+        private TemporaryDirectory(string path)
+        {
+            Path = path;
+            Directory.CreateDirectory(path);
+        }
+
+        public string Path { get; }
+
+        public static TemporaryDirectory Create()
+        {
+            return new TemporaryDirectory(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "archrealms-hosted-policy-tests", Guid.NewGuid().ToString("N")));
+        }
+
+        public void Dispose()
+        {
+            try
+            {
+                if (Directory.Exists(Path))
+                {
+                    Directory.Delete(Path, true);
+                }
+            }
+            catch
+            {
+            }
+        }
     }
 }

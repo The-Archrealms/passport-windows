@@ -34,6 +34,9 @@ The hosted services project provides the production-facing API boundary that Win
 - Hosted records returned by capacity, genesis, and storage-delivery endpoints are signed with the hosted service signing key.
 - Set `ARCHREALMS_PASSPORT_HOSTED_SIGNING_KEY_PATH` to control the service signing-key location.
 - Hosted endpoints apply in-process per-scope rate limits and return `429` with `Retry-After` when exceeded.
+- The admin authority endpoint validates signed admin action payloads against requester/approver public keys stored in the hosted registry.
+- The admin authority endpoint requires active hosted role-membership records for both requester and approver devices.
+- Hosted role-membership records are verified with issuer signatures and hosted registry public keys.
 
 ## Release-Lane Configuration
 
@@ -43,7 +46,7 @@ The hosted services project provides the production-facing API boundary that Win
 
 ## Current Limits
 
-- Production deployment still needs managed durable storage, backups, managed signing-key custody, role membership lookup, telemetry, rate limits, incident logging, and release-lane configuration.
+- Production deployment still needs managed durable storage, backups, managed signing-key custody, telemetry access controls, incident logging, and managed release-lane deployment configuration.
 - The AI chat endpoint currently returns a gateway-contract response; production still needs the open-weight model runtime and vector store behind the gateway.
 - The service does not make fiat, exchange, external wallet, staking, yield, governance, or public stable-value claims.
 

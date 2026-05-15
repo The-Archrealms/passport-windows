@@ -221,6 +221,9 @@ public sealed record PassportAdminAuthorityValidationRequest
     [JsonPropertyName("admin_authority_record")]
     public JsonElement AdminAuthorityRecord { get; init; }
 
+    [JsonPropertyName("admin_authority_record_payload_base64")]
+    public string AdminAuthorityRecordPayloadBase64 { get; init; } = string.Empty;
+
     [JsonPropertyName("requester_signature_record")]
     public JsonElement RequesterSignatureRecord { get; init; }
 

@@ -8,6 +8,10 @@ public static class PassportRecordTypes
     public const string CcCapacityReport = "passport_cc_capacity_report";
     public const string ArchGenesisManifest = "passport_arch_genesis_manifest";
     public const string AdminDualControlAction = "passport_admin_dual_control_action";
+    public const string AdminDualControlRequesterSignature = "passport_admin_dual_control_requester_signature";
+    public const string AdminDualControlApproverSignature = "passport_admin_dual_control_approver_signature";
+    public const string AdminRoleMembership = "passport_admin_authority_role_membership";
+    public const string AdminRoleMembershipSignature = "passport_admin_authority_role_membership_signature";
     public const string StorageServiceDeliveryRequest = "passport_storage_service_delivery_request";
     public const string StorageDeliveryAcceptance = "passport_storage_delivery_acceptance";
 }

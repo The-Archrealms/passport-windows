@@ -346,6 +346,87 @@ public static class PassportHostedPolicy
         };
     }
 
+    public static PassportHostedRecordResponse ValidateAdminAuthority(
+        PassportAdminAuthorityValidationRequest request,
+        PassportHostedRegistryStore registryStore)
+    {
+        var structural = ValidateAdminAuthority(request);
+        if (!structural.Succeeded)
+        {
+            return structural;
+        }
+
+        var actionPayload = DecodeBase64(request.AdminAuthorityRecordPayloadBase64);
+        if (actionPayload.Length == 0)
+        {
+            return FailedRecord("Admin authority validation requires signed admin_authority_record_payload_base64.");
+        }
+
+        using var actionPayloadDocument = JsonDocument.Parse(actionPayload);
+        var actionPayloadRoot = actionPayloadDocument.RootElement;
+        var payloadMatch = AdminActionPayloadMatchesRequest(actionPayloadRoot, request.AdminAuthorityRecord);
+        if (!payloadMatch.Succeeded)
+        {
+            return payloadMatch;
+        }
+
+        var requesterDeviceId = ReadString(request.AdminAuthorityRecord, "requester_device_id");
+        var approverDeviceId = ReadString(request.AdminAuthorityRecord, "approver_device_id");
+        var authorityIdentityId = ReadString(request.AdminAuthorityRecord, "authority_identity_id");
+        var requesterRole = registryStore.ValidateActiveRoleMembership(
+            authorityIdentityId,
+            requesterDeviceId,
+            request.ActionType,
+            request.AuthorityScope);
+        if (!requesterRole.Succeeded)
+        {
+            return FailedRecord("Requester device is not assigned an active hosted admin role: " + requesterRole.Message);
+        }
+
+        var approverRole = registryStore.ValidateActiveRoleMembership(
+            authorityIdentityId,
+            approverDeviceId,
+            request.ActionType,
+            request.AuthorityScope);
+        if (!approverRole.Succeeded)
+        {
+            return FailedRecord("Approver device is not assigned an active hosted admin role: " + approverRole.Message);
+        }
+
+        var payloadHash = ComputeSha256(actionPayload);
+        var requesterSignature = ValidateAdminSignature(
+            request.RequesterSignatureRecord,
+            PassportRecordTypes.AdminDualControlRequesterSignature,
+            requesterDeviceId,
+            actionPayload,
+            payloadHash,
+            registryStore);
+        if (!requesterSignature.Succeeded)
+        {
+            return requesterSignature;
+        }
+
+        var approverSignature = ValidateAdminSignature(
+            request.ApproverSignatureRecord,
+            PassportRecordTypes.AdminDualControlApproverSignature,
+            approverDeviceId,
+            actionPayload,
+            payloadHash,
+            registryStore);
+        if (!approverSignature.Succeeded)
+        {
+            return approverSignature;
+        }
+
+        return new PassportHostedRecordResponse
+        {
+            Succeeded = true,
+            Message = "Admin authority evidence is valid against hosted registry roles and signatures.",
+            RecordId = ReadString(request.AdminAuthorityRecord, "record_id"),
+            RecordSha256 = payloadHash
+        };
+    }
+
     public static PassportHostedRecordResponse AcceptStorageDeliveryRequest(PassportStorageDeliveryRequest request)
     {
         var source = request.ServiceDeliveryRequestRecord;
@@ -430,6 +511,86 @@ public static class PassportHostedPolicy
         using var rsa = RSA.Create();
         rsa.ImportSubjectPublicKeyInfo(publicKeyBytes, out _);
         return rsa.VerifyData(signedPayload, signatureBytes, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+    }
+
+    private static PassportHostedRecordResponse ValidateAdminSignature(
+        JsonElement signatureRecord,
+        string expectedRecordType,
+        string expectedDeviceId,
+        byte[] actionPayload,
+        string actionPayloadSha256,
+        PassportHostedRegistryStore registryStore)
+    {
+        if (!Matches(signatureRecord, "record_type", expectedRecordType))
+        {
+            return FailedRecord("The hosted admin authority signature record type is invalid.");
+        }
+
+        if (!Matches(signatureRecord, "device_id", expectedDeviceId))
+        {
+            return FailedRecord("The hosted admin authority signature was made by an unexpected device.");
+        }
+
+        if (!string.Equals(ReadString(signatureRecord, "admin_action_record_sha256"), actionPayloadSha256, StringComparison.OrdinalIgnoreCase))
+        {
+            return FailedRecord("The hosted admin authority signature does not reference the signed action payload.");
+        }
+
+        if (!registryStore.TryGetPublicKey(expectedDeviceId, out var publicKey))
+        {
+            return FailedRecord("The hosted admin authority signer public key could not be found.");
+        }
+
+        var signatureBase64 = ReadString(signatureRecord, "signature_base64");
+        if (string.IsNullOrWhiteSpace(signatureBase64))
+        {
+            return FailedRecord("The hosted admin authority signature is missing.");
+        }
+
+        using var rsa = RSA.Create();
+        rsa.ImportSubjectPublicKeyInfo(publicKey, out _);
+        if (!rsa.VerifyData(actionPayload, Convert.FromBase64String(signatureBase64), HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1))
+        {
+            return FailedRecord("The hosted admin authority signature verification failed.");
+        }
+
+        return new PassportHostedRecordResponse
+        {
+            Succeeded = true,
+            Message = "Hosted admin authority signature verified.",
+            RecordId = ReadString(signatureRecord, "record_id"),
+            RecordSha256 = ComputeJsonSha256(signatureRecord)
+        };
+    }
+
+    private static PassportHostedRecordResponse AdminActionPayloadMatchesRequest(JsonElement payload, JsonElement requestRecord)
+    {
+        var criticalFields = new[]
+        {
+            "record_type",
+            "record_id",
+            "authority_identity_id",
+            "action_type",
+            "authority_scope",
+            "target_record_sha256",
+            "requested_payload_sha256",
+            "requester_device_id",
+            "approver_device_id"
+        };
+
+        foreach (var field in criticalFields)
+        {
+            if (!string.Equals(ReadString(payload, field), ReadString(requestRecord, field), StringComparison.Ordinal))
+            {
+                return FailedRecord("Admin authority signed payload does not match request field: " + field + ".");
+            }
+        }
+
+        return new PassportHostedRecordResponse
+        {
+            Succeeded = true,
+            Message = "Admin authority signed payload matches request record."
+        };
     }
 
     private static bool SignedPayloadMatchesRequest(byte[] signedPayload, JsonElement requestRecord)

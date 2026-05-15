@@ -5,6 +5,7 @@ var builder = WebApplication.CreateBuilder(args);
 var app = builder.Build();
 
 var store = PassportHostedFileStore.FromEnvironment();
+var registryStore = PassportHostedRegistryStore.FromDataRoot(store.Root);
 var signer = PassportHostedServiceSigner.FromDataRoot(store.Root);
 var operatorGate = PassportHostedOperatorGate.FromEnvironment();
 var rateLimiter = new PassportHostedRateLimiter();
@@ -112,7 +113,7 @@ app.MapPost("/admin/authority/validate", (HttpRequest httpRequest, PassportAdmin
         return rateLimit;
     }
 
-    var result = PassportHostedPolicy.ValidateAdminAuthority(request);
+    var result = PassportHostedPolicy.ValidateAdminAuthority(request, registryStore);
     return result.Succeeded ? Results.Json(result) : Results.BadRequest(result);
 });
 
