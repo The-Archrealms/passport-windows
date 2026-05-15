@@ -576,7 +576,22 @@ Validate the full production provisioning packet before loading approved values 
   -OutputPath .\artifacts\release\production-provisioning-packet-validation-report.json
 ```
 
-Use `-RequireNoPlaceholders` against filled, controlled copies of the provisioning packet before production approval. The packet validator runs the package-signing, release-endpoint, managed-storage, managed-signing-custody, hosted-services, managed-signing, open-weight AI runtime, production-ops, and production-monetary validators and writes child reports under `artifacts\release\production-provisioning-packet\`.
+Generate a working copy of the packet when operators need a single folder to move into a controlled document system:
+
+```powershell
+.\tools\release\New-PassportProductionProvisioningPacket.ps1 `
+  -OutputDirectory C:\secure\archrealms-passport-production-provisioning-packet
+```
+
+Use `-RequireNoPlaceholders` against filled, controlled copies of the provisioning packet before production approval:
+
+```powershell
+.\tools\release\Test-PassportProductionProvisioningPacket.ps1 `
+  -PacketRoot C:\secure\archrealms-passport-production-provisioning-packet `
+  -RequireNoPlaceholders
+```
+
+The packet validator runs the package-signing, release-endpoint, managed-storage, managed-signing-custody, hosted-services, managed-signing, open-weight AI runtime, production-ops, and production-monetary validators and writes child reports under `artifacts\release\production-provisioning-packet\`.
 
 Validate the package-signing provisioning packet before loading production signing secrets:
 

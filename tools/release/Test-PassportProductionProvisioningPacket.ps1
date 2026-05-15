@@ -1,6 +1,8 @@
 param(
     [string]$OutputPath = "artifacts\release\production-provisioning-packet-validation-report.json",
 
+    [string]$PacketRoot = "",
+
     [string]$PackageSigningPath = "deploy\package-signing",
 
     [string]$EndpointProvisioningPath = "deploy\release-lane-endpoints",
@@ -12,6 +14,20 @@ param(
     [string]$ProductionOpsPath = "deploy\production-ops",
 
     [string]$ProductionMonetaryPath = "deploy\production-monetary",
+
+    [string]$HostedServicesDockerfilePath = "deploy\hosted-services\Dockerfile",
+
+    [string]$HostedServicesComposePath = "deploy\hosted-services\docker-compose.staging.yml",
+
+    [string]$HostedServicesEnvTemplatePath = "deploy\hosted-services\hosted-services-staging-env.template",
+
+    [string]$ManagedSigningDockerfilePath = "deploy\managed-signing\Dockerfile",
+
+    [string]$ManagedSigningComposePath = "deploy\managed-signing\docker-compose.local-validation.yml",
+
+    [string]$ManagedSigningEnvTemplatePath = "deploy\managed-signing\managed-signing-env.template",
+
+    [string]$ManagedSigningReadmePath = "deploy\managed-signing\README.md",
 
     [string]$OpenWeightVllmComposePath = "deploy\open-weight-ai-runtime\docker-compose.vllm.yml",
 
@@ -181,6 +197,37 @@ function Add-SwitchArgument {
     return @($normalized)
 }
 
+if (-not [string]::IsNullOrWhiteSpace($PacketRoot)) {
+    $resolvedPacketRoot = Resolve-RepoPath -Path $PacketRoot
+    if (-not (Test-Path -LiteralPath $resolvedPacketRoot -PathType Container)) {
+        throw "PacketRoot was not found or is not a directory: $resolvedPacketRoot"
+    }
+
+    $PackageSigningPath = Join-Path $resolvedPacketRoot "package-signing"
+    $EndpointProvisioningPath = Join-Path $resolvedPacketRoot "release-lane-endpoints"
+    $ManagedStoragePath = Join-Path $resolvedPacketRoot "managed-storage"
+    $ManagedSigningCustodyPath = Join-Path $resolvedPacketRoot "managed-signing-custody"
+    $ProductionOpsPath = Join-Path $resolvedPacketRoot "production-ops"
+    $ProductionMonetaryPath = Join-Path $resolvedPacketRoot "production-monetary"
+    $HostedServicesDockerfilePath = Join-Path $resolvedPacketRoot "hosted-services\Dockerfile"
+    $HostedServicesComposePath = Join-Path $resolvedPacketRoot "hosted-services\docker-compose.staging.yml"
+    $HostedServicesEnvTemplatePath = Join-Path $resolvedPacketRoot "hosted-services\hosted-services-staging-env.template"
+    $ManagedSigningDockerfilePath = Join-Path $resolvedPacketRoot "managed-signing\Dockerfile"
+    $ManagedSigningComposePath = Join-Path $resolvedPacketRoot "managed-signing\docker-compose.local-validation.yml"
+    $ManagedSigningEnvTemplatePath = Join-Path $resolvedPacketRoot "managed-signing\managed-signing-env.template"
+    $ManagedSigningReadmePath = Join-Path $resolvedPacketRoot "managed-signing\README.md"
+    $OpenWeightVllmComposePath = Join-Path $resolvedPacketRoot "open-weight-ai-runtime\docker-compose.vllm.yml"
+    $OpenWeightTgiComposePath = Join-Path $resolvedPacketRoot "open-weight-ai-runtime\docker-compose.tgi.yml"
+    $OpenWeightEnvTemplatePath = Join-Path $resolvedPacketRoot "open-weight-ai-runtime\open-weight-ai-runtime.env.template"
+    $OpenWeightReadmePath = Join-Path $resolvedPacketRoot "open-weight-ai-runtime\README.md"
+    $OpenWeightModelApprovalPath = Join-Path $resolvedPacketRoot "open-weight-ai-runtime\model-approval-request.template.md"
+    $OpenWeightVectorStoreProvisioningPath = Join-Path $resolvedPacketRoot "open-weight-ai-runtime\vector-store-provisioning.template.md"
+    $OpenWeightRuntimeReadinessEvidencePath = Join-Path $resolvedPacketRoot "open-weight-ai-runtime\ai-runtime-readiness-evidence.template.md"
+}
+else {
+    $resolvedPacketRoot = ""
+}
+
 $childReportRoot = "artifacts\release\production-provisioning-packet"
 $checks = @()
 
@@ -215,7 +262,11 @@ $checks += Invoke-ValidationScript `
     -Arguments (@("-ManagedSigningCustodyPath", $ManagedSigningCustodyPath) + $placeholderArgs) `
     -ReportRelativePath (Join-Path $childReportRoot "managed-signing-custody-provisioning-validation-report.json")
 
-$hostedServicesArgs = @()
+$hostedServicesArgs = @(
+    "-DockerfilePath", $HostedServicesDockerfilePath,
+    "-ComposePath", $HostedServicesComposePath,
+    "-EnvTemplatePath", $HostedServicesEnvTemplatePath
+)
 $hostedServicesArgs = Add-SwitchArgument -Arguments $hostedServicesArgs -Name "-SkipPublish" -Enabled ([bool]$SkipPublish)
 $hostedServicesArgs = Add-SwitchArgument -Arguments $hostedServicesArgs -Name "-BuildDockerImage" -Enabled ([bool]$BuildHostedDockerImage)
 $checks += Invoke-ValidationScript `
@@ -225,7 +276,12 @@ $checks += Invoke-ValidationScript `
     -Arguments $hostedServicesArgs `
     -ReportRelativePath (Join-Path $childReportRoot "hosted-services-deployment-validation-report.json")
 
-$managedSigningArgs = @()
+$managedSigningArgs = @(
+    "-DockerfilePath", $ManagedSigningDockerfilePath,
+    "-ComposePath", $ManagedSigningComposePath,
+    "-EnvTemplatePath", $ManagedSigningEnvTemplatePath,
+    "-ReadmePath", $ManagedSigningReadmePath
+)
 $managedSigningArgs = Add-SwitchArgument -Arguments $managedSigningArgs -Name "-SkipPublish" -Enabled ([bool]$SkipPublish)
 $managedSigningArgs = Add-SwitchArgument -Arguments $managedSigningArgs -Name "-ProbeEndpoint" -Enabled ([bool]$ProbeManagedSigningEndpoint)
 $checks += Invoke-ValidationScript `
@@ -274,6 +330,7 @@ $report = [pscustomobject][ordered]@{
     schema = "archrealms.passport.production_provisioning_packet_validation.v1"
     created_utc = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
     repo_root = $repoRoot
+    packet_root = $resolvedPacketRoot
     require_no_placeholders = [bool]$RequireNoPlaceholders
     skip_publish = [bool]$SkipPublish
     build_hosted_docker_image = [bool]$BuildHostedDockerImage
