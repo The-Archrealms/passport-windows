@@ -7,6 +7,7 @@ param(
     [string]$SimulationRunReportSha256,
     [switch]$SkipPreMvpRerun,
     [switch]$UseGeneratedFixture,
+    [switch]$RunPreMvpRerunForGeneratedFixture,
     [switch]$Force,
     [switch]$NoFail
 )
@@ -275,12 +276,18 @@ function New-FilledPilotEvidencePacket {
 }
 
 if ($UseGeneratedFixture) {
-    $fixtureRoot = Resolve-RepoPath -Path "artifacts\release\pre-mvp-staff-steward-pilot-closeout-fixture"
+    $fixtureDirectory = if ($RunPreMvpRerunForGeneratedFixture) {
+        "artifacts\release\pre-mvp-staff-steward-pilot-closeout-full-fixture"
+    }
+    else {
+        "artifacts\release\pre-mvp-staff-steward-pilot-closeout-fixture"
+    }
+    $fixtureRoot = Resolve-RepoPath -Path $fixtureDirectory
     $HandoffRoot = Join-Path $fixtureRoot "handoff"
     $OutputDirectory = Join-Path $fixtureRoot "closeout"
     $PilotReportPath = Join-Path $fixtureRoot "pre-mvp-staff-steward-pilot-report.json"
     $PreMvpReportPath = Join-Path $fixtureRoot "pre-mvp-internal-verification-report.json"
-    $SkipPreMvpRerun = $true
+    $SkipPreMvpRerun = (-not [bool]$RunPreMvpRerunForGeneratedFixture)
     $Force = $true
 
     $handoffGenerator = Join-Path $scriptRoot "New-PassportPreMvpStaffStewardPilotHandoff.ps1"
@@ -481,7 +488,8 @@ else {
                 "-SimulationRunReportSha256", $SimulationRunReportSha256,
                 "-StaffStewardPilotReportPath", $resolvedPilotReportPath,
                 "-StaffStewardPilotReportSha256", $pilotReportSha256,
-                "-OutputPath", $resolvedPreMvpReportPath
+                "-OutputPath", $resolvedPreMvpReportPath,
+                "-NoFail"
             ) `
             -LogPath $preMvpRerunLog
 
@@ -556,8 +564,14 @@ $result = [pscustomobject][ordered]@{
     next_step = $(if (-not $closeoutPassed) {
             "Resolve the listed failures, then rerun the closeout command."
         }
+        elseif ($UseGeneratedFixture -and $SkipPreMvpRerun) {
+            "Generated closeout validation passed with the final pre-MVP rerun skipped. Run again with -RunPreMvpRerunForGeneratedFixture to prove the full fixture path, then rerun without -UseGeneratedFixture after real pilot evidence exists."
+        }
+        elseif ($UseGeneratedFixture) {
+            "Generated full closeout validation passed. This proves the tool path only; do not use fixture evidence for readiness. Rerun without -UseGeneratedFixture after real pilot evidence exists."
+        }
         elseif ($SkipPreMvpRerun) {
-            "Generated closeout validation passed. After real pilot evidence exists, rerun without -SkipPreMvpRerun to produce the passing pre-MVP report."
+            "Closeout validation passed with the final pre-MVP rerun skipped. Rerun without -SkipPreMvpRerun to produce the passing pre-MVP report."
         }
         else {
             "Load the passing pre-MVP report path and SHA-256 into staging, canary, and production readiness environments."

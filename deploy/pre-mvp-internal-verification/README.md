@@ -135,3 +135,13 @@ ARCHREALMS_PASSPORT_PRE_MVP_STAFF_STEWARD_PILOT_REPORT_SHA256
 The reports must use the `internal-verification` lane, include real non-placeholder evidence references and evidence files, and prove that no production ARCH, production CC, Crown reserve balance, citizen production account history, or production service-liability record was created.
 
 `Test-PassportPreMvpInternalVerification.ps1` also validates the handoff generator through `staff_steward_pilot_handoff_validation`, the supporting dry-run helper through `staff_steward_pilot_dry_run_validation`, the final report validator through `staff_steward_pilot_report_validation`, and the closeout path through `staff_steward_pilot_closeout_validation`. Those automated checks do not close the external pilot gate; they only prove the operator path is available, scenario evidence references are structured, filled-evidence closeout is repeatable, and final acceptance still fails closed until real pilot evidence exists.
+
+The umbrella invokes the generated closeout fixture with its final pre-MVP rerun skipped to avoid recursive verification. To independently prove the full generated closeout path, including final pre-MVP rerun, use:
+
+```powershell
+.\tools\release\Complete-PassportPreMvpStaffStewardPilotHandoff.ps1 `
+  -UseGeneratedFixture `
+  -RunPreMvpRerunForGeneratedFixture
+```
+
+That standalone fixture remains tool validation only. It does not satisfy the external staff/steward pilot requirement, and its generated report must not be used as staging, canary, or production readiness evidence.

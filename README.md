@@ -592,6 +592,16 @@ $staffPilotHash = (Get-FileHash -Algorithm SHA256 .\artifacts\release\pre-mvp-st
   -OutputPath .\artifacts\release\pre-mvp-internal-verification-report.json
 ```
 
+The staff/steward closeout fixture normally skips the final umbrella rerun when it is invoked from the pre-MVP umbrella, to avoid recursive validation. To prove the full closeout path independently, including the generated pre-MVP rerun, use:
+
+```powershell
+.\tools\release\Complete-PassportPreMvpStaffStewardPilotHandoff.ps1 `
+  -UseGeneratedFixture `
+  -RunPreMvpRerunForGeneratedFixture
+```
+
+That full generated run proves the closeout tooling only. It does not replace real staff/steward signoff and its report must not be loaded into staging, canary, or production readiness evidence.
+
 Staging readiness has its own gate so canary and production releases cannot skip the PRD staging-exit criterion. Generate a staging environment template after validating a `Staging` artifact with `Test-PassportWindowsReleaseArtifact.ps1`, then fill the staging endpoint, operational-drill, rollback-drill, and promotion-approval evidence:
 
 ```powershell
