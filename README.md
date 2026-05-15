@@ -366,8 +366,6 @@ Run the gate directly:
 ```powershell
 .\tools\release\Test-PassportProductionMvpReadiness.ps1 `
   -EnvironmentFile .\artifacts\release\production-mvp.env `
-  -PackageSigningConfigured 1 `
-  -TimestampConfigured 1 `
   -EndpointTimeoutSeconds 10 `
   -OutputPath .\artifacts\release\production-mvp-readiness-report.json
 ```

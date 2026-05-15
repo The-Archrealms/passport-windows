@@ -176,8 +176,13 @@ function Test-ManagedSigningCustody {
 }
 
 function Test-PackageSigning {
-    if (-not (Test-Truthy -Value $PackageSigningConfigured)) {
+    $pfxBase64Configured = Test-NonEmptyEnvironment -Name "PASSPORT_WINDOWS_MSIX_PFX_BASE64"
+    if (-not (Test-Truthy -Value $PackageSigningConfigured) -and -not $pfxBase64Configured) {
         return "production package signing certificate is not configured"
+    }
+
+    if ($pfxBase64Configured -and -not (Test-NonEmptyEnvironment -Name "PASSPORT_WINDOWS_MSIX_PFX_PASSWORD")) {
+        return "PASSPORT_WINDOWS_MSIX_PFX_PASSWORD"
     }
 
     if (-not (Test-Truthy -Value $TimestampConfigured) -and -not (Test-NonEmptyEnvironment -Name "PASSPORT_WINDOWS_MSIX_TIMESTAMP_URL")) {
