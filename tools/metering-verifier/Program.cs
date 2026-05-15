@@ -193,9 +193,17 @@ internal static class Program
                 return new VerificationResult(report, false, IsStorageProof(recordType), 0, 0);
             }
 
+            using var payloadDocument = JsonDocument.Parse(payloadBytes);
+            var signedRoot = payloadDocument.RootElement;
+            if (!string.Equals(GetString(signedRoot, "record_id"), recordId, StringComparison.Ordinal))
+            {
+                report["reason"] = "signed_payload_record_id_mismatch";
+                return new VerificationResult(report, false, IsStorageProof(recordType), 0, 0);
+            }
+
             long claimedReplicatedByteSeconds = 0;
             long claimedStorageBytes = 0;
-            if (root.TryGetProperty("metering_claim", out var claim))
+            if (signedRoot.TryGetProperty("metering_claim", out var claim))
             {
                 claimedReplicatedByteSeconds = GetInt64(claim, "claimed_replicated_byte_seconds");
                 claimedStorageBytes = GetInt64(claim, "claimed_storage_bytes");
@@ -206,13 +214,21 @@ internal static class Program
 
             if (IsStorageProof(recordType))
             {
-                accepted = GetString(root, "status") == "submitted"
-                    && claimedStorageBytes > 0
-                    && claimedReplicatedByteSeconds > 0
-                    && root.TryGetProperty("proof_response", out var proofResponse)
-                    && GetInt64(proofResponse, "proved_bytes") > 0
-                    && !string.IsNullOrWhiteSpace(GetString(proofResponse, "response_sha256"));
-                reason = accepted ? "storage_proof_integrity_accepted" : "storage_proof_missing_required_metering_fields";
+                accepted = HasAcceptedStorageProofPackage(signedRoot, out reason);
+                if (signedRoot.TryGetProperty("delivery_metering", out var deliveryMetering))
+                {
+                    report["verified_gb_days"] = GetInt64(deliveryMetering, "verified_gb_days");
+                }
+
+                if (signedRoot.TryGetProperty("proof_response", out var proofResponse))
+                {
+                    report["proved_bytes"] = GetInt64(proofResponse, "proved_bytes");
+                }
+
+                if (signedRoot.TryGetProperty("retrieval_response", out var retrievalResponse))
+                {
+                    report["retrieved_bytes"] = GetInt64(retrievalResponse, "retrieved_bytes");
+                }
             }
 
             report["accepted"] = accepted;
@@ -239,6 +255,127 @@ internal static class Program
     private static bool IsStorageProof(string recordType)
     {
         return recordType == "storage_epoch_proof_record";
+    }
+
+    private static bool HasAcceptedStorageProofPackage(JsonElement root, out string reason)
+    {
+        if (GetString(root, "status") != "submitted" && GetString(root, "status") != "accepted")
+        {
+            reason = "storage_proof_status_not_submitted_or_accepted";
+            return false;
+        }
+
+        if (!root.TryGetProperty("content_ref", out var contentRef)
+            || string.IsNullOrWhiteSpace(GetString(contentRef, "cid"))
+            || string.IsNullOrWhiteSpace(GetString(contentRef, "manifest_sha256")))
+        {
+            reason = "storage_proof_missing_content_manifest";
+            return false;
+        }
+
+        if (!root.TryGetProperty("object_manifest", out var objectManifest)
+            || GetInt64(objectManifest, "total_size_bytes") <= 0
+            || GetInt64(objectManifest, "redundancy_target") <= 0
+            || string.IsNullOrWhiteSpace(GetString(objectManifest, "privacy_preserving_object_id_sha256"))
+            || !ObjectManifestHasChunkHashes(objectManifest))
+        {
+            reason = "storage_proof_missing_object_manifest";
+            return false;
+        }
+
+        if (!root.TryGetProperty("challenge", out var challenge)
+            || string.IsNullOrWhiteSpace(GetString(challenge, "challenge_seed_sha256"))
+            || !HasNonEmptyArray(challenge, "segment_offsets"))
+        {
+            reason = "storage_proof_missing_possession_challenge";
+            return false;
+        }
+
+        if (!root.TryGetProperty("proof_response", out var proofResponse)
+            || GetInt64(proofResponse, "proved_bytes") <= 0
+            || string.IsNullOrWhiteSpace(GetString(proofResponse, "response_sha256")))
+        {
+            reason = "storage_proof_missing_possession_response";
+            return false;
+        }
+
+        if (!root.TryGetProperty("retrieval_challenge", out var retrievalChallenge)
+            || GetInt64(retrievalChallenge, "latency_threshold_ms") <= 0
+            || string.IsNullOrWhiteSpace(GetString(retrievalChallenge, "verifier_id")))
+        {
+            reason = "storage_proof_missing_retrieval_challenge";
+            return false;
+        }
+
+        if (!root.TryGetProperty("retrieval_response", out var retrievalResponse)
+            || !GetBoolean(retrievalResponse, "succeeded")
+            || GetInt64(retrievalResponse, "retrieved_bytes") <= 0
+            || !retrievalResponse.TryGetProperty("latency_ms", out _)
+            || GetInt64(retrievalResponse, "latency_ms") > GetInt64(retrievalChallenge, "latency_threshold_ms")
+            || string.IsNullOrWhiteSpace(GetString(retrievalResponse, "verifier_signature")))
+        {
+            reason = "storage_proof_missing_successful_retrieval_response";
+            return false;
+        }
+
+        if (!root.TryGetProperty("metering_claim", out var meteringClaim)
+            || GetInt64(meteringClaim, "claimed_storage_bytes") <= 0
+            || GetInt64(meteringClaim, "claimed_replicated_byte_seconds") <= 0)
+        {
+            reason = "storage_proof_missing_metering_claim";
+            return false;
+        }
+
+        if (!root.TryGetProperty("delivery_metering", out var deliveryMetering)
+            || GetInt64(deliveryMetering, "verified_gb_days") <= 0
+            || string.IsNullOrWhiteSpace(GetString(deliveryMetering, "metering_formula")))
+        {
+            reason = "storage_proof_missing_delivery_metering";
+            return false;
+        }
+
+        if (!root.TryGetProperty("repair_status", out var repairStatus)
+            || string.IsNullOrWhiteSpace(GetString(repairStatus, "redundancy_status"))
+            || (GetBoolean(repairStatus, "node_failed") && string.IsNullOrWhiteSpace(GetString(repairStatus, "repair_action"))))
+        {
+            reason = "storage_proof_missing_repair_status";
+            return false;
+        }
+
+        if (!root.TryGetProperty("failure_remedy", out var failureRemedy)
+            || string.IsNullOrWhiteSpace(GetString(failureRemedy, "failed_epoch_remedy")))
+        {
+            reason = "storage_proof_missing_failure_remedy";
+            return false;
+        }
+
+        reason = "storage_proof_package_accepted";
+        return true;
+    }
+
+    private static bool ObjectManifestHasChunkHashes(JsonElement objectManifest)
+    {
+        if (!objectManifest.TryGetProperty("chunks", out var chunks) || chunks.ValueKind != JsonValueKind.Array)
+        {
+            return false;
+        }
+
+        foreach (var chunk in chunks.EnumerateArray())
+        {
+            if (GetInt64(chunk, "size_bytes") > 0 && !string.IsNullOrWhiteSpace(GetString(chunk, "sha256")))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool HasNonEmptyArray(JsonElement root, string propertyName)
+    {
+        return root.TryGetProperty(propertyName, out var value)
+            && value.ValueKind == JsonValueKind.Array
+            && value.GetArrayLength() > 0;
     }
 
     private static bool VerifySignature(string publicKeyPath, byte[] data, byte[] signatureBytes)
@@ -291,6 +428,13 @@ internal static class Program
         }
 
         return value.ValueKind == JsonValueKind.String && long.TryParse(value.GetString(), out var parsed) ? parsed : 0;
+    }
+
+    private static bool GetBoolean(JsonElement root, string propertyName)
+    {
+        return root.TryGetProperty(propertyName, out var value)
+            && (value.ValueKind == JsonValueKind.True
+                || (value.ValueKind == JsonValueKind.String && bool.TryParse(value.GetString(), out var parsed) && parsed));
     }
 
     private static string ComputeSha256(byte[] bytes)

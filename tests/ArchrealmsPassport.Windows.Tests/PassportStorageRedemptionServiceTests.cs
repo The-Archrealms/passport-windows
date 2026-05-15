@@ -60,14 +60,14 @@ public sealed class PassportStorageRedemptionServiceTests
             wallet.WalletPublicKeyPath);
         Assert.True(accepted.Succeeded, accepted.Message);
 
-        var proofPath = workspace.WriteProofSource("storage-proof.json", "{\"proof\":\"ok\"}");
-        var proofHash = PassportTestWorkspace.ComputeFileSha256(proofPath);
+        var proof = CreateAcceptedStorageProof(workspace, "mvp_storage");
+        var proofHash = PassportTestWorkspace.ComputeFileSha256(proof.RecordPath);
         var burn = service.BurnVerifiedEpoch(
             workspace.Root,
             accepted.RecordPath,
-            burnCcBaseUnits: 40,
-            verifiedGbDays: 40,
-            proofRecordPath: proofPath,
+            burnCcBaseUnits: 1,
+            verifiedGbDays: 1,
+            proofRecordPath: proof.RecordPath,
             proofRecordSha256: proofHash,
             walletKeyReferencePath: wallet.WalletKeyReferencePath,
             walletPublicKeyPath: wallet.WalletPublicKeyPath);
@@ -76,7 +76,7 @@ public sealed class PassportStorageRedemptionServiceTests
         var refund = service.RefundRemaining(
             workspace.Root,
             accepted.RecordPath,
-            refundCcBaseUnits: 60,
+            refundCcBaseUnits: 99,
             reasonCode: "unused_or_failed_epochs",
             walletKeyReferencePath: wallet.WalletKeyReferencePath,
             walletPublicKeyPath: wallet.WalletPublicKeyPath);
@@ -86,13 +86,16 @@ public sealed class PassportStorageRedemptionServiceTests
         Assert.True(replay.Succeeded, string.Join("; ", replay.Failures));
         Assert.Contains(replay.Balances, balance =>
             balance.AssetCode == PassportMonetaryLedgerService.AssetCrownCredit
-            && balance.AvailableBaseUnits == 160
+            && balance.AvailableBaseUnits == 199
             && balance.EscrowedBaseUnits == 0
-            && balance.BurnedBaseUnits == 40);
+            && balance.BurnedBaseUnits == 1);
 
         var burnRecord = PassportTestWorkspace.ReadJson(burn.RecordPath);
         Assert.Equal("passport_storage_redemption_epoch_burn", PassportTestWorkspace.GetString(burnRecord, "record_type"));
         Assert.Equal(proofHash, PassportTestWorkspace.GetString(burnRecord, "proof_record_sha256"));
+        Assert.Equal(1, PassportTestWorkspace.GetInt64(burnRecord, "verified_gb_days"));
+        Assert.True(burnRecord.TryGetProperty("proof_acceptance", out var proofAcceptance));
+        Assert.True(proofAcceptance.GetProperty("accepted").GetBoolean());
         Assert.True(burnRecord.TryGetProperty("wallet_signature", out _));
     }
 
@@ -143,19 +146,75 @@ public sealed class PassportStorageRedemptionServiceTests
             wallet.WalletPublicKeyPath);
         Assert.True(accepted.Succeeded, accepted.Message);
 
-        var proofPath = workspace.WriteProofSource("storage-proof.json", "{\"proof\":\"ok\"}");
+        var proof = CreateAcceptedStorageProof(workspace, "mvp_storage");
         var burn = service.BurnVerifiedEpoch(
             workspace.Root,
             accepted.RecordPath,
             101,
-            101,
+            1,
+            proof.RecordPath,
+            PassportTestWorkspace.ComputeFileSha256(proof.RecordPath),
+            wallet.WalletKeyReferencePath,
+            wallet.WalletPublicKeyPath);
+
+        Assert.False(burn.Succeeded);
+        Assert.Contains("exceeds remaining escrow", burn.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void StorageRedemptionRejectsBurnWhenProofPackageIsIncomplete()
+    {
+        using var workspace = PassportTestWorkspace.Create();
+        var releaseLane = PassportReleaseLane.CreateDefault("production-mvp");
+        var wallet = new PassportWalletKeyService(releaseLane).CreateAndBindWalletKey(
+            workspace.Root,
+            workspace.IdentityId,
+            workspace.DeviceId,
+            workspace.KeyReferencePath);
+        Assert.True(wallet.Succeeded, wallet.Message);
+        var accepted = CreateAcceptedRedemption(workspace, releaseLane, wallet, 200, 100);
+
+        var proofPath = workspace.WriteProofSource("incomplete-storage-proof.json", "{\"proof\":\"ok\"}");
+        var burn = new PassportStorageRedemptionService(releaseLane).BurnVerifiedEpoch(
+            workspace.Root,
+            accepted.RecordPath,
+            1,
+            1,
             proofPath,
             PassportTestWorkspace.ComputeFileSha256(proofPath),
             wallet.WalletKeyReferencePath,
             wallet.WalletPublicKeyPath);
 
         Assert.False(burn.Succeeded);
-        Assert.Contains("exceeds remaining escrow", burn.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("proof package rejected", burn.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void StorageRedemptionRequiresBurnToMatchAcceptedQuoteFormula()
+    {
+        using var workspace = PassportTestWorkspace.Create();
+        var releaseLane = PassportReleaseLane.CreateDefault("production-mvp");
+        var wallet = new PassportWalletKeyService(releaseLane).CreateAndBindWalletKey(
+            workspace.Root,
+            workspace.IdentityId,
+            workspace.DeviceId,
+            workspace.KeyReferencePath);
+        Assert.True(wallet.Succeeded, wallet.Message);
+        var accepted = CreateAcceptedRedemption(workspace, releaseLane, wallet, 200, 100);
+        var proof = CreateAcceptedStorageProof(workspace, "mvp_storage");
+
+        var burn = new PassportStorageRedemptionService(releaseLane).BurnVerifiedEpoch(
+            workspace.Root,
+            accepted.RecordPath,
+            2,
+            1,
+            proof.RecordPath,
+            PassportTestWorkspace.ComputeFileSha256(proof.RecordPath),
+            wallet.WalletKeyReferencePath,
+            wallet.WalletPublicKeyPath);
+
+        Assert.False(burn.Succeeded);
+        Assert.Contains("accepted quote rate", burn.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -238,15 +297,15 @@ public sealed class PassportStorageRedemptionServiceTests
         Assert.True(wallet.Succeeded, wallet.Message);
         var accepted = CreateAcceptedRedemption(workspace, releaseLane, wallet, 200, 100);
         var acceptedHash = PassportTestWorkspace.ComputeFileSha256(accepted.RecordPath);
-        var proofPath = workspace.WriteProofSource("admin-burn-proof.json", "{\"proof\":\"ok\"}");
-        var proofHash = PassportTestWorkspace.ComputeFileSha256(proofPath);
+        var proof = CreateAcceptedStorageProof(workspace, "mvp_storage");
+        var proofHash = PassportTestWorkspace.ComputeFileSha256(proof.RecordPath);
         var intentHash = PassportStorageRedemptionService.ComputeBurnOverrideIntentHash(
             releaseLane,
             "account-test",
             workspace.IdentityId,
             wallet.WalletKeyId,
-            30,
-            30,
+            1,
+            1,
             "verified_service_delivery",
             acceptedHash,
             proofHash);
@@ -263,10 +322,10 @@ public sealed class PassportStorageRedemptionServiceTests
         var burn = new PassportStorageRedemptionService(releaseLane).OverrideBurnByAdmin(
             workspace.Root,
             accepted.RecordPath,
-            30,
-            30,
+            1,
+            1,
             "verified_service_delivery",
-            proofPath,
+            proof.RecordPath,
             proofHash,
             adminEvidence);
 
@@ -282,8 +341,27 @@ public sealed class PassportStorageRedemptionServiceTests
         Assert.Contains(replay.Balances, balance =>
             balance.AssetCode == PassportMonetaryLedgerService.AssetCrownCredit
             && balance.AvailableBaseUnits == 100
-            && balance.EscrowedBaseUnits == 70
-            && balance.BurnedBaseUnits == 30);
+            && balance.EscrowedBaseUnits == 99
+            && balance.BurnedBaseUnits == 1);
+    }
+
+    private static PassportMeteringRecordResult CreateAcceptedStorageProof(PassportTestWorkspace workspace, string serviceClass)
+    {
+        var proofSource = workspace.WriteProofSource("storage-proof-" + Guid.NewGuid().ToString("N") + ".bin", "storage proof source content");
+        var manifestSha256 = PassportTestWorkspace.ComputeFileSha256(proofSource);
+        var proof = new PassportRecordService().CreateStorageEpochProof(
+            workspace.Root,
+            workspace.IdentityId,
+            workspace.DeviceId,
+            workspace.KeyReferencePath,
+            "node-test",
+            "assignment-test",
+            "bafytestcontent",
+            manifestSha256,
+            serviceClass,
+            proofSource);
+        Assert.True(proof.Succeeded, proof.Message);
+        return proof;
     }
 
     private static PassportStorageRedemptionResult CreateAcceptedRedemption(

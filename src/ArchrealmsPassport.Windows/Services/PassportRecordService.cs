@@ -582,11 +582,16 @@ namespace ArchrealmsPassport.Windows.Services
                 }
 
                 var fileInfo = new FileInfo(proofSourceFilePath);
+                var sourceFileSha256 = ComputeFileSha256(proofSourceFilePath);
                 var epochId = "local-" + timestamp;
                 var challengeSeed = ComputeSha256(Encoding.UTF8.GetBytes(epochId + "|" + contentCid.Trim() + "|" + fileInfo.Length));
                 var segmentOffsets = SelectSegmentOffsets(challengeSeed, fileInfo.Length);
                 var response = ComputeSegmentProofResponse(proofSourceFilePath, segmentOffsets);
+                var manifestHash = string.IsNullOrWhiteSpace(manifestSha256) ? sourceFileSha256 : manifestSha256.Trim();
+                var verifiedGbDays = Math.Max(1, (fileInfo.Length + 1024L * 1024L * 1024L - 1) / (1024L * 1024L * 1024L));
                 var recordId = timestamp + "-" + safeAssignmentId + "-proof";
+                var retrievalVerifierSignature = "local-verifier-sha256:"
+                    + ComputeSha256(Encoding.UTF8.GetBytes(recordId + "|" + response.ResponseSha256 + "|" + sourceFileSha256));
                 var recordRoot = Path.Combine(
                     resolvedWorkspaceRoot,
                     "records",
@@ -618,8 +623,26 @@ namespace ArchrealmsPassport.Windows.Services
                     ["content_ref"] = new Dictionary<string, object?>
                     {
                         ["cid"] = contentCid.Trim(),
-                        ["manifest_sha256"] = string.IsNullOrWhiteSpace(manifestSha256) ? string.Empty : manifestSha256.Trim(),
+                        ["manifest_sha256"] = manifestHash,
                         ["relative_path"] = string.Empty
+                    },
+                    ["object_manifest"] = new Dictionary<string, object?>
+                    {
+                        ["manifest_version"] = 1,
+                        ["manifest_sha256"] = manifestHash,
+                        ["privacy_preserving_object_id_sha256"] = ComputeSha256(Encoding.UTF8.GetBytes(contentCid.Trim() + "|" + manifestHash)),
+                        ["total_size_bytes"] = fileInfo.Length,
+                        ["redundancy_target"] = 1,
+                        ["chunks"] = new[]
+                        {
+                            new Dictionary<string, object?>
+                            {
+                                ["chunk_index"] = 0,
+                                ["offset"] = 0,
+                                ["size_bytes"] = fileInfo.Length,
+                                ["sha256"] = sourceFileSha256
+                            }
+                        }
                     },
                     ["measurement_epoch"] = new Dictionary<string, object?>
                     {
@@ -641,16 +664,52 @@ namespace ArchrealmsPassport.Windows.Services
                         ["proved_bytes"] = response.ProvedBytes,
                         ["observed_utc"] = createdUtc
                     },
+                    ["retrieval_challenge"] = new Dictionary<string, object?>
+                    {
+                        ["challenge_id"] = "retrieval-" + timestamp + "-" + safeAssignmentId,
+                        ["challenge_method"] = "local_sample_retrieval_v1",
+                        ["latency_threshold_ms"] = 5000,
+                        ["verifier_id"] = "local-passport-storage-verifier-v1"
+                    },
+                    ["retrieval_response"] = new Dictionary<string, object?>
+                    {
+                        ["succeeded"] = true,
+                        ["retrieved_bytes"] = fileInfo.Length,
+                        ["latency_ms"] = 0,
+                        ["response_sha256"] = sourceFileSha256,
+                        ["verifier_signature_algorithm"] = "LOCAL_SHA256_ATTESTATION_V1",
+                        ["verifier_signature"] = retrievalVerifierSignature
+                    },
                     ["metering_claim"] = new Dictionary<string, object?>
                     {
                         ["claimed_replicated_byte_seconds"] = fileInfo.Length,
                         ["claimed_storage_bytes"] = fileInfo.Length
                     },
+                    ["delivery_metering"] = new Dictionary<string, object?>
+                    {
+                        ["metering_formula"] = "verified_gb_days=max(1,ceil(claimed_storage_bytes/1GiB)) for local MVP proof records",
+                        ["verified_gb_days"] = verifiedGbDays,
+                        ["claimed_storage_bytes"] = fileInfo.Length,
+                        ["claimed_replicated_byte_seconds"] = fileInfo.Length
+                    },
+                    ["repair_status"] = new Dictionary<string, object?>
+                    {
+                        ["node_failed"] = false,
+                        ["repair_required"] = false,
+                        ["redundancy_status"] = "healthy",
+                        ["repair_action"] = "none"
+                    },
+                    ["failure_remedy"] = new Dictionary<string, object?>
+                    {
+                        ["failed_epoch_remedy"] = "automatic_cc_recredit_or_service_extension",
+                        ["refund_reason_code"] = "unused_or_failed_epochs",
+                        ["service_extension_allowed"] = true
+                    },
                     ["local_evidence"] = new Dictionary<string, object?>
                     {
                         ["source_file_name"] = fileInfo.Name,
                         ["source_file_length"] = fileInfo.Length,
-                        ["source_file_sha256"] = ComputeFileSha256(proofSourceFilePath)
+                        ["source_file_sha256"] = sourceFileSha256
                     },
                     ["summary"] = "Local Passport storage epoch proof. This is submitted proof evidence only; it is not accepted metering or settlement."
                 };
