@@ -457,6 +457,185 @@ function New-PassportWindowsReleaseLaneManifest {
     }
 }
 
+function Test-PassportWindowsSigningCertificateInput {
+    param(
+        [string]$PfxPath,
+        [string]$PfxBase64,
+        [string]$Password,
+        [string]$ExpectedPublisher,
+        [string]$TimestampUrl,
+        [int]$MinimumDaysValid = 30,
+        [switch]$DisallowSelfSigned
+    )
+
+    $failures = @()
+    $warnings = @()
+    $certificateInfo = $null
+    $source = ""
+
+    if ($PfxPath) {
+        try {
+            $resolvedPfxPath = (Resolve-Path -LiteralPath $PfxPath).Path
+            $source = "path"
+        }
+        catch {
+            $failures += "PFX path does not exist: $PfxPath"
+            $resolvedPfxPath = ""
+        }
+    }
+    elseif ($PfxBase64) {
+        $source = "base64"
+    }
+    else {
+        $failures += "A PFX path or base64-encoded PFX is required."
+    }
+
+    if ([string]::IsNullOrWhiteSpace($Password)) {
+        $failures += "PFX password is required."
+    }
+
+    if ([string]::IsNullOrWhiteSpace($TimestampUrl)) {
+        $failures += "Timestamp URL is required."
+    }
+    else {
+        $timestampUri = $null
+        if (-not [System.Uri]::TryCreate($TimestampUrl.Trim(), [System.UriKind]::Absolute, [ref]$timestampUri)) {
+            $failures += "Timestamp URL must be an absolute URL."
+        }
+        elseif ($timestampUri.Scheme -notin @("http", "https")) {
+            $failures += "Timestamp URL must use HTTP or HTTPS."
+        }
+    }
+
+    $certificate = $null
+    if ($failures.Count -eq 0) {
+        try {
+            $bytes = $null
+            if ($source -eq "path") {
+                $bytes = [System.IO.File]::ReadAllBytes($resolvedPfxPath)
+            }
+            else {
+                $bytes = [System.Convert]::FromBase64String($PfxBase64.Trim())
+            }
+
+            $collection = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2Collection
+            $collection.Import(
+                $bytes,
+                $Password,
+                [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::Exportable)
+
+            foreach ($candidate in $collection) {
+                if ($candidate.HasPrivateKey) {
+                    $certificate = $candidate
+                    break
+                }
+            }
+
+            if (-not $certificate -and $collection.Count -gt 0) {
+                $certificate = $collection[0]
+            }
+
+            if (-not $certificate) {
+                $failures += "No certificate was found in the supplied PFX."
+            }
+        }
+        catch {
+            $failures += "Could not import signing PFX: $($_.Exception.Message)"
+        }
+    }
+
+    if ($certificate) {
+        $nowUtc = [DateTime]::UtcNow
+        $notBeforeUtc = $certificate.NotBefore.ToUniversalTime()
+        $notAfterUtc = $certificate.NotAfter.ToUniversalTime()
+        $daysRemaining = [Math]::Floor(($notAfterUtc - $nowUtc).TotalDays)
+        $selfSigned = [string]::Equals($certificate.Subject, $certificate.Issuer, [System.StringComparison]::OrdinalIgnoreCase)
+        $codeSigningEkuPresent = $false
+        $ekuOids = @()
+
+        foreach ($extension in $certificate.Extensions) {
+            if ($extension.Oid.Value -ne "2.5.29.37") {
+                continue
+            }
+
+            try {
+                $ekuExtension = [System.Security.Cryptography.X509Certificates.X509EnhancedKeyUsageExtension]::new(
+                    $extension,
+                    $extension.Critical)
+                foreach ($oid in $ekuExtension.EnhancedKeyUsages) {
+                    $ekuOids += $oid.Value
+                    if ($oid.Value -eq "1.3.6.1.5.5.7.3.3") {
+                        $codeSigningEkuPresent = $true
+                    }
+                }
+            }
+            catch {
+                $warnings += "Could not parse enhanced key usage extension: $($_.Exception.Message)"
+            }
+        }
+
+        if (-not $certificate.HasPrivateKey) {
+            $failures += "Signing certificate must include a private key."
+        }
+
+        if (-not $codeSigningEkuPresent) {
+            $failures += "Signing certificate must include the Code Signing enhanced key usage (1.3.6.1.5.5.7.3.3)."
+        }
+
+        if ($nowUtc -lt $notBeforeUtc) {
+            $failures += "Signing certificate is not valid yet."
+        }
+
+        if ($nowUtc -ge $notAfterUtc) {
+            $failures += "Signing certificate is expired."
+        }
+        elseif ($MinimumDaysValid -gt 0 -and $daysRemaining -lt $MinimumDaysValid) {
+            $failures += "Signing certificate must have at least $MinimumDaysValid days remaining."
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace($ExpectedPublisher) -and
+            -not [string]::Equals($certificate.Subject, $ExpectedPublisher.Trim(), [System.StringComparison]::Ordinal)) {
+            $failures += "Signing certificate subject '$($certificate.Subject)' does not match MSIX publisher '$($ExpectedPublisher.Trim())'."
+        }
+
+        if ($selfSigned) {
+            if ($DisallowSelfSigned) {
+                $failures += "Signing certificate is self-signed."
+            }
+            else {
+                $warnings += "Signing certificate is self-signed; sideload clients must explicitly trust its root certificate."
+            }
+        }
+
+        $certificateInfo = [pscustomobject][ordered]@{
+            subject = $certificate.Subject
+            issuer = $certificate.Issuer
+            thumbprint = $certificate.Thumbprint
+            not_before_utc = $notBeforeUtc.ToString("yyyy-MM-ddTHH:mm:ssZ")
+            not_after_utc = $notAfterUtc.ToString("yyyy-MM-ddTHH:mm:ssZ")
+            days_remaining = $daysRemaining
+            has_private_key = $certificate.HasPrivateKey
+            code_signing_eku_present = $codeSigningEkuPresent
+            enhanced_key_usage_oids = $ekuOids
+            self_signed = $selfSigned
+        }
+    }
+
+    return [pscustomobject][ordered]@{
+        schema = "archrealms.passport.windows_signing_certificate_check.v1"
+        checked_utc = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
+        source = $source
+        expected_publisher = if ($ExpectedPublisher) { $ExpectedPublisher.Trim() } else { "" }
+        timestamp_url = if ($TimestampUrl) { $TimestampUrl.Trim() } else { "" }
+        minimum_days_valid = $MinimumDaysValid
+        disallow_self_signed = $DisallowSelfSigned.IsPresent
+        certificate = $certificateInfo
+        warnings = $warnings
+        failures = $failures
+        passed = ($failures.Count -eq 0)
+    }
+}
+
 Export-ModuleMember -Function `
     Get-PassportWindowsDefaultKuboVersion, `
     Normalize-PassportWindowsKuboVersion, `
@@ -470,4 +649,5 @@ Export-ModuleMember -Function `
     Get-PassportWindowsDefaultMsixPackageIdentity, `
     Get-PassportWindowsDefaultPackageDisplayName, `
     Get-PassportWindowsDefaultPackageDescription, `
-    New-PassportWindowsReleaseLaneManifest
+    New-PassportWindowsReleaseLaneManifest, `
+    Test-PassportWindowsSigningCertificateInput

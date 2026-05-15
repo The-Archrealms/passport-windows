@@ -492,14 +492,37 @@ if ([string]::Equals($laneSlug, "production-mvp", [System.StringComparison]::Ord
         $timestampConfigured = -not [string]::IsNullOrWhiteSpace($TimestampUrl)
         $packageSigningConfiguredValue = if ($packageSigningConfigured) { "1" } else { "0" }
         $timestampConfiguredValue = if ($timestampConfigured) { "1" } else { "0" }
-        & powershell -ExecutionPolicy Bypass -File $readinessScript `
-            -OutputPath $readinessReportPath `
-            -EnvironmentFile $EnvironmentFile `
-            -PackageSigningConfigured $packageSigningConfiguredValue `
-            -TimestampConfigured $timestampConfiguredValue `
-            -EndpointTimeoutSeconds $ProductionMvpReadinessEndpointTimeoutSeconds
-        if ($LASTEXITCODE -ne 0) {
-            throw "ProductionMvp readiness gate failed. See $readinessReportPath."
+
+        $readinessEnvironment = @{
+            PASSPORT_WINDOWS_MSIX_PFX_PATH = $CertificatePfxPath
+            PASSPORT_WINDOWS_MSIX_PFX_BASE64 = $CertificatePfxBase64
+            PASSPORT_WINDOWS_MSIX_PFX_PASSWORD = $CertificatePassword
+            PASSPORT_WINDOWS_MSIX_TIMESTAMP_URL = $TimestampUrl
+            PASSPORT_WINDOWS_MSIX_PUBLISHER = $PackagePublisher
+        }
+        $previousReadinessEnvironment = @{}
+        foreach ($entry in $readinessEnvironment.GetEnumerator()) {
+            $previousReadinessEnvironment[$entry.Key] = [System.Environment]::GetEnvironmentVariable($entry.Key)
+            if (-not [string]::IsNullOrWhiteSpace($entry.Value)) {
+                [System.Environment]::SetEnvironmentVariable($entry.Key, $entry.Value, "Process")
+            }
+        }
+
+        try {
+            & powershell -ExecutionPolicy Bypass -File $readinessScript `
+                -OutputPath $readinessReportPath `
+                -EnvironmentFile $EnvironmentFile `
+                -PackageSigningConfigured $packageSigningConfiguredValue `
+                -TimestampConfigured $timestampConfiguredValue `
+                -EndpointTimeoutSeconds $ProductionMvpReadinessEndpointTimeoutSeconds
+            if ($LASTEXITCODE -ne 0) {
+                throw "ProductionMvp readiness gate failed. See $readinessReportPath."
+            }
+        }
+        finally {
+            foreach ($entry in $previousReadinessEnvironment.GetEnumerator()) {
+                [System.Environment]::SetEnvironmentVariable($entry.Key, $entry.Value, "Process")
+            }
         }
     }
 }

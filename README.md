@@ -355,6 +355,7 @@ The Store channel is for Partner Center submission and internal validation. The 
 The packaging script accepts a stable signing certificate through either:
 
 - `PASSPORT_WINDOWS_MSIX_PFX_BASE64`
+- `PASSPORT_WINDOWS_MSIX_PFX_PATH`
 - `PASSPORT_WINDOWS_MSIX_PFX_PASSWORD`
 
 If those are not provided, the script falls back to a generated self-signed test certificate. That fallback is suitable for preview and sideload testing, but a stable certificate should be configured before treating public sideload `MSIX` upgrades as production-grade.
@@ -399,7 +400,17 @@ For a secure, gitignored working env file, the template generator can also fill 
   -OutputPath .\artifacts\release\production-mvp.env
 ```
 
-The template lists each readiness-gate variable, whether it is secret, and the gate it satisfies. Populate values only in a secure shell, CI secret store, or deployment environment; populated `.env` files and the `artifacts/` tree are ignored by git. The generated operator key must be stored only in the secure production secret store, while its SHA-256 hash is configured on the hosted service. Populated env files can be passed to the readiness gate or production package publisher with `-EnvironmentFile`. The readiness gate verifies the SHA-256 hash of the pre-MVP internal verification report, verifies that `ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY` hashes to `ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY_SHA256`, and authenticates against `/ops/operator/status`. Production hosted signing requires `ARCHREALMS_PASSPORT_HOSTED_SIGNING_ENDPOINT`; local hosted signing-key paths are development-only and fail the ProductionMvp gate. The readiness gate posts a non-mutating `production_mvp_readiness_probe` payload to the managed signing endpoint and verifies the returned RSA signature and public-key hash.
+The template lists each readiness-gate variable, whether it is secret, and the gate it satisfies. Populate values only in a secure shell, CI secret store, or deployment environment; populated `.env` files and the `artifacts/` tree are ignored by git. The generated operator key must be stored only in the secure production secret store, while its SHA-256 hash is configured on the hosted service. Populated env files can be passed to the readiness gate or production package publisher with `-EnvironmentFile`. The readiness gate verifies the SHA-256 hash of the pre-MVP internal verification report, validates the production package-signing PFX when available, verifies that `ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY` hashes to `ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY_SHA256`, and authenticates against `/ops/operator/status`. Production hosted signing requires `ARCHREALMS_PASSPORT_HOSTED_SIGNING_ENDPOINT`; local hosted signing-key paths are development-only and fail the ProductionMvp gate. The readiness gate posts a non-mutating `production_mvp_readiness_probe` payload to the managed signing endpoint and verifies the returned RSA signature and public-key hash.
+
+Validate a production signing certificate before packaging:
+
+```powershell
+.\tools\release\Test-PassportWindowsSigningCertificate.ps1 `
+  -EnvironmentFile .\artifacts\release\production-mvp.env `
+  -OutputPath .\artifacts\release\production-signing-certificate-report.json
+```
+
+The report confirms the PFX can be opened with its password, includes a private key, carries the Code Signing enhanced key usage, has at least 30 days remaining, matches the configured MSIX publisher subject, and has a usable timestamp URL. Self-signed certificates are reported with a warning because sideload clients must explicitly trust their root certificate.
 
 Package with the same production environment file after the gate is ready:
 

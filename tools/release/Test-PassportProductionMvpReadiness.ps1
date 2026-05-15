@@ -3,12 +3,19 @@ param(
     [string]$EnvironmentFile,
     [string]$PackageSigningConfigured = "false",
     [string]$TimestampConfigured = "false",
+    [string]$CertificatePfxPath,
+    [string]$CertificatePfxBase64,
+    [string]$CertificatePassword,
+    [string]$PackagePublisher,
+    [string]$TimestampUrl,
     [int]$EndpointTimeoutSeconds = 10,
     [switch]$NoFail
 )
 
 $ErrorActionPreference = "Stop"
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+Import-Module (Join-Path $PSScriptRoot "PassportWindowsRelease.psm1") -Force -DisableNameChecking
+$script:packageSigningCertificateReport = $null
 
 function Import-EnvironmentFile {
     param(
@@ -205,17 +212,79 @@ function Test-ManagedSigningCustody {
 }
 
 function Test-PackageSigning {
-    $pfxBase64Configured = Test-NonEmptyEnvironment -Name "PASSPORT_WINDOWS_MSIX_PFX_BASE64"
-    if (-not (Test-Truthy -Value $PackageSigningConfigured) -and -not $pfxBase64Configured) {
+    $pfxPath = $CertificatePfxPath
+    if (-not $pfxPath) {
+        $pfxPath = Get-FirstEnvironmentValue -Names @(
+            "PASSPORT_WINDOWS_MSIX_PFX_PATH",
+            "PASSPORT_WINDOWS_SIDELOAD_PFX_PATH",
+            "PASSPORT_WINDOWS_STORE_PFX_PATH"
+        )
+    }
+
+    $pfxBase64 = $CertificatePfxBase64
+    if (-not $pfxBase64) {
+        $pfxBase64 = Get-FirstEnvironmentValue -Names @(
+            "PASSPORT_WINDOWS_MSIX_PFX_BASE64",
+            "PASSPORT_WINDOWS_SIDELOAD_PFX_BASE64",
+            "PASSPORT_WINDOWS_STORE_PFX_BASE64"
+        )
+    }
+
+    $password = $CertificatePassword
+    if (-not $password) {
+        $password = Get-FirstEnvironmentValue -Names @(
+            "PASSPORT_WINDOWS_MSIX_PFX_PASSWORD",
+            "PASSPORT_WINDOWS_SIDELOAD_PFX_PASSWORD",
+            "PASSPORT_WINDOWS_STORE_PFX_PASSWORD"
+        )
+    }
+
+    $timestamp = $TimestampUrl
+    if (-not $timestamp) {
+        $timestamp = Get-FirstEnvironmentValue -Names @(
+            "PASSPORT_WINDOWS_MSIX_TIMESTAMP_URL",
+            "PASSPORT_WINDOWS_SIDELOAD_TIMESTAMP_URL",
+            "PASSPORT_WINDOWS_STORE_TIMESTAMP_URL"
+        )
+    }
+
+    $expectedPublisher = $PackagePublisher
+    if (-not $expectedPublisher) {
+        $expectedPublisher = Get-FirstEnvironmentValue -Names @(
+            "PASSPORT_WINDOWS_MSIX_PUBLISHER",
+            "PASSPORT_WINDOWS_SIDELOAD_PUBLISHER",
+            "PASSPORT_WINDOWS_STORE_PUBLISHER"
+        )
+    }
+    if (-not $expectedPublisher) {
+        $expectedPublisher = "CN=The Archrealms"
+    }
+
+    $pfxConfigured = -not [string]::IsNullOrWhiteSpace($pfxPath) -or -not [string]::IsNullOrWhiteSpace($pfxBase64)
+    if (-not $pfxConfigured) {
         return "production package signing certificate is not configured"
     }
 
-    if ($pfxBase64Configured -and -not (Test-NonEmptyEnvironment -Name "PASSPORT_WINDOWS_MSIX_PFX_PASSWORD")) {
+    if ($pfxConfigured -and [string]::IsNullOrWhiteSpace($password)) {
         return "PASSPORT_WINDOWS_MSIX_PFX_PASSWORD"
     }
 
-    if (-not (Test-Truthy -Value $TimestampConfigured) -and -not (Test-NonEmptyEnvironment -Name "PASSPORT_WINDOWS_MSIX_TIMESTAMP_URL")) {
+    if ([string]::IsNullOrWhiteSpace($timestamp)) {
         return "PASSPORT_WINDOWS_MSIX_TIMESTAMP_URL"
+    }
+
+    if ($pfxConfigured) {
+        $script:packageSigningCertificateReport = Test-PassportWindowsSigningCertificateInput `
+            -PfxPath $pfxPath `
+            -PfxBase64 $pfxBase64 `
+            -Password $password `
+            -ExpectedPublisher $expectedPublisher `
+            -TimestampUrl $timestamp `
+            -MinimumDaysValid 30
+
+        if ($script:packageSigningCertificateReport.passed -ne $true) {
+            return @($script:packageSigningCertificateReport.failures)
+        }
     }
 
     return ""
@@ -934,6 +1003,7 @@ $report = [pscustomobject][ordered]@{
     endpoint_timeout_seconds = $EndpointTimeoutSeconds
     ready = ($failed.Count -eq 0)
     failed_gate_count = $failed.Count
+    package_signing_certificate = $script:packageSigningCertificateReport
     gates = $gates
 }
 

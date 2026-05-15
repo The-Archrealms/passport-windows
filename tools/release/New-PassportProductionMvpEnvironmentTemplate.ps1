@@ -79,8 +79,10 @@ $variables = @(
     New-Variable -Gate "pre_mvp_internal_verification" -Name "ARCHREALMS_PASSPORT_PRE_MVP_VERIFICATION_REPORT_PATH" -Description "Path to the passing pre-MVP internal verification report produced by tools/release/Test-PassportPreMvpInternalVerification.ps1."
     New-Variable -Gate "pre_mvp_internal_verification" -Name "ARCHREALMS_PASSPORT_PRE_MVP_VERIFICATION_REPORT_SHA256" -Description "SHA-256 hex digest of the pre-MVP internal verification report."
 
-    New-Variable -Gate "package_signing" -Name "PASSPORT_WINDOWS_MSIX_PFX_BASE64" -Secret $true -Description "Base64-encoded stable production MVP MSIX signing PFX."
+    New-Variable -Gate "package_signing" -Name "PASSPORT_WINDOWS_MSIX_PFX_BASE64" -Required $false -Secret $true -Description "Base64-encoded stable production MVP MSIX signing PFX. Required unless PASSPORT_WINDOWS_MSIX_PFX_PATH is set."
+    New-Variable -Gate "package_signing" -Name "PASSPORT_WINDOWS_MSIX_PFX_PATH" -Required $false -Secret $true -Description "Local path to the stable production MVP MSIX signing PFX. Required unless PASSPORT_WINDOWS_MSIX_PFX_BASE64 is set."
     New-Variable -Gate "package_signing" -Name "PASSPORT_WINDOWS_MSIX_PFX_PASSWORD" -Secret $true -Description "Password for the stable production MVP MSIX signing PFX."
+    New-Variable -Gate "package_signing" -Name "PASSPORT_WINDOWS_MSIX_PUBLISHER" -Required $false -Description "Expected MSIX publisher string. The signing certificate subject must match this value." -Example "CN=The Archrealms"
     New-Variable -Gate "package_signing" -Name "PASSPORT_WINDOWS_MSIX_TIMESTAMP_URL" -Description "Authenticode timestamp server used for production MVP package signing." -Example "http://timestamp.sectigo.com"
 
     New-Variable -Gate "release_lane_endpoints" -Name "PASSPORT_WINDOWS_PRODUCTION_MVP_API_BASE_URL" -Description "Production MVP Passport hosted API base URL." -Example "https://passport.archrealms.example"
