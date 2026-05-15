@@ -200,9 +200,11 @@ namespace ArchrealmsPassport.Windows.ViewModels
                 return BuildPrimaryActionLabel(
                     HasActivePassport(),
                     IsJoiningExistingIdentity,
+                    HasActiveWalletKey(),
+                    ParticipateInPublicRegistry,
                     HasPreparedStorageNode(),
                     HasActiveNode(),
-                    IsPublishedRegistrySubmission());
+                    IsRegistrationCompleteForCurrentMode());
             }
         }
 
@@ -210,7 +212,12 @@ namespace ArchrealmsPassport.Windows.ViewModels
         {
             get
             {
-                return BuildPrimaryActionVisibility(HasPreparedStorageNode(), HasActiveNode(), IsPublishedRegistrySubmission());
+                return BuildPrimaryActionVisibility(
+                    HasActiveWalletKey(),
+                    ParticipateInPublicRegistry,
+                    HasPreparedStorageNode(),
+                    HasActiveNode(),
+                    IsRegistrationCompleteForCurrentMode());
             }
         }
 

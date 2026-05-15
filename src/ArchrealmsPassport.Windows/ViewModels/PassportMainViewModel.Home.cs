@@ -9,28 +9,68 @@ namespace ArchrealmsPassport.Windows.ViewModels
     {
         private async Task ExecutePrimaryActionAsync()
         {
+            await RunPassportSetupAsync();
+        }
+
+        private async Task RunPassportSetupAsync()
+        {
             if (!HasActivePassport())
             {
                 await ProvisionIdentityAsync();
+                if (!HasActivePassport())
+                {
+                    return;
+                }
+            }
+
+            if (!HasActiveWalletKey())
+            {
+                if (!CanBindWalletKey())
+                {
+                    AppendLog("Passport is active, but wallet key binding is not available yet.");
+                    return;
+                }
+
+                await BindWalletKeyAsync();
+                if (!HasActiveWalletKey())
+                {
+                    return;
+                }
+            }
+
+            if (!ParticipateInPublicRegistry)
+            {
+                if (!HasRegistrySubmissionPackage())
+                {
+                    TryCreateRegistrySubmission();
+                    await RefreshRegistryBrowserAsync();
+                }
+
                 return;
             }
 
             if (!HasPreparedStorageNode())
             {
                 await InitializeNodeAsync();
-                return;
+                if (!HasPreparedStorageNode())
+                {
+                    return;
+                }
             }
 
             if (!HasActiveNode())
             {
                 await StartNodeAsync();
-                return;
+                if (!HasActiveNode())
+                {
+                    return;
+                }
             }
 
-            if (!IsPublishedRegistrySubmission() && CanRegisterWithArchrealms())
+            if (!IsRegistrationCompleteForCurrentMode() && CanRegisterWithArchrealms())
             {
                 await RegisterWithArchrealmsAsync();
-                return;
+                await RefreshRegistryBrowserAsync();
             }
         }
 
@@ -41,6 +81,16 @@ namespace ArchrealmsPassport.Windows.ViewModels
                 return CanProvisionIdentity();
             }
 
+            if (!HasActiveWalletKey())
+            {
+                return CanBindWalletKey();
+            }
+
+            if (!ParticipateInPublicRegistry)
+            {
+                return !HasRegistrySubmissionPackage() && CanUseActiveDeviceCredential();
+            }
+
             if (!HasPreparedStorageNode())
             {
                 return CanRunWorkspaceAction();
@@ -51,7 +101,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
                 return CanRunWorkspaceAction();
             }
 
-            if (!IsPublishedRegistrySubmission())
+            if (!IsRegistrationCompleteForCurrentMode())
             {
                 return CanRegisterWithArchrealms();
             }
@@ -116,6 +166,13 @@ namespace ArchrealmsPassport.Windows.ViewModels
                 && !string.Equals(RegistrySubmissionCidText, "Not published", StringComparison.Ordinal);
         }
 
+        private bool IsRegistrationCompleteForCurrentMode()
+        {
+            return ParticipateInPublicRegistry
+                ? IsPublishedRegistrySubmission()
+                : HasRegistrySubmissionPackage();
+        }
+
         private static string ShortenIdentifier(string value)
         {
             if (string.IsNullOrWhiteSpace(value) || value.Length <= 24)
@@ -173,13 +230,25 @@ namespace ArchrealmsPassport.Windows.ViewModels
         internal static string BuildPrimaryActionLabel(
             bool hasActivePassport,
             bool isJoiningExistingIdentity,
+            bool hasActiveWallet,
+            bool participatesInPublicRegistry,
             bool storageNodePrepared,
             bool storageNodeRunning,
-            bool isPublishedRegistrySubmission)
+            bool isRegistrationComplete)
         {
             if (!hasActivePassport)
             {
                 return isJoiningExistingIdentity ? "Request Access" : "Create Passport";
+            }
+
+            if (!hasActiveWallet)
+            {
+                return "Finish Setup";
+            }
+
+            if (!participatesInPublicRegistry)
+            {
+                return isRegistrationComplete ? "Passport Ready" : "Prepare Registration";
             }
 
             if (!storageNodePrepared)
@@ -192,7 +261,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
                 return "Start Storage";
             }
 
-            if (!isPublishedRegistrySubmission)
+            if (!isRegistrationComplete)
             {
                 return "Register Passport";
             }
@@ -200,9 +269,15 @@ namespace ArchrealmsPassport.Windows.ViewModels
             return "Passport Ready";
         }
 
-        internal static Visibility BuildPrimaryActionVisibility(bool storageNodePrepared, bool storageNodeRunning, bool isPublishedRegistrySubmission)
+        internal static Visibility BuildPrimaryActionVisibility(
+            bool hasActiveWallet,
+            bool participatesInPublicRegistry,
+            bool storageNodePrepared,
+            bool storageNodeRunning,
+            bool isRegistrationComplete)
         {
-            return storageNodePrepared && storageNodeRunning && isPublishedRegistrySubmission
+            var storageReady = !participatesInPublicRegistry || (storageNodePrepared && storageNodeRunning);
+            return hasActiveWallet && storageReady && isRegistrationComplete
                 ? Visibility.Collapsed
                 : Visibility.Visible;
         }

@@ -9,26 +9,32 @@ namespace ArchrealmsPassport.Windows.Tests;
 public sealed class PassportMainViewModelHomeTests
 {
     [Theory]
-    [InlineData(false, false, false, false, false, "Create Passport")]
-    [InlineData(false, true, false, false, false, "Request Access")]
-    [InlineData(true, false, false, false, false, "Enable Storage")]
-    [InlineData(true, false, true, false, false, "Start Storage")]
-    [InlineData(true, false, true, true, false, "Register Passport")]
-    [InlineData(true, false, true, true, true, "Passport Ready")]
+    [InlineData(false, false, false, true, false, false, false, "Create Passport")]
+    [InlineData(false, true, false, true, false, false, false, "Request Access")]
+    [InlineData(true, false, false, true, false, false, false, "Finish Setup")]
+    [InlineData(true, false, true, false, false, false, false, "Prepare Registration")]
+    [InlineData(true, false, true, true, false, false, false, "Enable Storage")]
+    [InlineData(true, false, true, true, true, false, false, "Start Storage")]
+    [InlineData(true, false, true, true, true, true, false, "Register Passport")]
+    [InlineData(true, false, true, true, true, true, true, "Passport Ready")]
     public void PrimaryActionLabelSeparatesPreparedStorageFromRunningStorage(
         bool hasActivePassport,
         bool isJoiningExistingIdentity,
+        bool hasActiveWallet,
+        bool participatesInPublicRegistry,
         bool storageNodePrepared,
         bool storageNodeRunning,
-        bool isPublishedRegistrySubmission,
+        bool isRegistrationComplete,
         string expected)
     {
         var label = PassportMainViewModel.BuildPrimaryActionLabel(
             hasActivePassport,
             isJoiningExistingIdentity,
+            hasActiveWallet,
+            participatesInPublicRegistry,
             storageNodePrepared,
             storageNodeRunning,
-            isPublishedRegistrySubmission);
+            isRegistrationComplete);
 
         Assert.Equal(expected, label);
     }
@@ -56,9 +62,11 @@ public sealed class PassportMainViewModelHomeTests
     [Fact]
     public void PrimaryActionOnlyHidesAfterRegistrationWhenStorageIsRunning()
     {
-        Assert.Equal(Visibility.Visible, PassportMainViewModel.BuildPrimaryActionVisibility(false, true, true));
-        Assert.Equal(Visibility.Visible, PassportMainViewModel.BuildPrimaryActionVisibility(true, false, true));
-        Assert.Equal(Visibility.Collapsed, PassportMainViewModel.BuildPrimaryActionVisibility(true, true, true));
+        Assert.Equal(Visibility.Visible, PassportMainViewModel.BuildPrimaryActionVisibility(false, true, true, true, true));
+        Assert.Equal(Visibility.Visible, PassportMainViewModel.BuildPrimaryActionVisibility(true, true, false, true, true));
+        Assert.Equal(Visibility.Visible, PassportMainViewModel.BuildPrimaryActionVisibility(true, true, true, false, true));
+        Assert.Equal(Visibility.Collapsed, PassportMainViewModel.BuildPrimaryActionVisibility(true, true, true, true, true));
+        Assert.Equal(Visibility.Collapsed, PassportMainViewModel.BuildPrimaryActionVisibility(true, false, false, false, true));
     }
 
     [Fact]
