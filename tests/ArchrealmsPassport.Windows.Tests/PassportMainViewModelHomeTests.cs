@@ -126,6 +126,61 @@ public sealed class PassportMainViewModelHomeTests
     }
 
     [Fact]
+    public void ReleaseLaneAiGatewayConfiguresDefaultAiGateway()
+    {
+        RunOnStaThread(delegate
+        {
+            var root = Path.Combine(Path.GetTempPath(), "archrealms-passport-lane-tests", Guid.NewGuid().ToString("N"));
+            var appDataRoot = Path.Combine(root, "appdata");
+            var releaseLanePath = Path.Combine(root, "passport-release-lane.json");
+            Directory.CreateDirectory(root);
+            File.WriteAllText(releaseLanePath, "{" +
+                "\"lane\":\"canary-mvp\"," +
+                "\"ledger_namespace\":\"archrealms-passport-canary-mvp\"," +
+                "\"api_base_url\":\"https://passport-canary.archrealms.example\"," +
+                "\"ai_gateway_url\":\"https://ai-canary.archrealms.example\"," +
+                "\"allow_production_token_records\":true," +
+                "\"production_ledger\":true" +
+                "}");
+            var oldAppDataRoot = Environment.GetEnvironmentVariable("ARCHREALMS_PASSPORT_APPDATA_ROOT");
+            var oldReleaseLaneConfig = Environment.GetEnvironmentVariable("ARCHREALMS_PASSPORT_RELEASE_LANE_CONFIG");
+            Environment.SetEnvironmentVariable("ARCHREALMS_PASSPORT_APPDATA_ROOT", appDataRoot);
+            Environment.SetEnvironmentVariable("ARCHREALMS_PASSPORT_RELEASE_LANE_CONFIG", releaseLanePath);
+
+            try
+            {
+                var localNodeService = new FakeLocalNodeService();
+                using var viewModel = new PassportMainViewModel(
+                    new PassportSettingsStore(),
+                    new PassportStatusService(localNodeService),
+                    localNodeService,
+                    new PassportRecordService(),
+                    new PassportCryptoService(),
+                    new NetworkUsageService());
+
+                Assert.Equal("https://ai-canary.archrealms.example", viewModel.AiGatewayUrl);
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable("ARCHREALMS_PASSPORT_APPDATA_ROOT", oldAppDataRoot);
+                Environment.SetEnvironmentVariable("ARCHREALMS_PASSPORT_RELEASE_LANE_CONFIG", oldReleaseLaneConfig);
+                try
+                {
+                    if (Directory.Exists(root))
+                    {
+                        Directory.Delete(root, true);
+                    }
+                }
+                catch
+                {
+                }
+            }
+
+            return Task.CompletedTask;
+        });
+    }
+
+    [Fact]
     public void PrimaryActionOnlyHidesAfterRegistrationWhenStorageIsRunning()
     {
         Assert.Equal(Visibility.Visible, PassportMainViewModel.BuildPrimaryActionVisibility(false, true, true, true, true));

@@ -30,7 +30,7 @@ namespace ArchrealmsPassport.Windows.Models
         public string ReadOnlyIpfsCid { get; set; } = string.Empty;
         public string ReadOnlyIpfsRelativePath { get; set; } = string.Empty;
         public string ReadOnlyIpfsFetchedPath { get; set; } = string.Empty;
-        public string AiGatewayUrl { get; set; } = "https://ai.archrealms.local";
+        public string AiGatewayUrl { get; set; } = string.Empty;
         public string AiKnowledgePackId { get; set; } = "archrealms-mvp-approved-knowledge";
         public bool AiDiagnosticsUploadOptIn { get; set; }
     }

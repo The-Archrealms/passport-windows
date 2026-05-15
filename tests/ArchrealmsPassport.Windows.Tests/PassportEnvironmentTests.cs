@@ -37,6 +37,8 @@ public sealed class PassportEnvironmentTests
             "\"package_channel\":\"sideload\"," +
             "\"package_identity\":\"TheArchrealms.PassportWindows.Staging.Sideload\"," +
             "\"ledger_namespace\":\"archrealms-passport-staging\"," +
+            "\"api_base_url\":\"https://passport-staging.archrealms.example\"," +
+            "\"ai_gateway_url\":\"https://ai-staging.archrealms.example\"," +
             "\"telemetry_environment\":\"staging\"," +
             "\"issuer_key_scope\":\"passport-staging\"," +
             "\"allow_production_token_records\":false," +
@@ -50,6 +52,8 @@ public sealed class PassportEnvironmentTests
         Assert.Equal("staging", releaseLane.Lane);
         Assert.Equal("PassportWindows-staging", releaseLane.AppDataFolderName);
         Assert.Equal("archrealms-passport-staging", releaseLane.LedgerNamespace);
+        Assert.Equal("https://passport-staging.archrealms.example", releaseLane.ApiBaseUrl);
+        Assert.Equal("https://ai-staging.archrealms.example", releaseLane.AiGatewayUrl);
         Assert.False(releaseLane.AllowProductionTokenRecords);
         Assert.True(releaseLane.AllowStagingRecords);
         Assert.False(releaseLane.ProductionLedger);

@@ -34,6 +34,12 @@ The hosted services project provides the production-facing API boundary that Win
 - Hosted records returned by capacity, genesis, and storage-delivery endpoints are signed with the hosted service signing key.
 - Set `ARCHREALMS_PASSPORT_HOSTED_SIGNING_KEY_PATH` to control the service signing-key location.
 
+## Release-Lane Configuration
+
+- `passport-release-lane.json` supports `ai_gateway_url`.
+- Release scripts populate `ai_gateway_url` from `PASSPORT_WINDOWS_<LANE>_AI_GATEWAY_URL`, `PASSPORT_WINDOWS_RELEASE_LANE_AI_GATEWAY_URL`, or `api_base_url`.
+- Windows Passport uses the lane AI gateway for staging, canary MVP, and production MVP unless the user explicitly configured a non-local gateway.
+
 ## Current Limits
 
 - Production deployment still needs managed durable storage, backups, managed signing-key custody, role membership lookup, telemetry, rate limits, incident logging, and release-lane configuration.

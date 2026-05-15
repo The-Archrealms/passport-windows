@@ -407,6 +407,11 @@ function New-PassportWindowsReleaseLaneManifest {
     }
 
     $apiBaseUrl = Get-PassportWindowsReleaseLaneEnvironmentValue -Lane $laneSlug -Name "API_BASE_URL"
+    $aiGatewayUrl = Get-PassportWindowsReleaseLaneEnvironmentValue -Lane $laneSlug -Name "AI_GATEWAY_URL"
+    if (-not $aiGatewayUrl -and $apiBaseUrl) {
+        $aiGatewayUrl = $apiBaseUrl
+    }
+
     $telemetryEnvironment = Get-PassportWindowsReleaseLaneEnvironmentValue -Lane $laneSlug -Name "TELEMETRY_ENVIRONMENT"
     if (-not $telemetryEnvironment) {
         $telemetryEnvironment = $laneSlug
@@ -438,6 +443,7 @@ function New-PassportWindowsReleaseLaneManifest {
         package_display_name = if ($PackageDisplayName) { $PackageDisplayName } else { "" }
         ledger_namespace = $ledgerNamespace
         api_base_url = if ($apiBaseUrl) { $apiBaseUrl } else { "" }
+        ai_gateway_url = if ($aiGatewayUrl) { $aiGatewayUrl } else { "" }
         telemetry_environment = $telemetryEnvironment
         issuer_key_scope = $issuerKeyScope
         feature_flag_scope = $featureFlagScope

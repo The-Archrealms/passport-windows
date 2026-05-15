@@ -46,10 +46,31 @@ namespace ArchrealmsPassport.Windows.ViewModels
             ReadOnlyIpfsFetchedPathText = string.IsNullOrWhiteSpace(settings.ReadOnlyIpfsFetchedPath)
                 ? "No read-only copy yet"
                 : settings.ReadOnlyIpfsFetchedPath;
-            AiGatewayUrl = string.IsNullOrWhiteSpace(settings.AiGatewayUrl) ? "https://ai.archrealms.local" : settings.AiGatewayUrl;
+            AiGatewayUrl = ResolveAiGatewayUrl(settings.AiGatewayUrl);
             AiKnowledgePackId = string.IsNullOrWhiteSpace(settings.AiKnowledgePackId) ? "archrealms-mvp-approved-knowledge" : settings.AiKnowledgePackId;
             AiDiagnosticsUploadOptIn = settings.AiDiagnosticsUploadOptIn;
             UpdateMonetaryStatus();
+        }
+
+        private string ResolveAiGatewayUrl(string configuredGatewayUrl)
+        {
+            if (!string.IsNullOrWhiteSpace(configuredGatewayUrl)
+                && !string.Equals(configuredGatewayUrl.Trim(), "https://ai.archrealms.local", StringComparison.OrdinalIgnoreCase))
+            {
+                return configuredGatewayUrl.Trim();
+            }
+
+            if (!string.IsNullOrWhiteSpace(_releaseLane.AiGatewayUrl))
+            {
+                return _releaseLane.AiGatewayUrl.Trim();
+            }
+
+            if (_releaseLane.ProductionLedger && !string.IsNullOrWhiteSpace(_releaseLane.ApiBaseUrl))
+            {
+                return _releaseLane.ApiBaseUrl.TrimEnd('/');
+            }
+
+            return "https://ai.archrealms.local";
         }
 
         private async Task SaveSettingsAsync()

@@ -14,6 +14,7 @@ namespace ArchrealmsPassport.Windows.Services
         public string PackageIdentity { get; set; } = string.Empty;
         public string LedgerNamespace { get; set; } = "archrealms-passport-dev";
         public string ApiBaseUrl { get; set; } = string.Empty;
+        public string AiGatewayUrl { get; set; } = string.Empty;
         public string TelemetryEnvironment { get; set; } = "dev";
         public string IssuerKeyScope { get; set; } = "passport-dev";
         public string FeatureFlagScope { get; set; } = "passport-dev";
@@ -71,6 +72,7 @@ namespace ArchrealmsPassport.Windows.Services
                 PackageIdentity = ReadString(root, "package_identity", defaults.PackageIdentity),
                 LedgerNamespace = ReadString(root, "ledger_namespace", defaults.LedgerNamespace),
                 ApiBaseUrl = ReadString(root, "api_base_url", defaults.ApiBaseUrl),
+                AiGatewayUrl = ReadString(root, "ai_gateway_url", defaults.AiGatewayUrl),
                 TelemetryEnvironment = ReadString(root, "telemetry_environment", defaults.TelemetryEnvironment),
                 IssuerKeyScope = ReadString(root, "issuer_key_scope", defaults.IssuerKeyScope),
                 FeatureFlagScope = ReadString(root, "feature_flag_scope", defaults.FeatureFlagScope),
