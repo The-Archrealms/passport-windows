@@ -5,6 +5,8 @@ param(
 
     [string]$ReadinessReportPath = "artifacts\release\production-mvp-readiness-report.json",
 
+    [string]$StagingReadinessReportPath = "artifacts\release\staging-readiness-report.json",
+
     [string]$ProvisioningPacketReportPath = "artifacts\release\production-provisioning-packet-validation-report.json",
 
     [string]$ProvisioningPacketManifestPath = "artifacts\release\production-provisioning-packet-working\production-provisioning-packet.manifest.json",
@@ -157,6 +159,43 @@ function Import-RedactedEnvironmentFile {
     return $records
 }
 
+function Get-EnvironmentFileValue {
+    param(
+        [string]$Path,
+        [string]$Name
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Path) -or -not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        return ""
+    }
+
+    foreach ($line in Get-Content -LiteralPath $Path) {
+        $trimmed = $line.Trim()
+        if ([string]::IsNullOrWhiteSpace($trimmed) -or $trimmed.StartsWith("#")) {
+            continue
+        }
+
+        $separator = $trimmed.IndexOf("=")
+        if ($separator -le 0) {
+            continue
+        }
+
+        $lineName = $trimmed.Substring(0, $separator).Trim()
+        if ($lineName -ne $Name) {
+            continue
+        }
+
+        $value = $trimmed.Substring($separator + 1).Trim()
+        if (($value.StartsWith('"') -and $value.EndsWith('"')) -or ($value.StartsWith("'") -and $value.EndsWith("'"))) {
+            $value = $value.Substring(1, $value.Length - 2)
+        }
+
+        return $value
+    }
+
+    return ""
+}
+
 $resolvedOutput = Resolve-RepoPath -Path $OutputDirectory
 if ((Test-Path -LiteralPath $resolvedOutput) -and -not $Force) {
     throw "OutputDirectory already exists. Use -Force to update it: $resolvedOutput"
@@ -177,9 +216,18 @@ New-Item -ItemType Directory -Force -Path $manifestsRoot | Out-Null
 
 $resolvedPreMvpReport = Resolve-RepoPath -Path $PreMvpReportPath
 $resolvedReadinessReport = Resolve-RepoPath -Path $ReadinessReportPath
+$resolvedEnvironmentFile = Resolve-RepoPath -Path $EnvironmentFile
+
+if (-not $PSBoundParameters.ContainsKey("StagingReadinessReportPath")) {
+    $stagingReportFromEnvironment = Get-EnvironmentFileValue -Path $resolvedEnvironmentFile -Name "ARCHREALMS_PASSPORT_STAGING_READINESS_REPORT_PATH"
+    if (-not [string]::IsNullOrWhiteSpace($stagingReportFromEnvironment)) {
+        $StagingReadinessReportPath = $stagingReportFromEnvironment
+    }
+}
+
+$resolvedStagingReadinessReport = Resolve-RepoPath -Path $StagingReadinessReportPath
 $resolvedProvisioningPacketReport = Resolve-RepoPath -Path $ProvisioningPacketReportPath
 $resolvedProvisioningPacketManifest = Resolve-RepoPath -Path $ProvisioningPacketManifestPath
-$resolvedEnvironmentFile = Resolve-RepoPath -Path $EnvironmentFile
 
 $evidenceFiles = @(
     New-EvidenceFile -Id "pre_mvp_internal_verification_report" -Path $resolvedPreMvpReport -CopyRoot $reportsRoot
@@ -187,9 +235,13 @@ $evidenceFiles = @(
     New-EvidenceFile -Id "production_provisioning_packet_validation_report" -Path $resolvedProvisioningPacketReport -CopyRoot $reportsRoot
     New-EvidenceFile -Id "production_provisioning_packet_manifest" -Path $resolvedProvisioningPacketManifest -CopyRoot $manifestsRoot
 )
+if (-not [string]::IsNullOrWhiteSpace($resolvedStagingReadinessReport) -and (Test-Path -LiteralPath $resolvedStagingReadinessReport -PathType Leaf)) {
+    $evidenceFiles += New-EvidenceFile -Id "staging_readiness_report" -Path $resolvedStagingReadinessReport -CopyRoot $reportsRoot
+}
 
 $preMvp = Read-JsonFile -Path $resolvedPreMvpReport
 $readiness = Read-JsonFile -Path $resolvedReadinessReport
+$stagingReadiness = Read-JsonFile -Path $resolvedStagingReadinessReport
 $provisioning = Read-JsonFile -Path $resolvedProvisioningPacketReport
 $packetManifest = Read-JsonFile -Path $resolvedProvisioningPacketManifest
 $environment = Import-RedactedEnvironmentFile -Path $resolvedEnvironmentFile
@@ -250,6 +302,13 @@ $manifest = [pscustomobject][ordered]@{
         failed_check_count = $preMvpFailedCheckCount
         failed_requirement_count = $preMvpFailedRequirementCount
     }
+    staging_readiness = [pscustomobject][ordered]@{
+        included = ($null -ne $stagingReadiness)
+        ready = ($null -ne $stagingReadiness -and [bool]$stagingReadiness.ready)
+        synthetic_fixtures_used = ($null -ne $stagingReadiness -and [bool]$stagingReadiness.synthetic_fixtures_used)
+        canary_or_production_release_approved = ($null -ne $stagingReadiness -and [bool]$stagingReadiness.canary_or_production_release_approved)
+        failed_gate_count = $(if ($null -ne $stagingReadiness) { [int]$stagingReadiness.failed_gate_count } else { $null })
+    }
     production_provisioning_packet = [pscustomobject][ordered]@{
         passed = ($null -ne $provisioning -and [bool]$provisioning.passed)
         failed_check_count = $provisioningFailedCheckCount
@@ -295,6 +354,8 @@ $summaryLines = @(
     "- App commit: $($manifest.source_commit)",
     "- Secrets included: false",
     "- Pre-MVP verification passed: $($manifest.pre_mvp_internal_verification.passed)",
+    "- Staging readiness included: $($manifest.staging_readiness.included)",
+    "- Staging readiness ready: $($manifest.staging_readiness.ready)",
     "- Production provisioning packet passed: $($manifest.production_provisioning_packet.passed)",
     "- Production readiness ready: $($manifest.production_mvp_readiness.ready)",
     "- Production readiness failed gates: $($manifest.production_mvp_readiness.failed_gate_count)",

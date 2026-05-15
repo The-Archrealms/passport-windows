@@ -613,7 +613,7 @@ Use `-RequireNoPlaceholders` against filled, controlled copies of the provisioni
 
 The packet validator runs the package-signing, release-endpoint, managed-storage, managed-signing-custody, hosted-services, managed-signing, open-weight AI runtime, production-ops, and production-monetary validators and writes child reports under `artifacts\release\production-provisioning-packet\`.
 
-Generate a redacted release-evidence packet for product, engineering, security/privacy, and Crown monetary authority review after the pre-MVP report, production readiness report, and provisioning packet report have been refreshed:
+Generate a redacted release-evidence packet for product, engineering, security/privacy, and Crown monetary authority review after the pre-MVP report, staging readiness report, production readiness report, and provisioning packet report have been refreshed:
 
 ```powershell
 .\tools\release\New-PassportProductionMvpReleaseEvidencePacket.ps1 `
@@ -622,7 +622,7 @@ Generate a redacted release-evidence packet for product, engineering, security/p
   -Force
 ```
 
-The evidence packet copies the current reports, records SHA-256 hashes, redacts environment values, lists remaining readiness gates, and writes `release-evidence.manifest.json` plus `release-evidence-summary.md`. It is review evidence only; citizen-facing production testing still requires `Test-PassportProductionMvpReadiness.ps1` to return `ready=true`.
+The evidence packet copies the current reports, records SHA-256 hashes, redacts environment values, lists remaining readiness gates, and writes `release-evidence.manifest.json` plus `release-evidence-summary.md`. If the production readiness report shows `staging_readiness` passed, the packet must also include the standalone non-synthetic staging readiness report and prove that promotion was approved. It is review evidence only; citizen-facing production testing still requires `Test-PassportProductionMvpReadiness.ps1` to return `ready=true`.
 
 Validate the evidence-packet generator and redaction behavior with synthetic fixtures:
 

@@ -7,6 +7,8 @@ param(
 
     [string]$ReadinessReportPath = "artifacts\release\production-mvp-readiness-report.json",
 
+    [string]$StagingReadinessReportPath = "artifacts\release\staging-readiness-report.json",
+
     [string]$ProvisioningPacketReportPath = "artifacts\release\production-provisioning-packet-validation-report.json",
 
     [string]$ProvisioningPacketManifestPath = "artifacts\release\production-provisioning-packet-working\production-provisioning-packet.manifest.json",
@@ -85,6 +87,7 @@ function Invoke-Generator {
         [string]$PacketRoot,
         [string]$PreMvpPath,
         [string]$ReadinessPath,
+        [string]$StagingReadinessPath,
         [string]$ProvisioningPath,
         [string]$ProvisioningManifestPath,
         [string]$EnvPath
@@ -105,6 +108,8 @@ function Invoke-Generator {
         $PreMvpPath,
         "-ReadinessReportPath",
         $ReadinessPath,
+        "-StagingReadinessReportPath",
+        $StagingReadinessPath,
         "-ProvisioningPacketReportPath",
         $ProvisioningPath,
         "-ProvisioningPacketManifestPath",
@@ -182,6 +187,7 @@ if ($UseSyntheticFixtures) {
 
     $PreMvpReportPath = Join-Path $fixtureRoot "pre-mvp-internal-verification-report.json"
     $ReadinessReportPath = Join-Path $fixtureRoot "production-mvp-readiness-report.json"
+    $StagingReadinessReportPath = Join-Path $fixtureRoot "staging-readiness-report.json"
     $ProvisioningPacketReportPath = Join-Path $fixtureRoot "production-provisioning-packet-validation-report.json"
     $ProvisioningPacketManifestPath = Join-Path $fixtureRoot "production-provisioning-packet.manifest.json"
     $EnvironmentFile = Join-Path $fixtureRoot "production-mvp.env"
@@ -210,10 +216,34 @@ if ($UseSyntheticFixtures) {
                 missing = @()
             },
             [pscustomobject][ordered]@{
+                id = "staging_readiness"
+                passed = $true
+                missing = @()
+            },
+            [pscustomobject][ordered]@{
                 id = "package_signing"
                 passed = $false
                 missing = @("production package signing certificate is not configured")
             }
+        )
+    })
+
+    Write-JsonFile -Path $StagingReadinessReportPath -Value ([pscustomobject][ordered]@{
+        schema = "archrealms.passport.staging_readiness.v1"
+        created_utc = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
+        ready = $true
+        staging_is_mvp = $false
+        failed_gate_count = 0
+        synthetic_fixtures_used = $false
+        canary_or_production_release_approved = $true
+        gates = @(
+            [pscustomobject][ordered]@{ id = "pre_mvp_internal_verification"; passed = $true; missing = @() },
+            [pscustomobject][ordered]@{ id = "staging_package_artifact"; passed = $true; missing = @() },
+            [pscustomobject][ordered]@{ id = "staging_lane_endpoints"; passed = $true; missing = @() },
+            [pscustomobject][ordered]@{ id = "staging_ledger_telemetry"; passed = $true; missing = @() },
+            [pscustomobject][ordered]@{ id = "staging_rollback_drill"; passed = $true; missing = @() },
+            [pscustomobject][ordered]@{ id = "staging_promotion_approvals"; passed = $true; missing = @() },
+            [pscustomobject][ordered]@{ id = "no_staging_to_production_migration"; passed = $true; missing = @() }
         )
     })
 
@@ -234,6 +264,8 @@ if ($UseSyntheticFixtures) {
     })
 
     Set-Content -LiteralPath $EnvironmentFile -Encoding UTF8 -Value @(
+        "ARCHREALMS_PASSPORT_STAGING_READINESS_REPORT_PATH=$StagingReadinessReportPath",
+        "ARCHREALMS_PASSPORT_STAGING_READINESS_REPORT_SHA256=$(Get-Sha256Hex -Path $StagingReadinessReportPath)",
         "ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY=$syntheticSecret",
         "ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY_SHA256=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
         "PASSPORT_WINDOWS_PRODUCTION_MVP_API_BASE_URL=https://passport.example.invalid"
@@ -243,6 +275,7 @@ if ($UseSyntheticFixtures) {
 $resolvedPacketRoot = Resolve-RepoPath -Path $EvidencePacketRoot
 $resolvedPreMvpReport = Resolve-RepoPath -Path $PreMvpReportPath
 $resolvedReadinessReport = Resolve-RepoPath -Path $ReadinessReportPath
+$resolvedStagingReadinessReport = Resolve-RepoPath -Path $StagingReadinessReportPath
 $resolvedProvisioningPacketReport = Resolve-RepoPath -Path $ProvisioningPacketReportPath
 $resolvedProvisioningPacketManifest = Resolve-RepoPath -Path $ProvisioningPacketManifestPath
 $resolvedEnvironmentFile = Resolve-RepoPath -Path $EnvironmentFile
@@ -253,6 +286,7 @@ if ($Generate) {
         -PacketRoot $resolvedPacketRoot `
         -PreMvpPath $resolvedPreMvpReport `
         -ReadinessPath $resolvedReadinessReport `
+        -StagingReadinessPath $resolvedStagingReadinessReport `
         -ProvisioningPath $resolvedProvisioningPacketReport `
         -ProvisioningManifestPath $resolvedProvisioningPacketManifest `
         -EnvPath $resolvedEnvironmentFile
@@ -291,6 +325,7 @@ if ($null -ne $manifest) {
     $checks += Add-Check -Id "environment_redacted" -Condition ($manifest.environment_file.values_redacted -eq $true) -Failure "environment values must be redacted"
     $checks += Add-Check -Id "pre_mvp_passed" -Condition ($manifest.pre_mvp_internal_verification.passed -eq $true -and $manifest.pre_mvp_internal_verification.failed_check_count -eq 0 -and $manifest.pre_mvp_internal_verification.failed_requirement_count -eq 0) -Failure "pre-MVP evidence did not pass"
     $checks += Add-Check -Id "fake_balance_blocked" -Condition ($manifest.pre_mvp_internal_verification.fake_balance_migration_blocked -eq $true) -Failure "fake-balance migration flag is not true"
+    $checks += Add-Check -Id "staging_readiness_summary" -Condition ($null -ne $manifest.staging_readiness) -Failure "staging readiness summary is missing"
     $checks += Add-Check -Id "provisioning_packet_passed" -Condition ($manifest.production_provisioning_packet.passed -eq $true -and $manifest.production_provisioning_packet.failed_check_count -eq 0) -Failure "production provisioning packet evidence did not pass"
     $checks += Add-Check -Id "reviewable_for_signoff" -Condition ($manifest.approval_packet_status.reviewable_for_signoff -eq $true) -Failure "release evidence packet is not reviewable for signoff"
     $checks += Add-Check -Id "completion_matches_readiness" -Condition ($manifest.approval_packet_status.complete_for_production_testing -eq $manifest.production_mvp_readiness.ready) -Failure "complete_for_production_testing must match readiness"
@@ -301,6 +336,26 @@ if ($null -ne $manifest) {
 
     $evidenceFiles = @($manifest.evidence_files)
     $checks += Add-Check -Id "evidence_file_count" -Condition ($evidenceFiles.Count -ge 4) -Failure "release evidence packet should contain at least four evidence files"
+    $requiredEvidenceIds = @(
+        "pre_mvp_internal_verification_report",
+        "production_mvp_readiness_report",
+        "production_provisioning_packet_validation_report",
+        "production_provisioning_packet_manifest"
+    )
+    foreach ($requiredId in $requiredEvidenceIds) {
+        $checks += Add-Check -Id ("evidence_file_required_" + $requiredId) -Condition (($evidenceFiles | Where-Object { $_.id -eq $requiredId } | Select-Object -First 1) -ne $null) -Failure "required evidence file is missing: $requiredId"
+    }
+
+    $stagingGate = @($manifest.production_mvp_readiness.gates) | Where-Object { $_.id -eq "staging_readiness" } | Select-Object -First 1
+    $stagingGatePassed = ($null -ne $stagingGate -and $stagingGate.passed -eq $true)
+    $stagingEvidenceFile = $evidenceFiles | Where-Object { $_.id -eq "staging_readiness_report" } | Select-Object -First 1
+    if ($stagingGatePassed -or $RequireReady) {
+        $checks += Add-Check -Id "staging_readiness_report_included_when_gate_passes" -Condition ($null -ne $stagingEvidenceFile -and $manifest.staging_readiness.included -eq $true) -Failure "staging readiness report must be included when staging_readiness passed or readiness is required"
+        $checks += Add-Check -Id "staging_readiness_report_ready" -Condition ($manifest.staging_readiness.ready -eq $true -and $manifest.staging_readiness.failed_gate_count -eq 0) -Failure "included staging readiness report is not ready"
+        $checks += Add-Check -Id "staging_readiness_report_non_synthetic" -Condition ($manifest.staging_readiness.synthetic_fixtures_used -eq $false) -Failure "release evidence cannot rely on a synthetic staging readiness report"
+        $checks += Add-Check -Id "staging_readiness_report_promotion_approved" -Condition ($manifest.staging_readiness.canary_or_production_release_approved -eq $true) -Failure "included staging readiness report does not approve canary or production release promotion"
+    }
+
     foreach ($file in $evidenceFiles) {
         $fileFailures = @()
         if ($file.exists -ne $true) {
