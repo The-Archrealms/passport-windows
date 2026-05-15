@@ -9,9 +9,9 @@ namespace ArchrealmsPassport.Windows.Services
 {
     public sealed class PassportStatusService
     {
-        private readonly LocalNodeService _localNodeService;
+        private readonly ILocalNodeService _localNodeService;
 
-        public PassportStatusService(LocalNodeService localNodeService)
+        public PassportStatusService(ILocalNodeService localNodeService)
         {
             _localNodeService = localNodeService;
         }

@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Security.Cryptography;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using ArchrealmsPassport.Windows.Models;
@@ -61,51 +62,63 @@ namespace ArchrealmsPassport.Windows.ViewModels
         private async Task RefreshStatusAsync()
         {
             var snapshot = await _statusService.GetSnapshotAsync(WorkspaceRoot, IpfsRepoPath, _toolRoot, IpfsCliPathOverride);
-
-            await Application.Current.Dispatcher.InvokeAsync(delegate
+            var dispatcher = Application.Current?.Dispatcher;
+            if (SynchronizationContext.Current == null
+                || dispatcher == null
+                || dispatcher.HasShutdownStarted
+                || dispatcher.HasShutdownFinished
+                || dispatcher.CheckAccess())
             {
-                WorkspaceRoot = snapshot.WorkspaceRoot;
-                if (string.IsNullOrWhiteSpace(IpfsRepoPath))
-                {
-                    IpfsRepoPath = snapshot.IpfsRepoPath;
-                }
+                ApplyStatusSnapshot(snapshot);
+                return;
+            }
 
-                WorkspaceStateText = snapshot.WorkspaceReady ? snapshot.WorkspaceRoot : "Workspace unavailable";
-                IpfsStateText = snapshot.IpfsCliSource;
-                ResolvedIpfsCliPathText = snapshot.IpfsCliDetected ? snapshot.IpfsCliPath : "No runtime resolved";
-                _storageNodePrepared = snapshot.IpfsNodePrepared;
-                _storageNodeRunning = snapshot.NodeApiReachable;
-                _preparedNodeId = snapshot.IpfsNodePrepared ? snapshot.NodePeerId : string.Empty;
-                _activeNodeId = snapshot.NodeApiReachable ? snapshot.NodePeerId : string.Empty;
-                var nodeState = string.IsNullOrWhiteSpace(snapshot.NodeHealthSummary)
-                    ? "Node not initialized"
-                    : snapshot.NodeHealthSummary;
-                if (!string.IsNullOrWhiteSpace(snapshot.NodeStorageMax))
-                {
-                    nodeState += "; storage " + snapshot.NodeStorageMax;
-                }
-                if (!string.IsNullOrWhiteSpace(snapshot.NodeParticipationMode))
-                {
-                    nodeState += "; " + snapshot.NodeParticipationMode;
-                }
-                if (!string.IsNullOrWhiteSpace(snapshot.NodeCachePolicy))
-                {
-                    nodeState += "; " + snapshot.NodeCachePolicy;
-                }
+            await dispatcher.InvokeAsync(delegate { ApplyStatusSnapshot(snapshot); });
+        }
 
-                NodeStateText = nodeState;
-                VerificationStateText = snapshot.VerificationSummary;
-                RegistrySubmissionCidText = snapshot.RegistrySubmissionCid;
+        private void ApplyStatusSnapshot(ArchiveStatusSnapshot snapshot)
+        {
+            WorkspaceRoot = snapshot.WorkspaceRoot;
+            if (string.IsNullOrWhiteSpace(IpfsRepoPath))
+            {
+                IpfsRepoPath = snapshot.IpfsRepoPath;
+            }
 
-                if ((string.IsNullOrWhiteSpace(RegistrySubmissionText) || !File.Exists(RegistrySubmissionText))
-                    && !string.IsNullOrWhiteSpace(snapshot.LatestSubmissionPath))
-                {
-                    RegistrySubmissionText = snapshot.LatestSubmissionPath;
-                }
+            WorkspaceStateText = snapshot.WorkspaceReady ? snapshot.WorkspaceRoot : "Workspace unavailable";
+            IpfsStateText = snapshot.IpfsCliSource;
+            ResolvedIpfsCliPathText = snapshot.IpfsCliDetected ? snapshot.IpfsCliPath : "No runtime resolved";
+            _storageNodePrepared = snapshot.IpfsNodePrepared;
+            _storageNodeRunning = snapshot.NodeApiReachable;
+            _preparedNodeId = snapshot.IpfsNodePrepared ? snapshot.NodePeerId : string.Empty;
+            _activeNodeId = snapshot.NodeApiReachable ? snapshot.NodePeerId : string.Empty;
+            var nodeState = string.IsNullOrWhiteSpace(snapshot.NodeHealthSummary)
+                ? "Node not initialized"
+                : snapshot.NodeHealthSummary;
+            if (!string.IsNullOrWhiteSpace(snapshot.NodeStorageMax))
+            {
+                nodeState += "; storage " + snapshot.NodeStorageMax;
+            }
+            if (!string.IsNullOrWhiteSpace(snapshot.NodeParticipationMode))
+            {
+                nodeState += "; " + snapshot.NodeParticipationMode;
+            }
+            if (!string.IsNullOrWhiteSpace(snapshot.NodeCachePolicy))
+            {
+                nodeState += "; " + snapshot.NodeCachePolicy;
+            }
 
-                RaiseHomePropertiesChanged();
-                UpdateMonetaryStatus();
-            });
+            NodeStateText = nodeState;
+            VerificationStateText = snapshot.VerificationSummary;
+            RegistrySubmissionCidText = snapshot.RegistrySubmissionCid;
+
+            if ((string.IsNullOrWhiteSpace(RegistrySubmissionText) || !File.Exists(RegistrySubmissionText))
+                && !string.IsNullOrWhiteSpace(snapshot.LatestSubmissionPath))
+            {
+                RegistrySubmissionText = snapshot.LatestSubmissionPath;
+            }
+
+            RaiseHomePropertiesChanged();
+            UpdateMonetaryStatus();
         }
 
         private async Task ProvisionIdentityAsync()

@@ -54,7 +54,10 @@ namespace ArchrealmsPassport.Windows.Commands
             }
 
             var dispatcher = Application.Current?.Dispatcher;
-            if (dispatcher != null && !dispatcher.CheckAccess())
+            if (dispatcher != null
+                && !dispatcher.HasShutdownStarted
+                && !dispatcher.HasShutdownFinished
+                && !dispatcher.CheckAccess())
             {
                 dispatcher.BeginInvoke(new Action(delegate { handler(this, EventArgs.Empty); }));
                 return;

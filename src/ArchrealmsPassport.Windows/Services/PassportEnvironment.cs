@@ -14,9 +14,15 @@ namespace ArchrealmsPassport.Windows.Services
         public static string GetAppDataRoot()
         {
             var releaseLane = GetReleaseLane();
+            var appDataRootOverride = Environment.GetEnvironmentVariable("ARCHREALMS_PASSPORT_APPDATA_ROOT");
+            var appDataBaseRoot = string.IsNullOrWhiteSpace(appDataRootOverride)
+                ? Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "Archrealms")
+                : Path.GetFullPath(appDataRootOverride);
+
             var root = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Archrealms",
+                appDataBaseRoot,
                 releaseLane.AppDataFolderName);
 
             Directory.CreateDirectory(root);

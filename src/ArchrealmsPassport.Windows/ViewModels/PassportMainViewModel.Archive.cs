@@ -16,7 +16,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
             return string.IsNullOrWhiteSpace(_activeNodeId) ? _preparedNodeId : _activeNodeId;
         }
 
-        private async Task InitializeNodeAsync()
+        internal async Task InitializeNodeAsync()
         {
             try
             {

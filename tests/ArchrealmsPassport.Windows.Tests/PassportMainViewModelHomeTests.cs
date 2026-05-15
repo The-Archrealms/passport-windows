@@ -1,6 +1,12 @@
+using System;
+using System.IO;
+using System.Runtime.ExceptionServices;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using ArchrealmsPassport.Windows.Models;
 using ArchrealmsPassport.Windows.Services;
+using ArchrealmsPassport.Windows.Tests.Infrastructure;
 using ArchrealmsPassport.Windows.ViewModels;
 using Xunit;
 
@@ -63,6 +69,60 @@ public sealed class PassportMainViewModelHomeTests
     public void HomeStorageOptInLabelShowsDefaultStorageLimit()
     {
         Assert.Equal("Contribute 1 GB storage", PassportMainViewModel.BuildHomeStorageOptInLabel("1 GB"));
+    }
+
+    [Fact]
+    public void InitializeNodeReportsPreparedStorageWhenStartupFails()
+    {
+        RunOnStaThread(async delegate
+        {
+            var appDataRoot = Path.Combine(Path.GetTempPath(), "archrealms-passport-viewmodel-tests", Guid.NewGuid().ToString("N"));
+            var oldAppDataRoot = Environment.GetEnvironmentVariable("ARCHREALMS_PASSPORT_APPDATA_ROOT");
+            Environment.SetEnvironmentVariable("ARCHREALMS_PASSPORT_APPDATA_ROOT", appDataRoot);
+
+            try
+            {
+                using var workspace = PassportTestWorkspace.Create();
+                var localNodeService = new FakeLocalNodeService();
+                using var viewModel = new PassportMainViewModel(
+                    new PassportSettingsStore(),
+                    new PassportStatusService(localNodeService),
+                    localNodeService,
+                    new PassportRecordService(),
+                    new PassportCryptoService(),
+                    new NetworkUsageService());
+
+                viewModel.WorkspaceRoot = workspace.Root;
+                viewModel.IpfsRepoPath = Path.Combine(workspace.Root, "ipfs");
+                viewModel.StorageAllocationGb = 1;
+                viewModel.NodeParticipationMode = "Read-only cache";
+                viewModel.ParticipateInPublicRegistry = false;
+
+                await viewModel.InitializeNodeAsync();
+
+                Assert.Equal(1, localNodeService.InitializeCallCount);
+                Assert.Equal(1, localNodeService.StartCallCount);
+                Assert.True(viewModel.ParticipateInPublicRegistry);
+                Assert.Equal("Public archive contributor", viewModel.NodeParticipationMode);
+                Assert.Equal("Storage was prepared, but node startup failed: daemon blocked by test", viewModel.StorageActionStatusText);
+                Assert.Equal("Paused: 1 GB", viewModel.StorageSummaryText);
+                Assert.Equal("Paused", viewModel.LocalNodeSummaryText);
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable("ARCHREALMS_PASSPORT_APPDATA_ROOT", oldAppDataRoot);
+                try
+                {
+                    if (Directory.Exists(appDataRoot))
+                    {
+                        Directory.Delete(appDataRoot, true);
+                    }
+                }
+                catch
+                {
+                }
+            }
+        });
     }
 
     [Fact]
@@ -136,5 +196,202 @@ public sealed class PassportMainViewModelHomeTests
         Assert.Contains("admin_authority_record_sha256=", evidence);
         Assert.Contains("admin_authority_requester_signature_path=", evidence);
         Assert.Contains("admin_authority_approver_signature_path=", evidence);
+    }
+
+    private static void RunOnStaThread(Func<Task> action)
+    {
+        Exception? threadException = null;
+        var completed = new ManualResetEventSlim(false);
+
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                action().GetAwaiter().GetResult();
+            }
+            catch (Exception ex)
+            {
+                threadException = ex;
+            }
+            finally
+            {
+                completed.Set();
+            }
+        });
+
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+
+        Assert.True(completed.Wait(TimeSpan.FromSeconds(15)), "The WPF view-model test did not complete.");
+        if (threadException != null)
+        {
+            ExceptionDispatchInfo.Capture(threadException).Throw();
+        }
+    }
+
+    private sealed class FakeLocalNodeService : ILocalNodeService
+    {
+        public int InitializeCallCount { get; private set; }
+
+        public int StartCallCount { get; private set; }
+
+        private bool _prepared;
+
+        public Task<LocalNodeOperationResult> InitializeAsync(
+            string toolRoot,
+            string workspaceRoot,
+            string ipfsRepoPath,
+            double storageAllocationGb,
+            string participationMode,
+            string cachePolicy,
+            int storageGcWatermark,
+            string provideStrategy,
+            string ipfsCliPathOverride,
+            CancellationToken cancellationToken = default)
+        {
+            InitializeCallCount++;
+            _prepared = true;
+            return Task.FromResult(new LocalNodeOperationResult
+            {
+                Succeeded = true,
+                Action = "initialize-local-node",
+                Message = "Prepared test storage node.",
+                RecordPath = Path.Combine(workspaceRoot, "records", "node", "local-node.json"),
+                PeerId = "peer-test"
+            });
+        }
+
+        public Task<LocalNodeOperationResult> StartAsync(
+            string toolRoot,
+            string workspaceRoot,
+            string ipfsRepoPath,
+            string ipfsCliPathOverride,
+            CancellationToken cancellationToken = default)
+        {
+            StartCallCount++;
+            return Task.FromResult(LocalNodeOperationResult.Failure("daemon blocked by test"));
+        }
+
+        public Task<LocalNodeOperationResult> RepairAsync(
+            string toolRoot,
+            string workspaceRoot,
+            string ipfsRepoPath,
+            double storageAllocationGb,
+            string participationMode,
+            string cachePolicy,
+            int storageGcWatermark,
+            string provideStrategy,
+            string ipfsCliPathOverride,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(LocalNodeOperationResult.Failure("not implemented in fake"));
+        }
+
+        public Task<LocalNodeOperationResult> StopAsync(
+            string toolRoot,
+            string workspaceRoot,
+            string ipfsRepoPath,
+            string ipfsCliPathOverride,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new LocalNodeOperationResult
+            {
+                Succeeded = true,
+                Action = "stop-local-node",
+                Message = "Stopped fake node."
+            });
+        }
+
+        public Task<LocalNodeOperationResult> RestartAsync(
+            string toolRoot,
+            string workspaceRoot,
+            string ipfsRepoPath,
+            string ipfsCliPathOverride,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(LocalNodeOperationResult.Failure("not implemented in fake"));
+        }
+
+        public Task<LocalNodeOperationResult> WriteDiagnosticsAsync(
+            string toolRoot,
+            string workspaceRoot,
+            string ipfsRepoPath,
+            string ipfsCliPathOverride,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(LocalNodeOperationResult.Failure("not implemented in fake"));
+        }
+
+        public Task<LocalNodeOperationResult> ExportCarAsync(
+            string toolRoot,
+            string workspaceRoot,
+            string cid,
+            string ipfsRepoPath,
+            string ipfsCliPathOverride,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(LocalNodeOperationResult.Failure("not implemented in fake"));
+        }
+
+        public Task<LocalNodeOperationResult> PublishRegistrySubmissionAsync(
+            string toolRoot,
+            string workspaceRoot,
+            string submissionPath,
+            string ipfsRepoPath,
+            string ipfsCliPathOverride,
+            bool exportCar,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(LocalNodeOperationResult.Failure("not implemented in fake"));
+        }
+
+        public Task<LocalNodeOperationResult> PreviewReadOnlyIpfsFileAsync(
+            string toolRoot,
+            string workspaceRoot,
+            string cid,
+            string relativePath,
+            string ipfsRepoPath,
+            string ipfsCliPathOverride,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(LocalNodeOperationResult.Failure("not implemented in fake"));
+        }
+
+        public Task<LocalNodeOperationResult> FetchReadOnlyIpfsFileAsync(
+            string toolRoot,
+            string workspaceRoot,
+            string cid,
+            string relativePath,
+            string ipfsRepoPath,
+            string ipfsCliPathOverride,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(LocalNodeOperationResult.Failure("not implemented in fake"));
+        }
+
+        public Task<LocalNodeHealthSnapshot> GetHealthAsync(
+            string workspaceRoot,
+            string ipfsRepoPath,
+            string toolRoot,
+            string ipfsCliPathOverride,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new LocalNodeHealthSnapshot
+            {
+                WorkspaceRoot = workspaceRoot,
+                IpfsRepoPath = ipfsRepoPath,
+                IpfsCliDetected = true,
+                IpfsCliPath = "fake-ipfs.exe",
+                IpfsCliSource = "Test runtime",
+                RepoInitialized = _prepared,
+                NodeRecordPresent = _prepared,
+                PeerId = _prepared ? "peer-test" : string.Empty,
+                StorageMax = _prepared ? "1GB" : string.Empty,
+                ParticipationMode = _prepared ? "Public archive contributor" : string.Empty,
+                CachePolicy = _prepared ? "Balanced pinned archive" : string.Empty,
+                ApiReachable = false,
+                Summary = _prepared ? "Local storage prepared; daemon offline" : "Node not initialized"
+            });
+        }
     }
 }

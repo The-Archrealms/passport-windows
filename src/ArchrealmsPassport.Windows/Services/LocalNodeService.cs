@@ -11,7 +11,7 @@ using System.Threading.Tasks;
 
 namespace ArchrealmsPassport.Windows.Services
 {
-    public sealed class LocalNodeService
+    public sealed class LocalNodeService : ILocalNodeService
     {
         private static readonly TimeSpan HealthTimeout = TimeSpan.FromSeconds(2);
         private static readonly TimeSpan DaemonStartupTimeout = TimeSpan.FromSeconds(90);

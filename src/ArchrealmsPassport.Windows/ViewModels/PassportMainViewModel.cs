@@ -9,7 +9,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
     {
         private readonly PassportSettingsStore _settingsStore;
         private readonly PassportStatusService _statusService;
-        private readonly LocalNodeService _localNodeService;
+        private readonly ILocalNodeService _localNodeService;
         private readonly PassportRecordService _recordService;
         private readonly PassportCryptoService _cryptoService;
         private readonly NetworkUsageService _networkUsageService;
@@ -177,7 +177,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
         public PassportMainViewModel(
             PassportSettingsStore settingsStore,
             PassportStatusService statusService,
-            LocalNodeService localNodeService,
+            ILocalNodeService localNodeService,
             PassportRecordService recordService,
             PassportCryptoService cryptoService,
             NetworkUsageService networkUsageService)
