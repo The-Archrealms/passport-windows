@@ -57,6 +57,8 @@ namespace ArchrealmsPassport.Windows.ViewModels
                     "recovery_override",
                     "escrow_release",
                     "burn_override",
+                    "storage_recredit",
+                    "service_extension",
                     "telemetry_access"
                 };
             }
@@ -349,6 +351,11 @@ namespace ArchrealmsPassport.Windows.ViewModels
         public long StorageRedemptionVerifiedGbDays { get { return _storageRedemptionVerifiedGbDays; } set { SetField(ref _storageRedemptionVerifiedGbDays, value); } }
         public string StorageRedemptionProofRecordPath { get { return _storageRedemptionProofRecordPath; } set { SetField(ref _storageRedemptionProofRecordPath, value); } }
         public long StorageRedemptionRefundCc { get { return _storageRedemptionRefundCc; } set { SetField(ref _storageRedemptionRefundCc, value); } }
+        public string StorageRedemptionFailureEvidencePath { get { return _storageRedemptionFailureEvidencePath; } set { SetField(ref _storageRedemptionFailureEvidencePath, value); } }
+        public string StorageRedemptionFailureEvidenceSha256 { get { return _storageRedemptionFailureEvidenceSha256; } set { SetField(ref _storageRedemptionFailureEvidenceSha256, value); } }
+        public string StorageRedemptionAdminEvidenceText { get { return _storageRedemptionAdminEvidenceText; } set { SetField(ref _storageRedemptionAdminEvidenceText, value); } }
+        public long StorageRedemptionRecreditCc { get { return _storageRedemptionRecreditCc; } set { SetField(ref _storageRedemptionRecreditCc, value); } }
+        public int StorageRedemptionExtensionEpochCount { get { return _storageRedemptionExtensionEpochCount; } set { SetField(ref _storageRedemptionExtensionEpochCount, value); } }
         public string StorageRedemptionStatusText { get { return _storageRedemptionStatusText; } private set { SetField(ref _storageRedemptionStatusText, value); } }
         public string RecoveryReasonCode { get { return _recoveryReasonCode; } set { SetField(ref _recoveryReasonCode, value); } }
         public string RecoveryTargetDeviceId { get { return _recoveryTargetDeviceId; } set { SetField(ref _recoveryTargetDeviceId, value); } }

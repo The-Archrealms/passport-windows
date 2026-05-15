@@ -366,6 +366,235 @@ namespace ArchrealmsPassport.Windows.Services
             }
         }
 
+        public PassportStorageRedemptionResult RecreditFailedEpochByAdmin(
+            string workspaceRoot,
+            string acceptedRedemptionPath,
+            long recreditCcBaseUnits,
+            string reasonCode,
+            string failureEvidencePath,
+            string failureEvidenceSha256,
+            IDictionary<string, string> adminAuthorityEvidence)
+        {
+            try
+            {
+                var resolvedWorkspaceRoot = PassportEnvironment.ResolveWorkspaceRoot(workspaceRoot);
+                if (recreditCcBaseUnits <= 0)
+                {
+                    return Failed("Storage re-credit requires a positive CC amount.");
+                }
+
+                var acceptedPath = ResolveWorkspaceRelativePath(resolvedWorkspaceRoot, acceptedRedemptionPath);
+                if (!File.Exists(acceptedPath))
+                {
+                    return Failed("Accepted storage redemption record could not be found.");
+                }
+
+                var evidencePath = ResolveWorkspaceRelativePath(resolvedWorkspaceRoot, failureEvidencePath);
+                if (!File.Exists(evidencePath))
+                {
+                    return Failed("Storage failure evidence record could not be found.");
+                }
+
+                var actualFailureEvidenceHash = ComputeSha256(File.ReadAllBytes(evidencePath));
+                if (!string.Equals(actualFailureEvidenceHash, failureEvidenceSha256, StringComparison.OrdinalIgnoreCase))
+                {
+                    return Failed("Storage failure evidence hash does not match re-credit evidence.");
+                }
+
+                using var document = JsonDocument.Parse(File.ReadAllText(acceptedPath));
+                var accepted = document.RootElement;
+                if (!Matches(accepted, "record_type", "passport_storage_redemption_accepted"))
+                {
+                    return Failed("Storage re-credit requires an accepted redemption record.");
+                }
+
+                if (!HasVerifiedWalletSignature(accepted))
+                {
+                    return Failed("Storage re-credit requires a signed accepted redemption record.");
+                }
+
+                var acceptedHash = ComputeSha256(File.ReadAllBytes(acceptedPath));
+                var intentHash = ComputeStorageRecreditIntentHash(
+                    releaseLane,
+                    ReadString(accepted, "account_id"),
+                    ReadString(accepted, "archrealms_identity_id"),
+                    ReadString(accepted, "wallet_key_id"),
+                    recreditCcBaseUnits,
+                    reasonCode,
+                    acceptedHash,
+                    actualFailureEvidenceHash);
+                var authority = new PassportAdminAuthorityService(releaseLane).ValidateDualControlActionEvidence(
+                    resolvedWorkspaceRoot,
+                    adminAuthorityEvidence,
+                    "storage_recredit",
+                    acceptedHash,
+                    intentHash);
+                if (!authority.Succeeded)
+                {
+                    return Failed(authority.Message);
+                }
+
+                var redemptionId = ReadString(accepted, "redemption_id");
+                var burnedSoFar = SumRecords(resolvedWorkspaceRoot, redemptionId, "passport_storage_redemption_epoch_burn", "burn_cc_base_units")
+                    + SumRecords(resolvedWorkspaceRoot, redemptionId, "passport_storage_redemption_admin_burn_override", "burn_cc_base_units");
+                var recreditedSoFar = SumRecords(resolvedWorkspaceRoot, redemptionId, "passport_storage_redemption_recredit", "recredit_cc_base_units");
+                if (recreditCcBaseUnits > burnedSoFar - recreditedSoFar)
+                {
+                    return Failed("Storage re-credit exceeds previously burned CC for this redemption.");
+                }
+
+                var recreditId = DateTime.UtcNow.ToString("yyyyMMddTHHmmssZ") + "-storage-recredit-" + Guid.NewGuid().ToString("N")[..10];
+                var evidence = new Dictionary<string, string>(adminAuthorityEvidence, StringComparer.Ordinal)
+                {
+                    ["storage_redemption_id"] = redemptionId,
+                    ["storage_accepted_redemption_path"] = acceptedPath,
+                    ["storage_accepted_redemption_sha256"] = acceptedHash,
+                    ["storage_failure_evidence_path"] = evidencePath,
+                    ["storage_failure_evidence_sha256"] = actualFailureEvidenceHash,
+                    ["storage_recredit_id"] = recreditId,
+                    ["storage_recredit_reason_code"] = NormalizeReasonCode(reasonCode),
+                    ["admin_authority_action_type"] = "storage_recredit",
+                    ["admin_authority_target_record_sha256"] = acceptedHash,
+                    ["admin_authority_requested_payload_sha256"] = intentHash
+                };
+                var recredit = new PassportMonetaryLedgerService(releaseLane).AppendEvent(
+                    resolvedWorkspaceRoot,
+                    ReadString(accepted, "account_id"),
+                    ReadString(accepted, "archrealms_identity_id"),
+                    ReadString(accepted, "wallet_key_id"),
+                    PassportMonetaryLedgerService.EventCrownCreditRecredit,
+                    PassportMonetaryLedgerService.AssetCrownCredit,
+                    recreditCcBaseUnits,
+                    evidence);
+                if (!recredit.Succeeded)
+                {
+                    return Failed("Storage re-credit ledger event failed: " + recredit.Message);
+                }
+
+                var recordPath = WriteAdminRecord(
+                    resolvedWorkspaceRoot,
+                    "recredit",
+                    recreditId,
+                    "passport_storage_redemption_recredit",
+                    accepted,
+                    authority,
+                    recredit,
+                    new Dictionary<string, object?>
+                    {
+                        ["recredit_cc_base_units"] = recreditCcBaseUnits,
+                        ["reason_code"] = NormalizeReasonCode(reasonCode),
+                        ["accepted_redemption_sha256"] = acceptedHash,
+                        ["failure_evidence_path"] = ToWorkspaceRelativePath(resolvedWorkspaceRoot, evidencePath),
+                        ["failure_evidence_sha256"] = actualFailureEvidenceHash,
+                        ["requested_payload_sha256"] = intentHash
+                    });
+                return Success("Storage failure re-credit recorded.", recreditId, recordPath, recredit.EventPath, recredit.EventHashSha256);
+            }
+            catch (Exception ex)
+            {
+                return Failed("Storage failure re-credit failed: " + ex.Message);
+            }
+        }
+
+        public PassportStorageRedemptionResult ExtendServiceByAdmin(
+            string workspaceRoot,
+            string acceptedRedemptionPath,
+            int extensionEpochCount,
+            string reasonCode,
+            string failureEvidencePath,
+            string failureEvidenceSha256,
+            IDictionary<string, string> adminAuthorityEvidence)
+        {
+            try
+            {
+                var resolvedWorkspaceRoot = PassportEnvironment.ResolveWorkspaceRoot(workspaceRoot);
+                if (extensionEpochCount <= 0)
+                {
+                    return Failed("Storage service extension requires a positive epoch count.");
+                }
+
+                var acceptedPath = ResolveWorkspaceRelativePath(resolvedWorkspaceRoot, acceptedRedemptionPath);
+                if (!File.Exists(acceptedPath))
+                {
+                    return Failed("Accepted storage redemption record could not be found.");
+                }
+
+                var evidencePath = ResolveWorkspaceRelativePath(resolvedWorkspaceRoot, failureEvidencePath);
+                if (!File.Exists(evidencePath))
+                {
+                    return Failed("Storage failure evidence record could not be found.");
+                }
+
+                var actualFailureEvidenceHash = ComputeSha256(File.ReadAllBytes(evidencePath));
+                if (!string.Equals(actualFailureEvidenceHash, failureEvidenceSha256, StringComparison.OrdinalIgnoreCase))
+                {
+                    return Failed("Storage failure evidence hash does not match service-extension evidence.");
+                }
+
+                using var document = JsonDocument.Parse(File.ReadAllText(acceptedPath));
+                var accepted = document.RootElement;
+                if (!Matches(accepted, "record_type", "passport_storage_redemption_accepted"))
+                {
+                    return Failed("Storage service extension requires an accepted redemption record.");
+                }
+
+                if (!HasVerifiedWalletSignature(accepted))
+                {
+                    return Failed("Storage service extension requires a signed accepted redemption record.");
+                }
+
+                var redemptionId = ReadString(accepted, "redemption_id");
+                var extendedSoFar = SumRecords(resolvedWorkspaceRoot, redemptionId, "passport_storage_redemption_service_extension", "extension_epoch_count");
+                var originalEpochCount = ReadInt64(accepted, "service_epoch_count");
+                if (extensionEpochCount > originalEpochCount - extendedSoFar)
+                {
+                    return Failed("Storage service extension exceeds the original accepted epoch count.");
+                }
+
+                var acceptedHash = ComputeSha256(File.ReadAllBytes(acceptedPath));
+                var intentHash = ComputeServiceExtensionIntentHash(
+                    releaseLane,
+                    ReadString(accepted, "account_id"),
+                    ReadString(accepted, "archrealms_identity_id"),
+                    ReadString(accepted, "wallet_key_id"),
+                    extensionEpochCount,
+                    reasonCode,
+                    acceptedHash,
+                    actualFailureEvidenceHash);
+                var authority = new PassportAdminAuthorityService(releaseLane).ValidateDualControlActionEvidence(
+                    resolvedWorkspaceRoot,
+                    adminAuthorityEvidence,
+                    "service_extension",
+                    acceptedHash,
+                    intentHash);
+                if (!authority.Succeeded)
+                {
+                    return Failed(authority.Message);
+                }
+
+                var extensionId = DateTime.UtcNow.ToString("yyyyMMddTHHmmssZ") + "-service-extension-" + Guid.NewGuid().ToString("N")[..10];
+                var recordPath = WriteAdminServiceExtensionRecord(
+                    resolvedWorkspaceRoot,
+                    extensionId,
+                    accepted,
+                    authority,
+                    new Dictionary<string, object?>
+                    {
+                        ["extension_epoch_count"] = extensionEpochCount,
+                        ["reason_code"] = NormalizeReasonCode(reasonCode),
+                        ["accepted_redemption_sha256"] = acceptedHash,
+                        ["failure_evidence_path"] = ToWorkspaceRelativePath(resolvedWorkspaceRoot, evidencePath),
+                        ["failure_evidence_sha256"] = actualFailureEvidenceHash,
+                        ["requested_payload_sha256"] = intentHash
+                    });
+                return Success("Storage service extension recorded.", extensionId, recordPath, string.Empty, string.Empty);
+            }
+            catch (Exception ex)
+            {
+                return Failed("Storage service extension failed: " + ex.Message);
+            }
+        }
+
         public PassportStorageRedemptionResult ReleaseEscrowByAdmin(
             string workspaceRoot,
             string acceptedRedemptionPath,
@@ -686,6 +915,58 @@ namespace ArchrealmsPassport.Windows.Services
             return ComputeSha256(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(intent, JsonOptions)));
         }
 
+        public static string ComputeStorageRecreditIntentHash(
+            PassportReleaseLane releaseLane,
+            string accountId,
+            string identityId,
+            string walletKeyId,
+            long recreditCcBaseUnits,
+            string reasonCode,
+            string acceptedRedemptionSha256,
+            string failureEvidenceSha256)
+        {
+            var intent = new SortedDictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["release_lane"] = releaseLane.Lane,
+                ["ledger_namespace"] = releaseLane.LedgerNamespace,
+                ["action_type"] = "storage_recredit",
+                ["account_id"] = (accountId ?? string.Empty).Trim(),
+                ["archrealms_identity_id"] = (identityId ?? string.Empty).Trim(),
+                ["wallet_key_id"] = (walletKeyId ?? string.Empty).Trim(),
+                ["recredit_cc_base_units"] = recreditCcBaseUnits,
+                ["reason_code"] = NormalizeReasonCode(reasonCode),
+                ["accepted_redemption_sha256"] = (acceptedRedemptionSha256 ?? string.Empty).Trim().ToLowerInvariant(),
+                ["failure_evidence_sha256"] = (failureEvidenceSha256 ?? string.Empty).Trim().ToLowerInvariant()
+            };
+            return ComputeSha256(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(intent, JsonOptions)));
+        }
+
+        public static string ComputeServiceExtensionIntentHash(
+            PassportReleaseLane releaseLane,
+            string accountId,
+            string identityId,
+            string walletKeyId,
+            int extensionEpochCount,
+            string reasonCode,
+            string acceptedRedemptionSha256,
+            string failureEvidenceSha256)
+        {
+            var intent = new SortedDictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["release_lane"] = releaseLane.Lane,
+                ["ledger_namespace"] = releaseLane.LedgerNamespace,
+                ["action_type"] = "service_extension",
+                ["account_id"] = (accountId ?? string.Empty).Trim(),
+                ["archrealms_identity_id"] = (identityId ?? string.Empty).Trim(),
+                ["wallet_key_id"] = (walletKeyId ?? string.Empty).Trim(),
+                ["extension_epoch_count"] = extensionEpochCount,
+                ["reason_code"] = NormalizeReasonCode(reasonCode),
+                ["accepted_redemption_sha256"] = (acceptedRedemptionSha256 ?? string.Empty).Trim().ToLowerInvariant(),
+                ["failure_evidence_sha256"] = (failureEvidenceSha256 ?? string.Empty).Trim().ToLowerInvariant()
+            };
+            return ComputeSha256(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(intent, JsonOptions)));
+        }
+
         private string WriteAdminRecord(
             string workspaceRoot,
             string kind,
@@ -724,6 +1005,49 @@ namespace ArchrealmsPassport.Windows.Services
                 ["requires_dual_control"] = true,
                 ["ai_approved"] = false,
                 ["summary"] = "Dual-control admin storage redemption operation linked to a CC ledger event. AI is not an approval authority."
+            };
+            foreach (var item in extra)
+            {
+                record[item.Key] = item.Value;
+            }
+
+            File.WriteAllText(path, JsonSerializer.Serialize(record, JsonOptions), Encoding.UTF8);
+            return path;
+        }
+
+        private string WriteAdminServiceExtensionRecord(
+            string workspaceRoot,
+            string recordId,
+            JsonElement sourceRecord,
+            PassportAdminAuthorityResult authority,
+            Dictionary<string, object?> extra)
+        {
+            var root = Path.Combine(workspaceRoot, "records", "passport", "monetary", "storage-redemptions", "service-extension");
+            Directory.CreateDirectory(root);
+            var path = Path.Combine(root, recordId + ".json");
+            var record = new Dictionary<string, object?>
+            {
+                ["schema_version"] = 1,
+                ["record_type"] = "passport_storage_redemption_service_extension",
+                ["record_id"] = recordId,
+                ["redemption_id"] = ReadString(sourceRecord, "redemption_id"),
+                ["created_utc"] = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+                ["release_lane"] = releaseLane.Lane,
+                ["ledger_namespace"] = releaseLane.LedgerNamespace,
+                ["policy_version"] = releaseLane.PolicyVersion,
+                ["account_id"] = ReadString(sourceRecord, "account_id"),
+                ["archrealms_identity_id"] = ReadString(sourceRecord, "archrealms_identity_id"),
+                ["wallet_key_id"] = ReadString(sourceRecord, "wallet_key_id"),
+                ["quote_id"] = ReadString(sourceRecord, "quote_id"),
+                ["quote_path"] = ReadString(sourceRecord, "quote_path"),
+                ["quote_sha256"] = ReadString(sourceRecord, "quote_sha256"),
+                ["admin_authority_record_path"] = ToWorkspaceRelativePath(workspaceRoot, authority.RecordPath),
+                ["admin_authority_requester_signature_path"] = ToWorkspaceRelativePath(workspaceRoot, authority.RequesterSignaturePath),
+                ["admin_authority_approver_signature_path"] = ToWorkspaceRelativePath(workspaceRoot, authority.ApproverSignaturePath),
+                ["requires_dual_control"] = true,
+                ["ai_approved"] = false,
+                ["ledger_event_id"] = string.Empty,
+                ["summary"] = "Dual-control admin storage service extension record. AI is not an approval authority."
             };
             foreach (var item in extra)
             {

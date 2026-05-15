@@ -323,6 +323,35 @@ public sealed class PassportMonetaryLedgerServiceTests
     }
 
     [Fact]
+    public void ProductionLedgerRejectsWalletSignedCcRecreditWithoutAdminAuthority()
+    {
+        using var workspace = PassportTestWorkspace.Create();
+        var releaseLane = PassportReleaseLane.CreateDefault("production-mvp");
+        var wallet = new PassportWalletKeyService(releaseLane).CreateAndBindWalletKey(
+            workspace.Root,
+            workspace.IdentityId,
+            workspace.DeviceId,
+            workspace.KeyReferencePath);
+        Assert.True(wallet.Succeeded, wallet.Message);
+
+        var service = new PassportMonetaryLedgerService(releaseLane);
+        var result = service.AppendEvent(
+            workspace.Root,
+            "account-test",
+            workspace.IdentityId,
+            wallet.WalletKeyId,
+            PassportMonetaryLedgerService.EventCrownCreditRecredit,
+            PassportMonetaryLedgerService.AssetCrownCredit,
+            10,
+            new Dictionary<string, string> { ["recredit_reason"] = "failed_service_epoch" },
+            walletKeyReferencePath: wallet.WalletKeyReferencePath,
+            walletPublicKeyPath: wallet.WalletPublicKeyPath);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("dual-control admin authority", result.Message, System.StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void ProductionLedgerReplaysWalletSignedEvents()
     {
         using var workspace = PassportTestWorkspace.Create();

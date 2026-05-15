@@ -176,6 +176,14 @@ namespace ArchrealmsPassport.Windows.Services
                     }
                 }
 
+                if (releaseLane.ProductionLedger
+                    && string.Equals(ledgerEvent.AssetCode, AssetCrownCredit, StringComparison.Ordinal)
+                    && string.Equals(ledgerEvent.EventType, EventCrownCreditRecredit, StringComparison.Ordinal)
+                    && !hasAdminAuthority)
+                {
+                    return FailedAppend("Production CC re-credit events require valid dual-control admin authority evidence.");
+                }
+
                 var semanticBalances = replay.Balances.ToDictionary(
                     balance => balance.AccountId + "|" + balance.AssetCode,
                     balance => new PassportMonetaryBalance
@@ -850,6 +858,7 @@ namespace ArchrealmsPassport.Windows.Services
 
             return (normalized == "escrow_release" && eventType == EventCrownCreditRefund)
                 || (normalized == "burn_override" && eventType == EventCrownCreditBurn)
+                || (normalized == "storage_recredit" && eventType == EventCrownCreditRecredit)
                 || (normalized == "recovery_override" && eventType == EventCrownCreditRecredit);
         }
 

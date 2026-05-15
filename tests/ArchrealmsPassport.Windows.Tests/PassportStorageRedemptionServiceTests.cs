@@ -162,6 +162,112 @@ public sealed class PassportStorageRedemptionServiceTests
     }
 
     [Fact]
+    public void FailedStorageEpochCanRecreditOrExtendServiceWithAdminAuthority()
+    {
+        using var workspace = PassportTestWorkspace.Create();
+        var releaseLane = PassportReleaseLane.CreateDefault("production-mvp");
+        var wallet = new PassportWalletKeyService(releaseLane).CreateAndBindWalletKey(
+            workspace.Root,
+            workspace.IdentityId,
+            workspace.DeviceId,
+            workspace.KeyReferencePath);
+        Assert.True(wallet.Succeeded, wallet.Message);
+
+        var ledger = new PassportMonetaryLedgerService(releaseLane);
+        var service = new PassportStorageRedemptionService(releaseLane);
+        var accepted = CreateAcceptedRedemption(workspace, releaseLane, wallet, 20, 10);
+        var proof = CreateAcceptedStorageProof(workspace, "mvp_storage");
+        var proofHash = PassportTestWorkspace.ComputeFileSha256(proof.RecordPath);
+        var burn = service.BurnVerifiedEpoch(
+            workspace.Root,
+            accepted.RecordPath,
+            burnCcBaseUnits: 1,
+            verifiedGbDays: 1,
+            proofRecordPath: proof.RecordPath,
+            proofRecordSha256: proofHash,
+            walletKeyReferencePath: wallet.WalletKeyReferencePath,
+            walletPublicKeyPath: wallet.WalletPublicKeyPath);
+        Assert.True(burn.Succeeded, burn.Message);
+
+        var failureEvidencePath = workspace.WriteProofSource("storage-failure-evidence.json", "{\"status\":\"failed_epoch\"}");
+        var failureEvidenceHash = PassportTestWorkspace.ComputeFileSha256(failureEvidencePath);
+        var acceptedHash = PassportTestWorkspace.ComputeFileSha256(accepted.RecordPath);
+        var recreditIntentHash = PassportStorageRedemptionService.ComputeStorageRecreditIntentHash(
+            releaseLane,
+            "account-test",
+            workspace.IdentityId,
+            wallet.WalletKeyId,
+            1,
+            "failed_epoch",
+            acceptedHash,
+            failureEvidenceHash);
+        var recreditEvidence = CreateAdminAuthorityEvidence(
+            workspace,
+            releaseLane,
+            "storage_recredit",
+            "mvp_storage_redemption",
+            "failed_epoch",
+            accepted.RecordId,
+            acceptedHash,
+            recreditIntentHash);
+
+        var recredit = service.RecreditFailedEpochByAdmin(
+            workspace.Root,
+            accepted.RecordPath,
+            recreditCcBaseUnits: 1,
+            reasonCode: "failed_epoch",
+            failureEvidencePath: failureEvidencePath,
+            failureEvidenceSha256: failureEvidenceHash,
+            adminAuthorityEvidence: recreditEvidence);
+        Assert.True(recredit.Succeeded, recredit.Message);
+
+        var extensionIntentHash = PassportStorageRedemptionService.ComputeServiceExtensionIntentHash(
+            releaseLane,
+            "account-test",
+            workspace.IdentityId,
+            wallet.WalletKeyId,
+            1,
+            "failed_epoch",
+            acceptedHash,
+            failureEvidenceHash);
+        var extensionEvidence = CreateAdminAuthorityEvidence(
+            workspace,
+            releaseLane,
+            "service_extension",
+            "mvp_storage_redemption",
+            "failed_epoch",
+            accepted.RecordId,
+            acceptedHash,
+            extensionIntentHash);
+
+        var extension = service.ExtendServiceByAdmin(
+            workspace.Root,
+            accepted.RecordPath,
+            extensionEpochCount: 1,
+            reasonCode: "failed_epoch",
+            failureEvidencePath: failureEvidencePath,
+            failureEvidenceSha256: failureEvidenceHash,
+            adminAuthorityEvidence: extensionEvidence);
+        Assert.True(extension.Succeeded, extension.Message);
+
+        var replay = ledger.Replay(workspace.Root);
+        Assert.True(replay.Succeeded, string.Join("; ", replay.Failures));
+        Assert.Contains(replay.Balances, balance =>
+            balance.AssetCode == PassportMonetaryLedgerService.AssetCrownCredit
+            && balance.AvailableBaseUnits == 11
+            && balance.EscrowedBaseUnits == 9
+            && balance.BurnedBaseUnits == 1);
+
+        var recreditRecord = PassportTestWorkspace.ReadJson(recredit.RecordPath);
+        Assert.Equal("passport_storage_redemption_recredit", PassportTestWorkspace.GetString(recreditRecord, "record_type"));
+        Assert.Equal(failureEvidenceHash, PassportTestWorkspace.GetString(recreditRecord, "failure_evidence_sha256"));
+
+        var extensionRecord = PassportTestWorkspace.ReadJson(extension.RecordPath);
+        Assert.Equal("passport_storage_redemption_service_extension", PassportTestWorkspace.GetString(extensionRecord, "record_type"));
+        Assert.Equal(1, PassportTestWorkspace.GetInt64(extensionRecord, "extension_epoch_count"));
+    }
+
+    [Fact]
     public void StorageRedemptionRejectsBurnWhenProofPackageIsIncomplete()
     {
         using var workspace = PassportTestWorkspace.Create();

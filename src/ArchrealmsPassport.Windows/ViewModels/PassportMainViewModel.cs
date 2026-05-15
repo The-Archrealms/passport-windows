@@ -47,6 +47,9 @@ namespace ArchrealmsPassport.Windows.ViewModels
         private readonly AsyncRelayCommand _acceptStorageRedemptionQuoteCommand;
         private readonly AsyncRelayCommand _burnStorageRedemptionEpochCommand;
         private readonly AsyncRelayCommand _refundStorageRedemptionCommand;
+        private readonly AsyncRelayCommand _hashStorageFailureEvidenceCommand;
+        private readonly AsyncRelayCommand _recreditStorageRedemptionCommand;
+        private readonly AsyncRelayCommand _extendStorageRedemptionCommand;
         private readonly AsyncRelayCommand _exportRecoveryGuidanceCommand;
         private readonly AsyncRelayCommand _freezeAccountCommand;
         private readonly AsyncRelayCommand _deauthorizeDeviceCommand;
@@ -137,6 +140,11 @@ namespace ArchrealmsPassport.Windows.ViewModels
         private long _storageRedemptionVerifiedGbDays = 1;
         private string _storageRedemptionProofRecordPath = string.Empty;
         private long _storageRedemptionRefundCc = 1;
+        private string _storageRedemptionFailureEvidencePath = string.Empty;
+        private string _storageRedemptionFailureEvidenceSha256 = string.Empty;
+        private string _storageRedemptionAdminEvidenceText = string.Empty;
+        private long _storageRedemptionRecreditCc = 1;
+        private int _storageRedemptionExtensionEpochCount = 1;
         private string _storageRedemptionStatusText = "No storage redemption yet.";
         private string _recoveryReasonCode = "user_request";
         private string _recoveryTargetDeviceId = string.Empty;
@@ -215,6 +223,9 @@ namespace ArchrealmsPassport.Windows.ViewModels
             _acceptStorageRedemptionQuoteCommand = new AsyncRelayCommand(AcceptStorageRedemptionQuoteAsync, CanAcceptStorageRedemptionQuote);
             _burnStorageRedemptionEpochCommand = new AsyncRelayCommand(BurnStorageRedemptionEpochAsync, CanBurnStorageRedemptionEpoch);
             _refundStorageRedemptionCommand = new AsyncRelayCommand(RefundStorageRedemptionAsync, CanRefundStorageRedemption);
+            _hashStorageFailureEvidenceCommand = new AsyncRelayCommand(HashStorageFailureEvidenceAsync, CanHashStorageFailureEvidence);
+            _recreditStorageRedemptionCommand = new AsyncRelayCommand(RecreditStorageRedemptionAsync, CanUseStorageAdminRemedy);
+            _extendStorageRedemptionCommand = new AsyncRelayCommand(ExtendStorageRedemptionAsync, CanUseStorageAdminRemedy);
             _exportRecoveryGuidanceCommand = new AsyncRelayCommand(ExportRecoveryGuidanceAsync, CanUseActiveDeviceCredential);
             _freezeAccountCommand = new AsyncRelayCommand(FreezeAccountAsync, CanUseActiveDeviceCredential);
             _deauthorizeDeviceCommand = new AsyncRelayCommand(DeauthorizeDeviceAsync, CanUseActiveDeviceCredential);
@@ -256,6 +267,9 @@ namespace ArchrealmsPassport.Windows.ViewModels
             AcceptStorageRedemptionQuoteCommand = _acceptStorageRedemptionQuoteCommand;
             BurnStorageRedemptionEpochCommand = _burnStorageRedemptionEpochCommand;
             RefundStorageRedemptionCommand = _refundStorageRedemptionCommand;
+            HashStorageFailureEvidenceCommand = _hashStorageFailureEvidenceCommand;
+            RecreditStorageRedemptionCommand = _recreditStorageRedemptionCommand;
+            ExtendStorageRedemptionCommand = _extendStorageRedemptionCommand;
             ExportRecoveryGuidanceCommand = _exportRecoveryGuidanceCommand;
             FreezeAccountCommand = _freezeAccountCommand;
             DeauthorizeDeviceCommand = _deauthorizeDeviceCommand;
@@ -304,6 +318,9 @@ namespace ArchrealmsPassport.Windows.ViewModels
         public ICommand AcceptStorageRedemptionQuoteCommand { get; private set; }
         public ICommand BurnStorageRedemptionEpochCommand { get; private set; }
         public ICommand RefundStorageRedemptionCommand { get; private set; }
+        public ICommand HashStorageFailureEvidenceCommand { get; private set; }
+        public ICommand RecreditStorageRedemptionCommand { get; private set; }
+        public ICommand ExtendStorageRedemptionCommand { get; private set; }
         public ICommand ExportRecoveryGuidanceCommand { get; private set; }
         public ICommand FreezeAccountCommand { get; private set; }
         public ICommand DeauthorizeDeviceCommand { get; private set; }

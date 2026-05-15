@@ -80,12 +80,13 @@ namespace ArchrealmsPassport.Windows.Services
                 var createdUtc = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
                 var root = Path.Combine(resolvedWorkspaceRoot, "records", "passport", "admin-authority", "roles");
                 Directory.CreateDirectory(root);
-                var recordPath = Path.Combine(root, timestamp + "-" + normalizedSubjectDeviceId + "-" + normalizedRoleName + ".json");
+                var recordId = timestamp + "-" + normalizedSubjectDeviceId + "-" + normalizedRoleName + "-" + Guid.NewGuid().ToString("N")[..10];
+                var recordPath = Path.Combine(root, recordId + ".json");
                 var record = new Dictionary<string, object?>
                 {
                     ["schema_version"] = 1,
                     ["record_type"] = "passport_admin_authority_role_membership",
-                    ["record_id"] = timestamp + "-" + normalizedSubjectDeviceId + "-" + normalizedRoleName,
+                    ["record_id"] = recordId,
                     ["created_utc"] = createdUtc,
                     ["effective_utc"] = createdUtc,
                     ["release_lane"] = releaseLane.Lane,
@@ -110,7 +111,7 @@ namespace ArchrealmsPassport.Windows.Services
                 var recordBytes = File.ReadAllBytes(recordPath);
                 var signature = WriteRoleMembershipSignature(
                     root,
-                    timestamp + "-" + normalizedSubjectDeviceId + "-" + normalizedRoleName + ".signature.json",
+                    recordId + ".signature.json",
                     resolvedWorkspaceRoot,
                     recordPath,
                     recordBytes,
@@ -880,6 +881,8 @@ namespace ArchrealmsPassport.Windows.Services
                 "recovery_override" => normalized,
                 "escrow_release" => normalized,
                 "burn_override" => normalized,
+                "storage_recredit" => normalized,
+                "service_extension" => normalized,
                 "telemetry_access" => normalized,
                 _ => throw new InvalidOperationException("Unsupported admin action type: " + actionType)
             };

@@ -686,6 +686,9 @@ namespace ArchrealmsPassport.Windows.ViewModels
             _acceptStorageRedemptionQuoteCommand.RaiseCanExecuteChanged();
             _burnStorageRedemptionEpochCommand.RaiseCanExecuteChanged();
             _refundStorageRedemptionCommand.RaiseCanExecuteChanged();
+            _hashStorageFailureEvidenceCommand.RaiseCanExecuteChanged();
+            _recreditStorageRedemptionCommand.RaiseCanExecuteChanged();
+            _extendStorageRedemptionCommand.RaiseCanExecuteChanged();
             _exportRecoveryGuidanceCommand.RaiseCanExecuteChanged();
             _freezeAccountCommand.RaiseCanExecuteChanged();
             _deauthorizeDeviceCommand.RaiseCanExecuteChanged();
