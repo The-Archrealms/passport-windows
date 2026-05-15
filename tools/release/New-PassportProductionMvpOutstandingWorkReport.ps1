@@ -182,6 +182,17 @@ function New-Action {
     }
 }
 
+function Get-ActionCommandArray {
+    param([object]$Action)
+
+    if ($null -eq $Action -or -not $Action.PSObject.Properties["commands"]) {
+        return ,[string[]]@()
+    }
+
+    $commands = @($Action.commands | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | ForEach-Object { [string]$_ })
+    return ,[string[]]$commands
+}
+
 $readinessActionMap = @{
     pre_mvp_internal_verification = New-Action `
         -Id "pre_mvp_internal_verification" `
@@ -715,7 +726,7 @@ foreach ($gate in $failedReadinessGates) {
                 missing_text = [string]$missing
                 operator_action = $(if ($null -ne $action) { [string]$action.action } else { "" })
                 operator_action_detail = $(if ($null -ne $action) { $action } else { $null })
-                operator_action_commands = $(if ($null -ne $action) { @($action.commands) } else { @() })
+                operator_action_commands = Get-ActionCommandArray -Action $action
             }
         }
     }
@@ -744,7 +755,7 @@ foreach ($check in $failedReleaseEvidenceChecks) {
         failures = @($check.failures)
         operator_action = [string]$check.operator_action_text
         operator_action_detail = $(if ($null -ne $check.operator_action) { $check.operator_action } else { $null })
-        operator_action_commands = $(if ($null -ne $check.operator_action) { @($check.operator_action.commands) } else { @() })
+        operator_action_commands = Get-ActionCommandArray -Action $check.operator_action
     }
 }
 
@@ -755,6 +766,21 @@ if ($null -eq $failedProvisioningChildCheckCount) {
 
 $readinessEvidenceItemCommandCount = @($readinessEvidenceItems | Where-Object { @($_.operator_action_commands).Count -gt 0 }).Count
 $releaseEvidenceItemCommandCount = @($releaseEvidenceItems | Where-Object { @($_.operator_action_commands).Count -gt 0 }).Count
+
+$contractFailures = @()
+foreach ($item in @($readinessEvidenceItems)) {
+    if ($item.operator_action_commands -isnot [array]) {
+        $contractFailures += "readiness_evidence_items operator_action_commands must serialize as an array for $($item.readiness_gate_id)."
+    }
+}
+foreach ($item in @($releaseEvidenceItems)) {
+    if ($item.operator_action_commands -isnot [array]) {
+        $contractFailures += "release_evidence_items operator_action_commands must serialize as an array for $($item.id)."
+    }
+}
+if ($contractFailures.Count -gt 0) {
+    throw "Outstanding-work report contract validation failed: $($contractFailures -join '; ')"
+}
 
 $readyForProductionTesting = (
     $inputFailures.Count -eq 0 -and
