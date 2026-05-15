@@ -30,6 +30,20 @@ Create a staff/steward pilot handoff before the controlled pilot. The handoff wr
   -HandoffRoot C:\secure\passport-pilot-handoff
 ```
 
+Optionally generate supporting dry-run evidence for the controlled pilot packet. This does not replace staff/steward participation, observations, or signoff:
+
+```powershell
+.\tools\release\New-PassportPreMvpStaffStewardPilotDryRunEvidence.ps1 `
+  -OutputDirectory C:\secure\passport-pilot-handoff\pilot-dry-run `
+  -HandoffRoot C:\secure\passport-pilot-handoff `
+  -PilotId <pre-mvp-staff-steward-pilot-id> `
+  -PilotOwner <pilot-owner> `
+  -Force
+
+.\tools\release\Test-PassportPreMvpStaffStewardPilotDryRunEvidence.ps1 `
+  -ReportPath C:\secure\passport-pilot-handoff\pilot-dry-run\staff-steward-pilot-dry-run-evidence.json
+```
+
 If the controlled evidence system needs the packet only, create a staff/steward pilot evidence packet before the controlled pilot, then fill the generated JSON records after the pilot is complete:
 
 ```powershell
@@ -98,4 +112,4 @@ ARCHREALMS_PASSPORT_PRE_MVP_STAFF_STEWARD_PILOT_REPORT_SHA256
 
 The reports must use the `internal-verification` lane, include real non-placeholder evidence references and evidence files, and prove that no production ARCH, production CC, Crown reserve balance, citizen production account history, or production service-liability record was created.
 
-`Test-PassportPreMvpInternalVerification.ps1` also validates the handoff generator through `staff_steward_pilot_handoff_validation`. That automated check does not close the external pilot gate; it only proves the operator path is available and fails closed until real pilot evidence exists.
+`Test-PassportPreMvpInternalVerification.ps1` also validates the handoff generator through `staff_steward_pilot_handoff_validation` and the supporting dry-run helper through `staff_steward_pilot_dry_run_validation`. Those automated checks do not close the external pilot gate; they only prove the operator path is available, scenario evidence references are structured, and final acceptance still fails closed until real pilot evidence exists.

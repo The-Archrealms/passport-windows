@@ -546,6 +546,16 @@ Pre-MVP internal verification has its own gate. Run it after building an `Intern
 .\tools\release\Test-PassportPreMvpStaffStewardPilotHandoff.ps1 `
   -HandoffRoot C:\secure\passport-pilot-handoff
 
+.\tools\release\New-PassportPreMvpStaffStewardPilotDryRunEvidence.ps1 `
+  -OutputDirectory C:\secure\passport-pilot-handoff\pilot-dry-run `
+  -HandoffRoot C:\secure\passport-pilot-handoff `
+  -PilotId <pre-mvp-staff-steward-pilot-id> `
+  -PilotOwner <pilot-owner> `
+  -Force
+
+.\tools\release\Test-PassportPreMvpStaffStewardPilotDryRunEvidence.ps1 `
+  -ReportPath C:\secure\passport-pilot-handoff\pilot-dry-run\staff-steward-pilot-dry-run-evidence.json
+
 .\tools\release\Test-PassportPreMvpStaffStewardPilotEvidencePacket.ps1 `
   -PacketRoot C:\secure\passport-pilot-handoff\pilot-evidence `
   -RequireNoPlaceholders
