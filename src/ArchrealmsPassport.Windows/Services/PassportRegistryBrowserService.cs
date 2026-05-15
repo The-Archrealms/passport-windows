@@ -23,6 +23,11 @@ namespace ArchrealmsPassport.Windows.Services
             var records = new List<PassportRegistryRecordSummary>();
             foreach (var path in Directory.EnumerateFiles(recordsRoot, "*.json", SearchOption.AllDirectories))
             {
+                if (Path.GetFileName(path).EndsWith(".payload.json", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
                 var summary = TryReadRecordSummary(resolvedWorkspaceRoot, path);
                 if (summary == null)
                 {
@@ -54,20 +59,26 @@ namespace ArchrealmsPassport.Windows.Services
             return string.Join(
                 Environment.NewLine + Environment.NewLine,
                 records.Select(record =>
-                    record.RecordType
-                    + " | "
-                    + record.RecordId
-                    + " | "
-                    + record.Status
-                    + Environment.NewLine
-                    + "created: "
-                    + record.CreatedUtc
-                    + Environment.NewLine
-                    + "sha256: "
-                    + record.Sha256
-                    + Environment.NewLine
-                    + "path: "
-                    + record.RelativePath));
+                    FormatRecordDetail(record)));
+        }
+
+        public string FormatRecordDetail(PassportRegistryRecordSummary record)
+        {
+            var lines = new List<string>
+            {
+                record.RecordType + " | " + record.RecordId + " | " + record.Status,
+                "created: " + record.CreatedUtc,
+                "sha256: " + record.Sha256,
+                "path: " + record.RelativePath
+            };
+
+            AddDetailLine(lines, "cid", record.Cid);
+            AddDetailLine(lines, "signed payload", record.SignedPayloadPath);
+            AddDetailLine(lines, "signed payload sha256", record.SignedPayloadSha256);
+            AddDetailLine(lines, "signature", record.SignaturePath);
+            AddDetailLine(lines, "wallet public key", record.WalletPublicKeyPath);
+            AddDetailLine(lines, "wallet payload sha256", record.WalletSignedPayloadSha256);
+            return string.Join(Environment.NewLine, lines);
         }
 
         private static PassportRegistryRecordSummary? TryReadRecordSummary(string workspaceRoot, string path)
@@ -81,15 +92,31 @@ namespace ArchrealmsPassport.Windows.Services
                     return null;
                 }
 
-                return new PassportRegistryRecordSummary
+                var summary = new PassportRegistryRecordSummary
                 {
                     RecordType = recordType.GetString() ?? string.Empty,
                     RecordId = ReadString(root, "record_id", "event_id", "quote_id", "execution_id", "correction_id"),
                     CreatedUtc = ReadString(root, "created_utc"),
                     Status = ReadString(root, "status", "record_stage", "signature_status"),
                     RelativePath = ToWorkspaceRelativePath(workspaceRoot, path),
-                    Sha256 = ComputeSha256(File.ReadAllBytes(path))
+                    Sha256 = ComputeSha256(File.ReadAllBytes(path)),
+                    Cid = ReadCid(root)
                 };
+
+                if (root.TryGetProperty("signature", out var signature))
+                {
+                    summary.SignedPayloadPath = ReadString(signature, "signed_payload_path");
+                    summary.SignedPayloadSha256 = ReadString(signature, "signed_payload_sha256");
+                    summary.SignaturePath = ReadString(signature, "signature_path");
+                }
+
+                if (root.TryGetProperty("wallet_signature", out var walletSignature))
+                {
+                    summary.WalletPublicKeyPath = ReadString(walletSignature, "wallet_public_key_path");
+                    summary.WalletSignedPayloadSha256 = ReadString(walletSignature, "signed_payload_sha256");
+                }
+
+                return summary;
             }
             catch
             {
@@ -108,7 +135,11 @@ namespace ArchrealmsPassport.Windows.Services
                 || Contains(record.RecordId, filter)
                 || Contains(record.Status, filter)
                 || Contains(record.RelativePath, filter)
-                || Contains(record.Sha256, filter);
+                || Contains(record.Sha256, filter)
+                || Contains(record.Cid, filter)
+                || Contains(record.SignaturePath, filter)
+                || Contains(record.SignedPayloadPath, filter)
+                || Contains(record.WalletPublicKeyPath, filter);
         }
 
         private static string ReadString(JsonElement root, params string[] propertyNames)
@@ -122,6 +153,35 @@ namespace ArchrealmsPassport.Windows.Services
             }
 
             return string.Empty;
+        }
+
+        private static string ReadCid(JsonElement root)
+        {
+            var direct = ReadString(root, "cid", "root_cid", "content_cid", "registry_submission_cid");
+            if (!string.IsNullOrWhiteSpace(direct))
+            {
+                return direct;
+            }
+
+            if (root.TryGetProperty("content_ref", out var contentRef))
+            {
+                return ReadString(contentRef, "cid");
+            }
+
+            if (root.TryGetProperty("source", out var source))
+            {
+                return ReadString(source, "cid", "root_cid");
+            }
+
+            return string.Empty;
+        }
+
+        private static void AddDetailLine(List<string> lines, string label, string value)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                lines.Add(label + ": " + value);
+            }
         }
 
         private static bool Contains(string value, string filter)

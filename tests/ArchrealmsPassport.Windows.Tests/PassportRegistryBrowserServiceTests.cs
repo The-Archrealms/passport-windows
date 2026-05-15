@@ -35,11 +35,33 @@ public sealed class PassportRegistryBrowserServiceTests
     public void RegistryBrowserFormatsRecordDetails()
     {
         using var workspace = PassportTestWorkspace.Create();
+        var proofSource = workspace.WriteProofSource("registry-proof-source.bin", "storage proof source content");
+        var proof = new PassportRecordService().CreateStorageEpochProof(
+            workspace.Root,
+            workspace.IdentityId,
+            workspace.DeviceId,
+            workspace.KeyReferencePath,
+            "node-test",
+            "assignment-test",
+            "bafyregistrycontent",
+            PassportTestWorkspace.ComputeFileSha256(proofSource),
+            "mvp_storage",
+            proofSource);
+        Assert.True(proof.Succeeded, proof.Message);
+
         var service = new PassportRegistryBrowserService();
+        var proofRecords = service.ListRecords(workspace.Root, "storage_epoch_proof_record");
+        var proofSummary = Assert.Single(proofRecords);
 
-        var records = service.ListRecords(workspace.Root);
-        var formatted = service.FormatRecordList(records.Take(1).ToArray());
+        Assert.Equal("bafyregistrycontent", proofSummary.Cid);
+        Assert.False(string.IsNullOrWhiteSpace(proofSummary.SignaturePath));
+        Assert.False(string.IsNullOrWhiteSpace(proofSummary.SignedPayloadPath));
 
+        var formatted = service.FormatRecordDetail(proofSummary);
+
+        Assert.Contains("cid:", formatted);
+        Assert.Contains("signature:", formatted);
+        Assert.Contains("signed payload:", formatted);
         Assert.Contains("sha256:", formatted);
         Assert.Contains("path:", formatted);
     }
