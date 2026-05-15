@@ -276,6 +276,24 @@ public sealed record PassportTelemetryAccessRequest
     public PassportAdminAuthorityValidationRequest AdminAuthority { get; init; } = new();
 }
 
+public sealed record PassportRecoveryControlValidationRequest
+{
+    [JsonPropertyName("recovery_control_record")]
+    public JsonElement RecoveryControlRecord { get; init; }
+
+    [JsonPropertyName("recovery_control_record_payload_base64")]
+    public string RecoveryControlRecordPayloadBase64 { get; init; } = string.Empty;
+
+    [JsonPropertyName("recovery_control_record_sha256")]
+    public string RecoveryControlRecordSha256 { get; init; } = string.Empty;
+
+    [JsonPropertyName("recovery_signature_record")]
+    public JsonElement RecoverySignatureRecord { get; init; }
+
+    [JsonPropertyName("admin_authority")]
+    public PassportAdminAuthorityValidationRequest AdminAuthority { get; init; } = new();
+}
+
 public sealed record PassportHostedTelemetryEntry
 {
     [JsonPropertyName("created_utc")]

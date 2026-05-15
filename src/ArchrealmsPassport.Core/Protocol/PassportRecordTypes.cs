@@ -19,6 +19,11 @@ public static class PassportRecordTypes
     public const string WalletKeyBindingSignature = "passport_wallet_key_binding_signature";
     public const string WalletKeyRevocation = "passport_wallet_key_revocation";
     public const string WalletKeyRevocationSignature = "passport_wallet_key_revocation_signature";
+    public const string DeviceDeauthorization = "passport_device_deauthorization";
+    public const string DeviceDeauthorizationSignature = "passport_device_deauthorization_signature";
+    public const string AccountSecurityFreeze = "passport_account_security_freeze";
+    public const string AccountSecurityFreezeSignature = "passport_account_security_freeze_signature";
+    public const string SupportMediatedRecoveryOverride = "passport_support_mediated_recovery_override";
     public const string StorageServiceDeliveryRequest = "passport_storage_service_delivery_request";
     public const string StorageDeliveryAcceptance = "passport_storage_delivery_acceptance";
 }

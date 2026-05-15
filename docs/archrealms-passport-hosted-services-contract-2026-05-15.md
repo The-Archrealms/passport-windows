@@ -19,6 +19,7 @@ The hosted services project provides the production-facing API boundary that Win
 | `POST /arch/genesis/manifests` | Create sealed ARCH genesis manifests | Enforces fixed supply, base-unit precision, unique allocation IDs, allocation total equals supply, no post-genesis minting, and authority hash evidence |
 | `POST /admin/authority/validate` | Validate dual-control admin authority evidence | Checks action/scope/hash binding, distinct requester and approver devices, non-AI approval, and requester/approver signature record types |
 | `POST /telemetry/access` | Authorize redacted hosted telemetry access | Requires operator authentication, strict `telemetry_access` dual-control authority, request-payload hash binding, metadata-only access, and bounded time windows |
+| `POST /recovery/controls/validate` | Validate Passport recovery controls | Verifies self-service recovery signatures against hosted device public keys and support-mediated recovery overrides against strict dual-control admin authority |
 | `POST /storage/delivery/requests` | Accept storage delivery requests | Verifies storage delivery request hash, positive storage/epoch terms, and returns proof requirements before burn |
 
 ## Storage
@@ -40,6 +41,7 @@ The hosted services project provides the production-facing API boundary that Win
 - The admin authority endpoint requires active hosted role-membership records for both requester and approver devices.
 - Hosted role-membership records are verified with issuer signatures and hosted registry public keys.
 - The telemetry access endpoint returns redacted append-log metadata only; it blocks personal data, raw AI prompts, and storage payload details.
+- The recovery controls endpoint rejects AI-approved recovery controls, validates signed device deauthorization/security-freeze records, and validates support-mediated recovery override records against hosted admin authority.
 
 ## Hosted AI Runtime
 

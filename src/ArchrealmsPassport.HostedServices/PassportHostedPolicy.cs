@@ -555,6 +555,116 @@ public static class PassportHostedPolicy
         return RecordResponse("Telemetry access authorized.", recordId, record);
     }
 
+    public static PassportHostedRecordResponse ValidateRecoveryControl(
+        PassportRecoveryControlValidationRequest request,
+        PassportHostedRegistryStore registryStore)
+    {
+        var recordType = ReadString(request.RecoveryControlRecord, "record_type");
+        if (recordType is not PassportRecordTypes.DeviceDeauthorization
+            and not PassportRecordTypes.AccountSecurityFreeze
+            and not PassportRecordTypes.SupportMediatedRecoveryOverride)
+        {
+            return FailedRecord("Recovery control validation requires a supported Passport recovery control record.");
+        }
+
+        if (ReadBoolean(request.RecoveryControlRecord, "ai_approved"))
+        {
+            return FailedRecord("AI cannot approve Passport recovery controls.");
+        }
+
+        var payload = DecodeBase64(request.RecoveryControlRecordPayloadBase64);
+        if (payload.Length == 0)
+        {
+            return FailedRecord("Recovery control validation requires signed recovery_control_record_payload_base64.");
+        }
+
+        var payloadSha256 = ComputeSha256(payload);
+        if (!string.IsNullOrWhiteSpace(request.RecoveryControlRecordSha256)
+            && !string.Equals(payloadSha256, request.RecoveryControlRecordSha256.Trim(), StringComparison.OrdinalIgnoreCase))
+        {
+            return FailedRecord("Recovery control payload hash does not match.");
+        }
+
+        using var payloadDocument = JsonDocument.Parse(payload);
+        var payloadMatch = RecoveryControlPayloadMatchesRequest(payloadDocument.RootElement, request.RecoveryControlRecord);
+        if (!payloadMatch.Succeeded)
+        {
+            return payloadMatch;
+        }
+
+        if (recordType == PassportRecordTypes.DeviceDeauthorization
+            && string.IsNullOrWhiteSpace(ReadString(request.RecoveryControlRecord, "target_device_id")))
+        {
+            return FailedRecord("Device deauthorization requires a target device.");
+        }
+
+        if (recordType == PassportRecordTypes.AccountSecurityFreeze
+            && !ReadBoolean(request.RecoveryControlRecord, "freeze_wallet_operations")
+            && !ReadBoolean(request.RecoveryControlRecord, "freeze_pending_escrow")
+            && !ReadBoolean(request.RecoveryControlRecord, "revoke_ai_sessions")
+            && !ReadBoolean(request.RecoveryControlRecord, "pause_storage_node_operations"))
+        {
+            return FailedRecord("Account security freeze requires at least one freeze scope.");
+        }
+
+        if (recordType == PassportRecordTypes.SupportMediatedRecoveryOverride)
+        {
+            if (!ReadBoolean(request.RecoveryControlRecord, "requires_dual_control"))
+            {
+                return FailedRecord("Support-mediated recovery override requires dual-control authority.");
+            }
+
+            if (!string.Equals(NormalizeSlug(request.AdminAuthority.ActionType), "recovery_override", StringComparison.Ordinal))
+            {
+                return FailedRecord("Support-mediated recovery override requires recovery_override admin authority.");
+            }
+
+            if (!string.Equals(request.AdminAuthority.RequestedPayloadSha256, ReadString(request.RecoveryControlRecord, "requested_payload_sha256"), StringComparison.OrdinalIgnoreCase))
+            {
+                return FailedRecord("Recovery override admin authority is not bound to the recovery payload.");
+            }
+
+            var adminAuthority = ValidateAdminAuthority(request.AdminAuthority, registryStore);
+            if (!adminAuthority.Succeeded)
+            {
+                return FailedRecord("Recovery override admin authority validation failed: " + adminAuthority.Message);
+            }
+
+            return new PassportHostedRecordResponse
+            {
+                Succeeded = true,
+                Message = "Support-mediated recovery override is valid against hosted admin authority.",
+                RecordId = ReadString(request.RecoveryControlRecord, "record_id"),
+                RecordSha256 = payloadSha256
+            };
+        }
+
+        var signature = ValidateRecoveryDeviceSignature(
+            request.RecoverySignatureRecord,
+            recordType == PassportRecordTypes.DeviceDeauthorization
+                ? PassportRecordTypes.DeviceDeauthorizationSignature
+                : PassportRecordTypes.AccountSecurityFreezeSignature,
+            recordType == PassportRecordTypes.DeviceDeauthorization
+                ? "device_deauthorization_record_sha256"
+                : "security_freeze_record_sha256",
+            ReadString(request.RecoveryControlRecord, "authorizing_device_id"),
+            payload,
+            payloadSha256,
+            registryStore);
+        if (!signature.Succeeded)
+        {
+            return signature;
+        }
+
+        return new PassportHostedRecordResponse
+        {
+            Succeeded = true,
+            Message = "Self-service recovery control is valid against hosted registry device signature.",
+            RecordId = ReadString(request.RecoveryControlRecord, "record_id"),
+            RecordSha256 = payloadSha256
+        };
+    }
+
     public static PassportHostedRecordResponse AcceptStorageDeliveryRequest(PassportStorageDeliveryRequest request)
     {
         var source = request.ServiceDeliveryRequestRecord;
@@ -718,6 +828,83 @@ public static class PassportHostedPolicy
         {
             Succeeded = true,
             Message = "Admin authority signed payload matches request record."
+        };
+    }
+
+    private static PassportHostedRecordResponse RecoveryControlPayloadMatchesRequest(JsonElement payload, JsonElement requestRecord)
+    {
+        var criticalFields = new[]
+        {
+            "record_type",
+            "record_id",
+            "release_lane",
+            "ledger_namespace",
+            "policy_version"
+        };
+
+        foreach (var field in criticalFields)
+        {
+            if (!string.Equals(ReadString(payload, field), ReadString(requestRecord, field), StringComparison.Ordinal))
+            {
+                return FailedRecord("Recovery control signed payload does not match request field: " + field + ".");
+            }
+        }
+
+        return new PassportHostedRecordResponse
+        {
+            Succeeded = true,
+            Message = "Recovery control signed payload matches request record."
+        };
+    }
+
+    private static PassportHostedRecordResponse ValidateRecoveryDeviceSignature(
+        JsonElement signatureRecord,
+        string expectedRecordType,
+        string hashPropertyName,
+        string expectedAuthorizingDeviceId,
+        byte[] recoveryPayload,
+        string recoveryPayloadSha256,
+        PassportHostedRegistryStore registryStore)
+    {
+        if (!Matches(signatureRecord, "record_type", expectedRecordType))
+        {
+            return FailedRecord("Recovery control signature record type is invalid.");
+        }
+
+        if (!Matches(signatureRecord, "authorizing_device_id", expectedAuthorizingDeviceId))
+        {
+            return FailedRecord("Recovery control signature was made by an unexpected device.");
+        }
+
+        if (!string.Equals(ReadString(signatureRecord, hashPropertyName), recoveryPayloadSha256, StringComparison.OrdinalIgnoreCase))
+        {
+            return FailedRecord("Recovery control signature does not reference the signed payload.");
+        }
+
+        if (!registryStore.TryGetPublicKey(expectedAuthorizingDeviceId, out var publicKey))
+        {
+            return FailedRecord("Recovery control signer public key could not be found.");
+        }
+
+        var signatureBytes = DecodeBase64(ReadString(signatureRecord, "signature_base64"));
+        if (signatureBytes.Length == 0)
+        {
+            return FailedRecord("Recovery control signature is missing.");
+        }
+
+        using var rsa = RSA.Create();
+        rsa.ImportSubjectPublicKeyInfo(publicKey, out _);
+        if (!rsa.VerifyData(recoveryPayload, signatureBytes, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1))
+        {
+            return FailedRecord("Recovery control signature verification failed.");
+        }
+
+        return new PassportHostedRecordResponse
+        {
+            Succeeded = true,
+            Message = "Recovery control signature verified.",
+            RecordId = ReadString(signatureRecord, "record_id"),
+            RecordSha256 = ComputeJsonSha256(signatureRecord)
         };
     }
 

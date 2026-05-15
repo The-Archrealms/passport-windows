@@ -162,6 +162,24 @@ app.MapPost("/telemetry/access", (HttpRequest httpRequest, PassportTelemetryAcce
     });
 });
 
+app.MapPost("/recovery/controls/validate", (HttpRequest httpRequest, PassportRecoveryControlValidationRequest request) =>
+{
+    var operatorAuthorization = AuthorizeOperator(httpRequest, operatorGate);
+    if (operatorAuthorization != null)
+    {
+        return operatorAuthorization;
+    }
+
+    var rateLimit = AuthorizeRate(httpRequest, rateLimiter, "operator-recovery", maxRequests: 60, window: TimeSpan.FromMinutes(1));
+    if (rateLimit != null)
+    {
+        return rateLimit;
+    }
+
+    var result = PassportHostedPolicy.ValidateRecoveryControl(request, registryStore);
+    return result.Succeeded ? Results.Json(result) : Results.BadRequest(result);
+});
+
 app.MapPost("/storage/delivery/requests", (HttpRequest httpRequest, PassportStorageDeliveryRequest request) =>
 {
     var operatorAuthorization = AuthorizeOperator(httpRequest, operatorGate);

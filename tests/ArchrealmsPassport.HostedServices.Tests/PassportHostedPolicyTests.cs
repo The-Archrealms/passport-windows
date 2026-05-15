@@ -381,6 +381,62 @@ public sealed class PassportHostedPolicyTests
         Assert.Contains("not bound", rejectedUnbound.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void RecoveryControlValidatesSelfServiceDeviceSignature()
+    {
+        using var workspace = TemporaryDirectory.Create();
+        using var device = RSA.Create(2048);
+        var registry = new PassportHostedRegistryStore(workspace.Path);
+        registry.SavePublicKey("device-1", device.ExportSubjectPublicKeyInfo());
+        var request = CreateSignedRecoveryControlRequest(
+            device,
+            "passport_account_security_freeze",
+            "passport_account_security_freeze_signature",
+            "security_freeze_record_sha256",
+            "device-1");
+
+        var result = PassportHostedPolicy.ValidateRecoveryControl(request, registry);
+
+        Assert.True(result.Succeeded, result.Message);
+        Assert.Contains("Self-service recovery", result.Message, StringComparison.OrdinalIgnoreCase);
+
+        var aiApprovedRecord = JsonDocument.Parse(request.RecoveryControlRecord.GetRawText().Replace("\"ai_approved\": false", "\"ai_approved\": true")).RootElement.Clone();
+        var rejectedAiApproval = PassportHostedPolicy.ValidateRecoveryControl(request with { RecoveryControlRecord = aiApprovedRecord }, registry);
+        Assert.False(rejectedAiApproval.Succeeded);
+        Assert.Contains("AI cannot approve", rejectedAiApproval.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void RecoveryControlValidatesSupportOverrideAdminAuthority()
+    {
+        using var workspace = TemporaryDirectory.Create();
+        using var issuer = RSA.Create(2048);
+        using var requester = RSA.Create(2048);
+        using var approver = RSA.Create(2048);
+        var registry = new PassportHostedRegistryStore(workspace.Path);
+        registry.SavePublicKey("issuer-device", issuer.ExportSubjectPublicKeyInfo());
+        registry.SavePublicKey("requester-device", requester.ExportSubjectPublicKeyInfo());
+        registry.SavePublicKey("approver-device", approver.ExportSubjectPublicKeyInfo());
+        AddRole(registry, issuer, "role-requester", "authority-identity", "requester-device", "recovery_override", "support_mediated_recovery");
+        AddRole(registry, issuer, "role-approver", "authority-identity", "approver-device", "recovery_override", "support_mediated_recovery");
+        var payloadHash = new string('b', 64);
+        var adminAuthority = CreateSignedAdminRequest(
+            requester,
+            approver,
+            "authority-identity",
+            "requester-device",
+            "approver-device",
+            "recovery_override",
+            "support_mediated_recovery",
+            payloadHash: payloadHash);
+        var request = CreateSupportRecoveryOverrideRequest(adminAuthority, payloadHash);
+
+        var result = PassportHostedPolicy.ValidateRecoveryControl(request, registry);
+
+        Assert.True(result.Succeeded, result.Message);
+        Assert.Contains("Support-mediated recovery", result.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static PassportAiSessionAuthorizationRequest CreateAiSessionRequest(RSA rsa)
     {
         var record = new Dictionary<string, object?>
@@ -496,6 +552,85 @@ public sealed class PassportHostedPolicyTests
                 "passport_admin_dual_control_approver_signature",
                 approverDeviceId,
                 actionBytes).RootElement.Clone()
+        };
+    }
+
+    private static PassportRecoveryControlValidationRequest CreateSignedRecoveryControlRequest(
+        RSA authorizingDevice,
+        string recordType,
+        string signatureRecordType,
+        string hashPropertyName,
+        string authorizingDeviceId)
+    {
+        var record = new Dictionary<string, object?>
+        {
+            ["schema_version"] = 1,
+            ["record_type"] = recordType,
+            ["record_id"] = "recovery-control-1",
+            ["created_utc"] = DateTimeOffset.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+            ["release_lane"] = "production-mvp",
+            ["ledger_namespace"] = "archrealms-passport-production-mvp",
+            ["policy_version"] = "passport-release-lanes-v1",
+            ["archrealms_identity_id"] = "identity-1",
+            ["authorizing_device_id"] = authorizingDeviceId,
+            ["reason_code"] = "identity_compromise",
+            ["freeze_wallet_operations"] = true,
+            ["freeze_pending_escrow"] = true,
+            ["revoke_ai_sessions"] = true,
+            ["pause_storage_node_operations"] = true,
+            ["ai_approved"] = false
+        };
+        var payload = JsonSerializer.SerializeToUtf8Bytes(record, JsonOptions);
+        var payloadHash = ComputeSha256(payload);
+        var signature = JsonDocument.Parse(JsonSerializer.Serialize(new Dictionary<string, object?>
+        {
+            ["schema_version"] = 1,
+            ["record_type"] = signatureRecordType,
+            ["record_id"] = "recovery-control-signature-1",
+            ["authorizing_device_id"] = authorizingDeviceId,
+            [hashPropertyName] = payloadHash,
+            ["signature_algorithm"] = "RSA_PKCS1_SHA256",
+            ["signature_base64"] = Convert.ToBase64String(authorizingDevice.SignData(payload, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1))
+        }, JsonOptions)).RootElement.Clone();
+
+        return new PassportRecoveryControlValidationRequest
+        {
+            RecoveryControlRecord = JsonDocument.Parse(payload).RootElement.Clone(),
+            RecoveryControlRecordPayloadBase64 = Convert.ToBase64String(payload),
+            RecoveryControlRecordSha256 = payloadHash,
+            RecoverySignatureRecord = signature
+        };
+    }
+
+    private static PassportRecoveryControlValidationRequest CreateSupportRecoveryOverrideRequest(
+        PassportAdminAuthorityValidationRequest adminAuthority,
+        string requestedPayloadSha256)
+    {
+        var record = new Dictionary<string, object?>
+        {
+            ["schema_version"] = 1,
+            ["record_type"] = "passport_support_mediated_recovery_override",
+            ["record_id"] = "support-recovery-1",
+            ["created_utc"] = DateTimeOffset.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+            ["release_lane"] = "production-mvp",
+            ["ledger_namespace"] = "archrealms-passport-production-mvp",
+            ["policy_version"] = "passport-release-lanes-v1",
+            ["authority_identity_id"] = "authority-identity",
+            ["target_identity_id"] = "identity-1",
+            ["target_account_id"] = "account-1",
+            ["reason_code"] = "identity_compromise",
+            ["target_record_sha256"] = new string('e', 64),
+            ["requested_payload_sha256"] = requestedPayloadSha256,
+            ["requires_dual_control"] = true,
+            ["ai_approved"] = false
+        };
+        var payload = JsonSerializer.SerializeToUtf8Bytes(record, JsonOptions);
+        return new PassportRecoveryControlValidationRequest
+        {
+            RecoveryControlRecord = JsonDocument.Parse(payload).RootElement.Clone(),
+            RecoveryControlRecordPayloadBase64 = Convert.ToBase64String(payload),
+            RecoveryControlRecordSha256 = ComputeSha256(payload),
+            AdminAuthority = adminAuthority
         };
     }
 
