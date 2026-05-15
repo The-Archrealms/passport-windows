@@ -15,6 +15,8 @@ param(
 
     [string]$OutputPath = "artifacts\release\open-weight-ai-runtime-deployment-validation-report.json",
 
+    [switch]$RequireNoPlaceholders,
+
     [switch]$ProbeRuntime,
 
     [string]$RuntimeBaseUrl = $env:ARCHREALMS_PASSPORT_AI_INFERENCE_BASE_URL,
@@ -33,6 +35,11 @@ $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $scriptRoot "..\.."))
 
 function Resolve-RepoPath {
     param([string]$Path)
+
+    if ([System.IO.Path]::IsPathRooted($Path)) {
+        return [System.IO.Path]::GetFullPath($Path)
+    }
+
     return [System.IO.Path]::GetFullPath((Join-Path $repoRoot $Path))
 }
 
@@ -58,7 +65,8 @@ function Test-TextContains {
     param(
         [string]$Text,
         [string[]]$Required,
-        [string[]]$Forbidden = @()
+        [string[]]$Forbidden = @(),
+        [string]$Path = ""
     )
 
     $failures = New-Object System.Collections.Generic.List[string]
@@ -71,6 +79,15 @@ function Test-TextContains {
     foreach ($forbiddenText in $Forbidden) {
         if ($Text.IndexOf($forbiddenText, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
             $failures.Add("forbidden text: $forbiddenText")
+        }
+    }
+
+    if ($RequireNoPlaceholders -and $Text -match '<[^>\r\n]+>') {
+        if ([string]::IsNullOrWhiteSpace($Path)) {
+            $failures.Add("placeholder values remain")
+        }
+        else {
+            $failures.Add("placeholder values remain in $Path")
         }
     }
 
@@ -186,7 +203,8 @@ if ($missingFiles.Count -eq 0) {
         ) `
         -Forbidden @(
             '0.0.0.0:${ARCHREALMS_PASSPORT_AI_RUNTIME_HOST_PORT'
-        )
+        ) `
+        -Path $resolvedVllmCompose
     $checks.Add((New-Check -Id "vllm_compose_gateway_contract" -Passed ($vllmFailures.Count -eq 0) -Failures $vllmFailures -Evidence @{ path = $resolvedVllmCompose }))
 
     $tgiText = Get-Content -LiteralPath $resolvedTgiCompose -Raw
@@ -202,7 +220,8 @@ if ($missingFiles.Count -eq 0) {
         ) `
         -Forbidden @(
             '0.0.0.0:${ARCHREALMS_PASSPORT_AI_RUNTIME_HOST_PORT'
-        )
+        ) `
+        -Path $resolvedTgiCompose
     $checks.Add((New-Check -Id "tgi_compose_gateway_contract" -Passed ($tgiFailures.Count -eq 0) -Failures $tgiFailures -Evidence @{ path = $resolvedTgiCompose }))
 
     $envText = Get-Content -LiteralPath $resolvedEnvTemplate -Raw
@@ -227,7 +246,8 @@ if ($missingFiles.Count -eq 0) {
         -Forbidden @(
             "hf-",
             "sk-"
-        )
+        ) `
+        -Path $resolvedEnvTemplate
     $checks.Add((New-Check -Id "env_template_runtime_readiness_variables" -Passed ($envFailures.Count -eq 0) -Failures $envFailures -Evidence @{ path = $resolvedEnvTemplate }))
 
     $readmeText = Get-Content -LiteralPath $resolvedReadme -Raw
@@ -242,7 +262,8 @@ if ($missingFiles.Count -eq 0) {
             "/ai/runtime/status",
             "/ai/runtime/probe",
             "Test-PassportOpenWeightAiRuntimeDeployment.ps1"
-        )
+        ) `
+        -Path $resolvedReadme
     $checks.Add((New-Check -Id "readme_operator_contract" -Passed ($readmeFailures.Count -eq 0) -Failures $readmeFailures -Evidence @{ path = $resolvedReadme }))
 
     $modelApprovalText = Get-Content -LiteralPath $resolvedModelApproval -Raw
@@ -257,7 +278,8 @@ if ($missingFiles.Count -eq 0) {
             "/v1/chat/completions",
             "non-authoritative",
             "open-weight-ai-runtime-deployment-validation-report.json"
-        )
+        ) `
+        -Path $resolvedModelApproval
     $checks.Add((New-Check -Id "model_approval_contract" -Passed ($modelApprovalFailures.Count -eq 0) -Failures $modelApprovalFailures -Evidence @{ path = $resolvedModelApproval }))
 
     $vectorStoreText = Get-Content -LiteralPath $resolvedVectorStoreProvisioning -Raw
@@ -271,7 +293,8 @@ if ($missingFiles.Count -eq 0) {
             "telemetry-retention policy",
             "/ai/runtime/status",
             "quota and non-authority policy"
-        )
+        ) `
+        -Path $resolvedVectorStoreProvisioning
     $checks.Add((New-Check -Id "vector_store_provisioning_contract" -Passed ($vectorStoreFailures.Count -eq 0) -Failures $vectorStoreFailures -Evidence @{ path = $resolvedVectorStoreProvisioning }))
 
     $runtimeEvidenceText = Get-Content -LiteralPath $resolvedRuntimeReadinessEvidence -Raw
@@ -288,7 +311,8 @@ if ($missingFiles.Count -eq 0) {
             "open_weight_ai_runtime",
             "hosted_ai_runtime_probe",
             "runtime_answer_received=true"
-        )
+        ) `
+        -Path $resolvedRuntimeReadinessEvidence
     $checks.Add((New-Check -Id "ai_runtime_readiness_evidence_contract" -Passed ($runtimeEvidenceFailures.Count -eq 0) -Failures $runtimeEvidenceFailures -Evidence @{ path = $resolvedRuntimeReadinessEvidence }))
 }
 
@@ -309,6 +333,7 @@ $report = [pscustomobject][ordered]@{
     repo_root = $repoRoot
     passed = $failed.Count -eq 0
     failed_check_count = $failed.Count
+    require_no_placeholders = [bool]$RequireNoPlaceholders
     runtime_probe_requested = [bool]$ProbeRuntime
     checks = $checks
 }

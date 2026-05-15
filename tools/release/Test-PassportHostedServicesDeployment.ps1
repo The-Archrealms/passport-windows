@@ -21,6 +21,11 @@ $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $scriptRoot "..\.."))
 
 function Resolve-RepoPath {
     param([string]$Path)
+
+    if ([System.IO.Path]::IsPathRooted($Path)) {
+        return [System.IO.Path]::GetFullPath($Path)
+    }
+
     return [System.IO.Path]::GetFullPath((Join-Path $repoRoot $Path))
 }
 
