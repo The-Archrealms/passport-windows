@@ -774,6 +774,17 @@ Validate the evidence-packet generator and redaction behavior with synthetic fix
   -OutputPath .\artifacts\release\production-mvp-release-evidence-packet-validation-report.json
 ```
 
+For final operator closeout after the production provisioning packet is filled and the production environment values are loaded, run the fail-closed Production MVP closeout command. It validates the filled provisioning packet with `-RequireNoPlaceholders`, reruns `Test-PassportProductionMvpReadiness.ps1`, generates the redacted release-evidence packet, validates that packet with `-RequireReady`, and writes the readiness and release-evidence hashes needed before packaging:
+
+```powershell
+.\tools\release\Complete-PassportProductionMvpCloseout.ps1 `
+  -EnvironmentFile .\artifacts\release\production-mvp.env `
+  -ProductionProvisioningPacketRoot C:\secure\archrealms-passport-production-provisioning-packet `
+  -OutputDirectory .\artifacts\release\production-mvp-closeout `
+  -ProductionMvpReadinessReportPath .\artifacts\release\production-mvp-readiness-report.json `
+  -ReleaseEvidencePacketDirectory .\artifacts\release\production-mvp-release-evidence-packet
+```
+
 Validate the package-signing provisioning packet before loading production signing secrets:
 
 ```powershell
