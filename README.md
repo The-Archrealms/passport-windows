@@ -517,6 +517,12 @@ For a secure, gitignored working env file, the template generator can also fill 
 
 The template lists each readiness-gate variable, whether it is secret, and the gate it satisfies. `-BlankUnconfiguredValues` keeps missing production values empty so the readiness gate reports them as missing instead of trying to validate placeholder URLs or certificates. Populate values only in a secure shell, CI secret store, or deployment environment; populated `.env` files and the `artifacts/` tree are ignored by git. The generated operator key must be stored only in the secure production secret store, while its SHA-256 hash is configured on the hosted service. Populated env files can be passed to the readiness gate or production package publisher with `-EnvironmentFile`. The readiness gate verifies the SHA-256 hash of the pre-MVP internal verification report, validates the production package-signing PFX when available, verifies that `ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY` hashes to `ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY_SHA256`, and authenticates against `/ops/operator/status`. Production hosted signing requires `ARCHREALMS_PASSPORT_HOSTED_SIGNING_ENDPOINT`; local hosted signing-key paths are development-only and fail the ProductionMvp gate. The readiness gate posts a non-mutating `production_mvp_readiness_probe` payload to the managed signing endpoint and verifies the returned RSA signature and public-key hash.
 
+Validate the package-signing provisioning packet before loading production signing secrets:
+
+```powershell
+.\tools\release\Test-PassportPackageSigningProvisioning.ps1
+```
+
 Validate a production signing certificate before packaging:
 
 ```powershell
