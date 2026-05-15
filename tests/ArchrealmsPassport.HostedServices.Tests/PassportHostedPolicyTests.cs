@@ -501,6 +501,10 @@ public sealed class PassportHostedPolicyTests
 
         Assert.True(result.Succeeded, result.Message);
         Assert.Contains("Self-service recovery", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("passport_recovery_control_validation", result.Record!["record_type"]);
+        Assert.Equal("self_service_device_signature", result.Record["validation_mode"]);
+        var inspection = PassportRegistryRecordInspector.Inspect(JsonSerializer.SerializeToUtf8Bytes(result.Record, JsonOptions));
+        Assert.True(inspection.IsEnvelopeValid, string.Join("; ", inspection.ValidationFailures));
 
         var aiApprovedRecord = JsonDocument.Parse(request.RecoveryControlRecord.GetRawText().Replace("\"ai_approved\": false", "\"ai_approved\": true")).RootElement.Clone();
         var rejectedAiApproval = PassportHostedPolicy.ValidateRecoveryControl(request with { RecoveryControlRecord = aiApprovedRecord }, registry);
@@ -537,6 +541,8 @@ public sealed class PassportHostedPolicyTests
 
         Assert.True(result.Succeeded, result.Message);
         Assert.Contains("Support-mediated recovery", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("passport_recovery_control_validation", result.Record!["record_type"]);
+        Assert.Equal("support_mediated_dual_control", result.Record["validation_mode"]);
     }
 
     private static PassportAiSessionAuthorizationRequest CreateAiSessionRequest(RSA rsa)

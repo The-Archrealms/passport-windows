@@ -642,13 +642,14 @@ public static class PassportHostedPolicy
                 return FailedRecord("Recovery override admin authority validation failed: " + adminAuthority.Message);
             }
 
-            return new PassportHostedRecordResponse
-            {
-                Succeeded = true,
-                Message = "Support-mediated recovery override is valid against hosted admin authority.",
-                RecordId = ReadString(request.RecoveryControlRecord, "record_id"),
-                RecordSha256 = payloadSha256
-            };
+            return CreateRecoveryValidationRecord(
+                "Support-mediated recovery override is valid against hosted admin authority.",
+                request.RecoveryControlRecord,
+                payloadSha256,
+                "support_mediated_dual_control",
+                adminAuthority.RecordSha256,
+                string.Empty,
+                string.Empty);
         }
 
         var signature = ValidateRecoveryDeviceSignature(
@@ -668,13 +669,14 @@ public static class PassportHostedPolicy
             return signature;
         }
 
-        return new PassportHostedRecordResponse
-        {
-            Succeeded = true,
-            Message = "Self-service recovery control is valid against hosted registry device signature.",
-            RecordId = ReadString(request.RecoveryControlRecord, "record_id"),
-            RecordSha256 = payloadSha256
-        };
+        return CreateRecoveryValidationRecord(
+            "Self-service recovery control is valid against hosted registry device signature.",
+            request.RecoveryControlRecord,
+            payloadSha256,
+            "self_service_device_signature",
+            string.Empty,
+            signature.RecordId,
+            signature.RecordSha256);
     }
 
     public static PassportHostedRecordResponse AcceptStorageDeliveryRequest(PassportStorageDeliveryRequest request)
@@ -722,6 +724,46 @@ public static class PassportHostedPolicy
         };
 
         return RecordResponse("Storage delivery request accepted.", recordId, record);
+    }
+
+    private static PassportHostedRecordResponse CreateRecoveryValidationRecord(
+        string message,
+        JsonElement recoveryControlRecord,
+        string recoveryControlRecordSha256,
+        string validationMode,
+        string adminAuthorityRecordSha256,
+        string recoverySignatureRecordId,
+        string recoverySignatureRecordSha256)
+    {
+        var recordId = NewRecordId("recovery-control-validation");
+        var record = new Dictionary<string, object?>
+        {
+            ["schema_version"] = 1,
+            ["record_type"] = PassportRecordTypes.RecoveryControlValidation,
+            ["record_id"] = recordId,
+            ["created_utc"] = DateTimeOffset.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+            ["contract_version"] = ContractVersion,
+            ["release_lane"] = ReadString(recoveryControlRecord, "release_lane"),
+            ["ledger_namespace"] = ReadString(recoveryControlRecord, "ledger_namespace"),
+            ["policy_version"] = ReadString(recoveryControlRecord, "policy_version"),
+            ["recovery_control_record_type"] = ReadString(recoveryControlRecord, "record_type"),
+            ["recovery_control_record_id"] = ReadString(recoveryControlRecord, "record_id"),
+            ["recovery_control_record_sha256"] = recoveryControlRecordSha256,
+            ["validation_mode"] = validationMode,
+            ["archrealms_identity_id"] = ReadString(recoveryControlRecord, "archrealms_identity_id"),
+            ["target_identity_id"] = ReadString(recoveryControlRecord, "target_identity_id"),
+            ["target_account_id"] = ReadString(recoveryControlRecord, "target_account_id"),
+            ["authorizing_device_id"] = ReadString(recoveryControlRecord, "authorizing_device_id"),
+            ["target_device_id"] = ReadString(recoveryControlRecord, "target_device_id"),
+            ["authority_identity_id"] = ReadString(recoveryControlRecord, "authority_identity_id"),
+            ["admin_authority_record_sha256"] = adminAuthorityRecordSha256,
+            ["recovery_signature_record_id"] = recoverySignatureRecordId,
+            ["recovery_signature_record_sha256"] = recoverySignatureRecordSha256,
+            ["ai_approved"] = false,
+            ["summary"] = "Hosted recovery control validation record. Recovery approval is cryptographic or dual-control and AI is not an approval authority."
+        };
+
+        return RecordResponse(message, recordId, record);
     }
 
     public static PassportHostedRecordResponse CreateBackupManifestRecord(

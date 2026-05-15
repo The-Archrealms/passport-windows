@@ -24,6 +24,7 @@ public static class PassportRecordTypes
     public const string AccountSecurityFreeze = "passport_account_security_freeze";
     public const string AccountSecurityFreezeSignature = "passport_account_security_freeze_signature";
     public const string SupportMediatedRecoveryOverride = "passport_support_mediated_recovery_override";
+    public const string RecoveryControlValidation = "passport_recovery_control_validation";
     public const string StorageServiceDeliveryRequest = "passport_storage_service_delivery_request";
     public const string StorageDeliveryAcceptance = "passport_storage_delivery_acceptance";
     public const string HostedStorageBackupManifest = "passport_hosted_storage_backup_manifest";

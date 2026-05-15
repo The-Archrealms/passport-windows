@@ -181,6 +181,12 @@ app.MapPost("/recovery/controls/validate", (HttpRequest httpRequest, PassportRec
     }
 
     var result = PassportHostedPolicy.ValidateRecoveryControl(request, registryStore);
+    if (result.Succeeded && result.Record != null)
+    {
+        result = signer.Sign(result, "recovery_control_validation");
+        store.SaveRecord(result.RecordId, result.Record!, result.RecordSha256);
+    }
+
     return result.Succeeded ? Results.Json(result) : Results.BadRequest(result);
 });
 
