@@ -1,0 +1,18 @@
+{
+  "schema": "archrealms.passport.staging_promotion_approval.v1",
+  "created_utc": "<yyyy-mm-ddThh:mm:ssZ>",
+  "lane": "staging",
+  "promotion_approval_id": "<ARCHREALMS_PASSPORT_STAGING_PROMOTION_APPROVAL_ID>",
+  "engineering_signoff_id": "<ARCHREALMS_PASSPORT_STAGING_ENGINEERING_SIGNOFF_ID>",
+  "security_privacy_signoff_id": "<ARCHREALMS_PASSPORT_STAGING_SECURITY_PRIVACY_SIGNOFF_ID>",
+  "crown_monetary_authority_signoff_id": "<ARCHREALMS_PASSPORT_STAGING_CROWN_MONETARY_AUTHORITY_SIGNOFF_ID>",
+  "rollback_drill_id": "<ARCHREALMS_PASSPORT_STAGING_ROLLBACK_DRILL_ID>",
+  "pre_mvp_report_sha256": "<ARCHREALMS_PASSPORT_PRE_MVP_VERIFICATION_REPORT_SHA256>",
+  "staging_artifact_validation_report_sha256": "<ARCHREALMS_PASSPORT_STAGING_ARTIFACT_VALIDATION_REPORT_SHA256>",
+  "rollback_drill_report_sha256": "<ARCHREALMS_PASSPORT_STAGING_ROLLBACK_DRILL_REPORT_SHA256>",
+  "approve_canary_or_production_release": true,
+  "product_approval_signed": true,
+  "engineering_signoff_signed": true,
+  "security_privacy_signoff_signed": true,
+  "crown_monetary_authority_signoff_signed": true
+}

@@ -86,11 +86,15 @@ $variables = @(
     New-Variable -Gate "staging_ledger_telemetry" -Name "ARCHREALMS_PASSPORT_STAGING_TELEMETRY_DESTINATION" -Description "Staging telemetry destination; must be distinct from production." -Example "staging-managed-telemetry"
 
     New-Variable -Gate "staging_rollback_drill" -Name "ARCHREALMS_PASSPORT_STAGING_ROLLBACK_DRILL_ID" -Description "Controlled evidence ID for the completed staging rollback drill."
+    New-Variable -Gate "staging_rollback_drill" -Name "ARCHREALMS_PASSPORT_STAGING_ROLLBACK_DRILL_REPORT_PATH" -Description "Path to the staging rollback drill report using schema archrealms.passport.staging_rollback_drill.v1."
+    New-Variable -Gate "staging_rollback_drill" -Name "ARCHREALMS_PASSPORT_STAGING_ROLLBACK_DRILL_REPORT_SHA256" -Description "SHA-256 hex digest of the staging rollback drill report."
 
     New-Variable -Gate "staging_promotion_approvals" -Name "ARCHREALMS_PASSPORT_STAGING_PROMOTION_APPROVAL_ID" -Description "Product approval reference for staging exit."
     New-Variable -Gate "staging_promotion_approvals" -Name "ARCHREALMS_PASSPORT_STAGING_ENGINEERING_SIGNOFF_ID" -Description "Engineering signoff reference for staging exit."
     New-Variable -Gate "staging_promotion_approvals" -Name "ARCHREALMS_PASSPORT_STAGING_SECURITY_PRIVACY_SIGNOFF_ID" -Description "Security/privacy signoff reference for staging exit."
     New-Variable -Gate "staging_promotion_approvals" -Name "ARCHREALMS_PASSPORT_STAGING_CROWN_MONETARY_AUTHORITY_SIGNOFF_ID" -Description "Crown monetary authority signoff reference for staging exit."
+    New-Variable -Gate "staging_promotion_approvals" -Name "ARCHREALMS_PASSPORT_STAGING_PROMOTION_APPROVAL_RECORD_PATH" -Description "Path to the signed staging promotion approval record using schema archrealms.passport.staging_promotion_approval.v1."
+    New-Variable -Gate "staging_promotion_approvals" -Name "ARCHREALMS_PASSPORT_STAGING_PROMOTION_APPROVAL_RECORD_SHA256" -Description "SHA-256 hex digest of the signed staging promotion approval record."
 )
 
 if ($IncludeCurrentPreMvpReport) {

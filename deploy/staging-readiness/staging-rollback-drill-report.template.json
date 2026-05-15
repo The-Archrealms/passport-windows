@@ -1,0 +1,32 @@
+{
+  "schema": "archrealms.passport.staging_rollback_drill.v1",
+  "created_utc": "<yyyy-mm-ddThh:mm:ssZ>",
+  "lane": "staging",
+  "rollback_drill_id": "<ARCHREALMS_PASSPORT_STAGING_ROLLBACK_DRILL_ID>",
+  "completed": true,
+  "package_version": "<staging package version or artifact hash>",
+  "policy_version": "<staging policy version>",
+  "reason_code": "<rollback drill reason code>",
+  "approvers": [
+    "<engineering approver>",
+    "<security/privacy approver>"
+  ],
+  "affected_service_classes": [
+    "identity",
+    "wallet",
+    "storage",
+    "ai",
+    "ledger-export"
+  ],
+  "affected_assets": [
+    "ARCH",
+    "CC"
+  ],
+  "user_facing_status": "<user-facing status displayed during rollback drill>",
+  "new_operations_disabled_or_routed": true,
+  "ledger_events_preserved": true,
+  "no_deletion_mutation_or_backdating": true,
+  "pending_escrow_resolved_by_policy": true,
+  "export_access_preserved": true,
+  "production_records_untouched": true
+}

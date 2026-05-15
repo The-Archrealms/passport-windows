@@ -548,6 +548,8 @@ Staging readiness has its own gate so canary and production releases cannot skip
   -OutputPath .\artifacts\release\staging.env
 ```
 
+The rollback drill and promotion approval values are not free-form notes. Copy and complete the templates under `deploy/staging-readiness/`, record their paths and SHA-256 hashes in the staging environment, and keep the completed evidence in the controlled staging document system.
+
 Then run:
 
 ```powershell

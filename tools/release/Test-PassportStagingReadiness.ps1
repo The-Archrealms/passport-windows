@@ -74,6 +74,46 @@ function Get-EnvironmentValue {
     return $value.Trim()
 }
 
+function Read-ObjectString {
+    param(
+        [object]$Object,
+        [string]$Name
+    )
+
+    if ($null -eq $Object -or -not $Object.PSObject.Properties[$Name]) {
+        return ""
+    }
+
+    return ([string]$Object.$Name).Trim()
+}
+
+function Read-ObjectBool {
+    param(
+        [object]$Object,
+        [string]$Name
+    )
+
+    if ($null -eq $Object -or -not $Object.PSObject.Properties[$Name]) {
+        return $false
+    }
+
+    return [bool]$Object.$Name
+}
+
+function Test-RequiredTrueField {
+    param(
+        [object]$Object,
+        [string]$Name,
+        [string]$Description
+    )
+
+    if (-not (Read-ObjectBool -Object $Object -Name $Name)) {
+        return "$Description must be true"
+    }
+
+    return ""
+}
+
 function Test-HexSha256Environment {
     param([string]$Name)
 
@@ -337,6 +377,141 @@ function Test-StagingLedgerTelemetry {
     return $failures
 }
 
+function Test-StagingRollbackDrill {
+    $failures = Test-ReportPathAndHash `
+        -PathEnvironment "ARCHREALMS_PASSPORT_STAGING_ROLLBACK_DRILL_REPORT_PATH" `
+        -HashEnvironment "ARCHREALMS_PASSPORT_STAGING_ROLLBACK_DRILL_REPORT_SHA256"
+    if ($failures.Count -gt 0) {
+        return $failures
+    }
+
+    $path = Get-EnvironmentValue -Name "ARCHREALMS_PASSPORT_STAGING_ROLLBACK_DRILL_REPORT_PATH"
+    if ([string]::IsNullOrWhiteSpace($path)) {
+        return $failures
+    }
+
+    try {
+        $report = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
+    }
+    catch {
+        return @("staging rollback drill report is not valid JSON: $($_.Exception.Message)")
+    }
+
+    $expectedId = Get-EnvironmentValue -Name "ARCHREALMS_PASSPORT_STAGING_ROLLBACK_DRILL_ID"
+    if ((Read-ObjectString -Object $report -Name "schema") -ne "archrealms.passport.staging_rollback_drill.v1") {
+        $failures += "staging rollback drill report has unexpected schema"
+    }
+
+    if ((Read-ObjectString -Object $report -Name "lane") -ne "staging") {
+        $failures += "staging rollback drill report must be for the staging lane"
+    }
+
+    if ((Read-ObjectString -Object $report -Name "rollback_drill_id") -ne $expectedId) {
+        $failures += "staging rollback drill report ID must match ARCHREALMS_PASSPORT_STAGING_ROLLBACK_DRILL_ID"
+    }
+
+    foreach ($check in @(
+        @("completed", "staging rollback drill completed"),
+        @("new_operations_disabled_or_routed", "rollback operation-routing control"),
+        @("ledger_events_preserved", "ledger event preservation"),
+        @("no_deletion_mutation_or_backdating", "rollback no-mutation control"),
+        @("pending_escrow_resolved_by_policy", "pending escrow rollback policy"),
+        @("export_access_preserved", "export access preservation"),
+        @("production_records_untouched", "production record isolation")
+    )) {
+        $failure = Test-RequiredTrueField -Object $report -Name $check[0] -Description $check[1]
+        if ($failure) {
+            $failures += $failure
+        }
+    }
+
+    foreach ($field in @("package_version", "policy_version", "reason_code", "user_facing_status")) {
+        if ([string]::IsNullOrWhiteSpace((Read-ObjectString -Object $report -Name $field))) {
+            $failures += "staging rollback drill report must include $field"
+        }
+    }
+
+    if (@($report.approvers).Count -lt 2) {
+        $failures += "staging rollback drill report must include at least two approvers"
+    }
+
+    if (@($report.affected_service_classes).Count -lt 1) {
+        $failures += "staging rollback drill report must identify affected service classes"
+    }
+
+    if (@($report.affected_assets).Count -lt 1) {
+        $failures += "staging rollback drill report must identify affected assets"
+    }
+
+    return $failures
+}
+
+function Test-StagingPromotionApprovals {
+    $failures = Test-ReportPathAndHash `
+        -PathEnvironment "ARCHREALMS_PASSPORT_STAGING_PROMOTION_APPROVAL_RECORD_PATH" `
+        -HashEnvironment "ARCHREALMS_PASSPORT_STAGING_PROMOTION_APPROVAL_RECORD_SHA256"
+    if ($failures.Count -gt 0) {
+        return $failures
+    }
+
+    $path = Get-EnvironmentValue -Name "ARCHREALMS_PASSPORT_STAGING_PROMOTION_APPROVAL_RECORD_PATH"
+    if ([string]::IsNullOrWhiteSpace($path)) {
+        return $failures
+    }
+
+    try {
+        $record = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
+    }
+    catch {
+        return @("staging promotion approval record is not valid JSON: $($_.Exception.Message)")
+    }
+
+    if ((Read-ObjectString -Object $record -Name "schema") -ne "archrealms.passport.staging_promotion_approval.v1") {
+        $failures += "staging promotion approval record has unexpected schema"
+    }
+
+    if ((Read-ObjectString -Object $record -Name "lane") -ne "staging") {
+        $failures += "staging promotion approval record must be for the staging lane"
+    }
+
+    foreach ($match in @(
+        @("promotion_approval_id", "ARCHREALMS_PASSPORT_STAGING_PROMOTION_APPROVAL_ID"),
+        @("engineering_signoff_id", "ARCHREALMS_PASSPORT_STAGING_ENGINEERING_SIGNOFF_ID"),
+        @("security_privacy_signoff_id", "ARCHREALMS_PASSPORT_STAGING_SECURITY_PRIVACY_SIGNOFF_ID"),
+        @("crown_monetary_authority_signoff_id", "ARCHREALMS_PASSPORT_STAGING_CROWN_MONETARY_AUTHORITY_SIGNOFF_ID"),
+        @("rollback_drill_id", "ARCHREALMS_PASSPORT_STAGING_ROLLBACK_DRILL_ID")
+    )) {
+        if ((Read-ObjectString -Object $record -Name $match[0]) -ne (Get-EnvironmentValue -Name $match[1])) {
+            $failures += "staging promotion approval record field $($match[0]) must match $($match[1])"
+        }
+    }
+
+    foreach ($hashMatch in @(
+        @("pre_mvp_report_sha256", "ARCHREALMS_PASSPORT_PRE_MVP_VERIFICATION_REPORT_SHA256"),
+        @("staging_artifact_validation_report_sha256", "ARCHREALMS_PASSPORT_STAGING_ARTIFACT_VALIDATION_REPORT_SHA256"),
+        @("rollback_drill_report_sha256", "ARCHREALMS_PASSPORT_STAGING_ROLLBACK_DRILL_REPORT_SHA256")
+    )) {
+        if ((Read-ObjectString -Object $record -Name $hashMatch[0]) -ne (Get-EnvironmentValue -Name $hashMatch[1])) {
+            $failures += "staging promotion approval record field $($hashMatch[0]) must match $($hashMatch[1])"
+        }
+    }
+
+    foreach ($check in @(
+        @("approve_canary_or_production_release", "canary or production release approval"),
+        @("product_approval_signed", "product approval signature"),
+        @("engineering_signoff_signed", "engineering signoff signature"),
+        @("security_privacy_signoff_signed", "security/privacy signoff signature"),
+        @("crown_monetary_authority_signoff_signed", "Crown monetary authority signoff signature")
+    )) {
+        $failure = Test-RequiredTrueField -Object $record -Name $check[0] -Description $check[1]
+        if ($failure) {
+            $failures += $failure
+        }
+    }
+
+    return $failures
+}
+
 function Test-StagingNoProductionMigration {
     $failures = @()
     $artifactPath = Get-EnvironmentValue -Name "ARCHREALMS_PASSPORT_STAGING_ARTIFACT_VALIDATION_REPORT_PATH"
@@ -424,23 +599,76 @@ function New-SyntheticFixtureReport {
     }
     $artifactReport | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $artifactPath -Encoding UTF8
 
+    $rollbackPath = Join-Path $OutputDirectory "synthetic-staging-rollback-drill-report.json"
+    $rollback = [pscustomobject][ordered]@{
+        schema = "archrealms.passport.staging_rollback_drill.v1"
+        created_utc = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
+        lane = "staging"
+        rollback_drill_id = "staging-rollback-drill-synthetic"
+        completed = $true
+        package_version = "synthetic-staging"
+        policy_version = "passport-token-ready-mvp-v1"
+        reason_code = "synthetic-validator-self-test"
+        approvers = @("synthetic-engineering", "synthetic-security-privacy")
+        affected_service_classes = @("identity", "wallet", "storage", "ai", "ledger-export")
+        affected_assets = @("ARCH", "CC")
+        user_facing_status = "synthetic rollback drill completed"
+        new_operations_disabled_or_routed = $true
+        ledger_events_preserved = $true
+        no_deletion_mutation_or_backdating = $true
+        pending_escrow_resolved_by_policy = $true
+        export_access_preserved = $true
+        production_records_untouched = $true
+    }
+    $rollback | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $rollbackPath -Encoding UTF8
+
+    $preMvpHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $preMvpPath).Hash.ToLowerInvariant()
+    $artifactHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $artifactPath).Hash.ToLowerInvariant()
+    $rollbackHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $rollbackPath).Hash.ToLowerInvariant()
+    $promotionPath = Join-Path $OutputDirectory "synthetic-staging-promotion-approval-record.json"
+    $promotion = [pscustomobject][ordered]@{
+        schema = "archrealms.passport.staging_promotion_approval.v1"
+        created_utc = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
+        lane = "staging"
+        promotion_approval_id = "staging-promotion-synthetic"
+        engineering_signoff_id = "staging-engineering-synthetic"
+        security_privacy_signoff_id = "staging-security-privacy-synthetic"
+        crown_monetary_authority_signoff_id = "staging-crown-monetary-synthetic"
+        rollback_drill_id = "staging-rollback-drill-synthetic"
+        pre_mvp_report_sha256 = $preMvpHash
+        staging_artifact_validation_report_sha256 = $artifactHash
+        rollback_drill_report_sha256 = $rollbackHash
+        approve_canary_or_production_release = $true
+        product_approval_signed = $true
+        engineering_signoff_signed = $true
+        security_privacy_signoff_signed = $true
+        crown_monetary_authority_signoff_signed = $true
+    }
+    $promotion | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $promotionPath -Encoding UTF8
+
     [System.Environment]::SetEnvironmentVariable("ARCHREALMS_PASSPORT_PRE_MVP_VERIFICATION_REPORT_PATH", $preMvpPath, "Process")
-    [System.Environment]::SetEnvironmentVariable("ARCHREALMS_PASSPORT_PRE_MVP_VERIFICATION_REPORT_SHA256", (Get-FileHash -Algorithm SHA256 -LiteralPath $preMvpPath).Hash.ToLowerInvariant(), "Process")
+    [System.Environment]::SetEnvironmentVariable("ARCHREALMS_PASSPORT_PRE_MVP_VERIFICATION_REPORT_SHA256", $preMvpHash, "Process")
     [System.Environment]::SetEnvironmentVariable("ARCHREALMS_PASSPORT_STAGING_ARTIFACT_VALIDATION_REPORT_PATH", $artifactPath, "Process")
-    [System.Environment]::SetEnvironmentVariable("ARCHREALMS_PASSPORT_STAGING_ARTIFACT_VALIDATION_REPORT_SHA256", (Get-FileHash -Algorithm SHA256 -LiteralPath $artifactPath).Hash.ToLowerInvariant(), "Process")
+    [System.Environment]::SetEnvironmentVariable("ARCHREALMS_PASSPORT_STAGING_ARTIFACT_VALIDATION_REPORT_SHA256", $artifactHash, "Process")
     [System.Environment]::SetEnvironmentVariable("PASSPORT_WINDOWS_STAGING_API_BASE_URL", "http://127.0.0.1:18080", "Process")
     [System.Environment]::SetEnvironmentVariable("PASSPORT_WINDOWS_STAGING_AI_GATEWAY_URL", "http://127.0.0.1:18081", "Process")
     [System.Environment]::SetEnvironmentVariable("ARCHREALMS_PASSPORT_STAGING_LEDGER_NAMESPACE", "archrealms-passport-staging", "Process")
     [System.Environment]::SetEnvironmentVariable("ARCHREALMS_PASSPORT_STAGING_TELEMETRY_DESTINATION", "staging-managed-telemetry", "Process")
     [System.Environment]::SetEnvironmentVariable("ARCHREALMS_PASSPORT_STAGING_ROLLBACK_DRILL_ID", "staging-rollback-drill-synthetic", "Process")
+    [System.Environment]::SetEnvironmentVariable("ARCHREALMS_PASSPORT_STAGING_ROLLBACK_DRILL_REPORT_PATH", $rollbackPath, "Process")
+    [System.Environment]::SetEnvironmentVariable("ARCHREALMS_PASSPORT_STAGING_ROLLBACK_DRILL_REPORT_SHA256", $rollbackHash, "Process")
     [System.Environment]::SetEnvironmentVariable("ARCHREALMS_PASSPORT_STAGING_PROMOTION_APPROVAL_ID", "staging-promotion-synthetic", "Process")
     [System.Environment]::SetEnvironmentVariable("ARCHREALMS_PASSPORT_STAGING_ENGINEERING_SIGNOFF_ID", "staging-engineering-synthetic", "Process")
     [System.Environment]::SetEnvironmentVariable("ARCHREALMS_PASSPORT_STAGING_SECURITY_PRIVACY_SIGNOFF_ID", "staging-security-privacy-synthetic", "Process")
     [System.Environment]::SetEnvironmentVariable("ARCHREALMS_PASSPORT_STAGING_CROWN_MONETARY_AUTHORITY_SIGNOFF_ID", "staging-crown-monetary-synthetic", "Process")
+    [System.Environment]::SetEnvironmentVariable("ARCHREALMS_PASSPORT_STAGING_PROMOTION_APPROVAL_RECORD_PATH", $promotionPath, "Process")
+    [System.Environment]::SetEnvironmentVariable("ARCHREALMS_PASSPORT_STAGING_PROMOTION_APPROVAL_RECORD_SHA256", (Get-FileHash -Algorithm SHA256 -LiteralPath $promotionPath).Hash.ToLowerInvariant(), "Process")
 
     return [pscustomobject][ordered]@{
         pre_mvp_report_path = $preMvpPath
         staging_artifact_validation_report_path = $artifactPath
+        staging_rollback_drill_report_path = $rollbackPath
+        staging_promotion_approval_record_path = $promotionPath
     }
 }
 
@@ -492,8 +720,11 @@ $gates = @(
         -Id "staging_rollback_drill" `
         -Description "Staging rollback drill evidence is recorded before canary promotion." `
         -RequiredEnvironment @(
-            "ARCHREALMS_PASSPORT_STAGING_ROLLBACK_DRILL_ID"
-        )
+            "ARCHREALMS_PASSPORT_STAGING_ROLLBACK_DRILL_ID",
+            "ARCHREALMS_PASSPORT_STAGING_ROLLBACK_DRILL_REPORT_PATH",
+            "ARCHREALMS_PASSPORT_STAGING_ROLLBACK_DRILL_REPORT_SHA256"
+        ) `
+        -ExtraCheck ${function:Test-StagingRollbackDrill}
 
     New-Gate `
         -Id "staging_promotion_approvals" `
@@ -502,8 +733,11 @@ $gates = @(
             "ARCHREALMS_PASSPORT_STAGING_PROMOTION_APPROVAL_ID",
             "ARCHREALMS_PASSPORT_STAGING_ENGINEERING_SIGNOFF_ID",
             "ARCHREALMS_PASSPORT_STAGING_SECURITY_PRIVACY_SIGNOFF_ID",
-            "ARCHREALMS_PASSPORT_STAGING_CROWN_MONETARY_AUTHORITY_SIGNOFF_ID"
-        )
+            "ARCHREALMS_PASSPORT_STAGING_CROWN_MONETARY_AUTHORITY_SIGNOFF_ID",
+            "ARCHREALMS_PASSPORT_STAGING_PROMOTION_APPROVAL_RECORD_PATH",
+            "ARCHREALMS_PASSPORT_STAGING_PROMOTION_APPROVAL_RECORD_SHA256"
+        ) `
+        -ExtraCheck ${function:Test-StagingPromotionApprovals}
 
     New-Gate `
         -Id "no_staging_to_production_migration" `
