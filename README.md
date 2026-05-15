@@ -380,7 +380,7 @@ Generate a production MVP environment template before wiring secrets or deployme
   -OutputPath .\artifacts\release\production-mvp.env.template
 ```
 
-The template lists each readiness-gate variable, whether it is secret, and the gate it satisfies. Populate values only in a secure shell, CI secret store, or deployment environment; populated `.env` files are ignored by git and can be passed to the readiness gate or production package publisher with `-EnvironmentFile`. Production hosted signing requires `ARCHREALMS_PASSPORT_HOSTED_SIGNING_ENDPOINT`; local hosted signing-key paths are development-only and fail the ProductionMvp gate.
+The template lists each readiness-gate variable, whether it is secret, and the gate it satisfies. Populate values only in a secure shell, CI secret store, or deployment environment; populated `.env` files are ignored by git and can be passed to the readiness gate or production package publisher with `-EnvironmentFile`. Production hosted signing requires `ARCHREALMS_PASSPORT_HOSTED_SIGNING_ENDPOINT`; local hosted signing-key paths are development-only and fail the ProductionMvp gate. The readiness gate posts a non-mutating `production_mvp_readiness_probe` payload to the managed signing endpoint and verifies the returned RSA signature and public-key hash.
 
 Package with the same production environment file after the gate is ready:
 

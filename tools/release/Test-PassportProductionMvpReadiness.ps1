@@ -276,6 +276,214 @@ function Test-HostedRuntimeStatusEndpoints {
     return $failures
 }
 
+function Test-ManagedSigningEndpointProbe {
+    $endpoint = [System.Environment]::GetEnvironmentVariable("ARCHREALMS_PASSPORT_HOSTED_SIGNING_ENDPOINT")
+    if ([string]::IsNullOrWhiteSpace($endpoint)) {
+        return ""
+    }
+
+    $keyId = [System.Environment]::GetEnvironmentVariable("ARCHREALMS_PASSPORT_HOSTED_SIGNING_KEY_ID")
+    $provider = [System.Environment]::GetEnvironmentVariable("ARCHREALMS_PASSPORT_HOSTED_SIGNING_KEY_PROVIDER")
+    $custody = [System.Environment]::GetEnvironmentVariable("ARCHREALMS_PASSPORT_HOSTED_SIGNING_KEY_CUSTODY")
+    $payloadText = "archrealms-passport-production-mvp-readiness-signing-probe"
+    $payloadBytes = [System.Text.Encoding]::UTF8.GetBytes($payloadText)
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $payloadSha256 = [System.BitConverter]::ToString($sha256.ComputeHash($payloadBytes)).Replace("-", "").ToLowerInvariant()
+    }
+    finally {
+        $sha256.Dispose()
+    }
+    $body = [pscustomobject][ordered]@{
+        key_id = $keyId
+        provider = $provider
+        custody = $custody
+        purpose = "production_mvp_readiness_probe"
+        payload_sha256 = $payloadSha256
+        payload_base64 = [System.Convert]::ToBase64String($payloadBytes)
+    } | ConvertTo-Json -Depth 4
+
+    $headers = @{}
+    $apiKey = [System.Environment]::GetEnvironmentVariable("ARCHREALMS_PASSPORT_HOSTED_SIGNING_ENDPOINT_API_KEY")
+    if (-not [string]::IsNullOrWhiteSpace($apiKey)) {
+        $headers["X-Archrealms-Managed-Signing-Key"] = $apiKey
+    }
+
+    try {
+        $response = Invoke-RestMethod -Method Post -Uri $endpoint.Trim() -Headers $headers -Body $body -ContentType "application/json" -TimeoutSec $EndpointTimeoutSeconds
+    }
+    catch {
+        return "managed signing endpoint probe failed for $endpoint`: $($_.Exception.Message)"
+    }
+
+    if ($null -eq $response) {
+        return "managed signing endpoint probe returned no JSON for $endpoint"
+    }
+
+    if ($response.signature_algorithm -ne "RSA_PKCS1_SHA256") {
+        return "managed signing endpoint probe must return RSA_PKCS1_SHA256"
+    }
+
+    if ($response.signed_payload_sha256 -ne $payloadSha256) {
+        return "managed signing endpoint probe signed the wrong payload hash"
+    }
+
+    try {
+        $signatureBytes = [System.Convert]::FromBase64String($response.signature_base64)
+        $publicKeyBytes = [System.Convert]::FromBase64String($response.public_key_spki_der_base64)
+    }
+    catch {
+        return "managed signing endpoint probe returned invalid base64 signature or public key"
+    }
+
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $publicKeySha256 = [System.BitConverter]::ToString($sha256.ComputeHash($publicKeyBytes)).Replace("-", "").ToLowerInvariant()
+    }
+    finally {
+        $sha256.Dispose()
+    }
+    if ($response.public_key_sha256 -ne $publicKeySha256) {
+        return "managed signing endpoint probe returned public key hash mismatch"
+    }
+
+    $verificationFailure = Test-RsaPkcs1Sha256Signature -PayloadBytes $payloadBytes -SignatureBytes $signatureBytes -PublicKeySpkiDer $publicKeyBytes
+    if ($verificationFailure) {
+        return "managed signing endpoint probe could not verify returned signature: $verificationFailure"
+    }
+
+    return ""
+}
+
+function Test-RsaPkcs1Sha256Signature {
+    param(
+        [byte[]]$PayloadBytes,
+        [byte[]]$SignatureBytes,
+        [byte[]]$PublicKeySpkiDer
+    )
+
+    try {
+        $parameters = ConvertFrom-SubjectPublicKeyInfo -PublicKeySpkiDer $PublicKeySpkiDer
+        $rsa = [System.Security.Cryptography.RSACryptoServiceProvider]::new()
+        try {
+            $rsa.ImportParameters($parameters)
+            $sha256Oid = [System.Security.Cryptography.CryptoConfig]::MapNameToOID("SHA256")
+            if (-not $rsa.VerifyData($PayloadBytes, $sha256Oid, $SignatureBytes)) {
+                return "signature verification failed"
+            }
+        }
+        finally {
+            $rsa.Dispose()
+        }
+    }
+    catch {
+        return $_.Exception.Message
+    }
+
+    return ""
+}
+
+function ConvertFrom-SubjectPublicKeyInfo {
+    param(
+        [byte[]]$PublicKeySpkiDer
+    )
+
+    $offset = 0
+    $root = Read-DerValue -Bytes $PublicKeySpkiDer -Offset ([ref]$offset) -ExpectedTag 0x30
+    $rootOffset = 0
+    [void](Read-DerValue -Bytes $root -Offset ([ref]$rootOffset) -ExpectedTag 0x30)
+    $bitString = Read-DerValue -Bytes $root -Offset ([ref]$rootOffset) -ExpectedTag 0x03
+    if ($bitString.Length -lt 2 -or $bitString[0] -ne 0) {
+        throw "unsupported RSA public-key bit string"
+    }
+
+    $rsaPublicKey = New-Object byte[] ($bitString.Length - 1)
+    [System.Array]::Copy($bitString, 1, $rsaPublicKey, 0, $rsaPublicKey.Length)
+
+    $rsaOffset = 0
+    $rsaSequence = Read-DerValue -Bytes $rsaPublicKey -Offset ([ref]$rsaOffset) -ExpectedTag 0x30
+    $sequenceOffset = 0
+    $modulus = Remove-DerIntegerPadding (Read-DerValue -Bytes $rsaSequence -Offset ([ref]$sequenceOffset) -ExpectedTag 0x02)
+    $exponent = Remove-DerIntegerPadding (Read-DerValue -Bytes $rsaSequence -Offset ([ref]$sequenceOffset) -ExpectedTag 0x02)
+
+    $parameters = [System.Security.Cryptography.RSAParameters]::new()
+    $parameters.Modulus = $modulus
+    $parameters.Exponent = $exponent
+    return $parameters
+}
+
+function Read-DerValue {
+    param(
+        [byte[]]$Bytes,
+        [ref]$Offset,
+        [int]$ExpectedTag
+    )
+
+    if ($Offset.Value -ge $Bytes.Length -or $Bytes[$Offset.Value] -ne $ExpectedTag) {
+        throw "unexpected DER tag"
+    }
+
+    $Offset.Value++
+    $length = Read-DerLength -Bytes $Bytes -Offset $Offset
+    if ($length -lt 0 -or $Offset.Value + $length -gt $Bytes.Length) {
+        throw "invalid DER length"
+    }
+
+    $value = New-Object byte[] $length
+    [System.Array]::Copy($Bytes, $Offset.Value, $value, 0, $length)
+    $Offset.Value += $length
+    return $value
+}
+
+function Read-DerLength {
+    param(
+        [byte[]]$Bytes,
+        [ref]$Offset
+    )
+
+    if ($Offset.Value -ge $Bytes.Length) {
+        throw "missing DER length"
+    }
+
+    $first = [int]$Bytes[$Offset.Value]
+    $Offset.Value++
+    if (($first -band 0x80) -eq 0) {
+        return $first
+    }
+
+    $count = $first -band 0x7F
+    if ($count -le 0 -or $count -gt 4 -or $Offset.Value + $count -gt $Bytes.Length) {
+        throw "unsupported DER length"
+    }
+
+    $length = 0
+    for ($index = 0; $index -lt $count; $index++) {
+        $length = ($length -shl 8) -bor [int]$Bytes[$Offset.Value]
+        $Offset.Value++
+    }
+
+    return $length
+}
+
+function Remove-DerIntegerPadding {
+    param(
+        [byte[]]$Value
+    )
+
+    $start = 0
+    while ($start -lt ($Value.Length - 1) -and $Value[$start] -eq 0) {
+        $start++
+    }
+
+    if ($start -eq 0) {
+        return $Value
+    }
+
+    $trimmed = New-Object byte[] ($Value.Length - $start)
+    [System.Array]::Copy($Value, $start, $trimmed, 0, $trimmed.Length)
+    return $trimmed
+}
+
 function Test-ReleaseLaneEndpointUrls {
     $endpoints = @(
         [pscustomobject]@{
@@ -373,6 +581,12 @@ $gates = @(
             "ARCHREALMS_PASSPORT_HOSTED_SIGNING_ENDPOINT"
         ) `
         -ExtraCheck ${function:Test-ManagedSigningCustody}
+
+    New-Gate `
+        -Id "managed_signing_endpoint_probe" `
+        -Description "Managed hosted signing endpoint signs a non-mutating readiness probe with verifiable public-key evidence." `
+        -RequiredEnvironment @() `
+        -ExtraCheck ${function:Test-ManagedSigningEndpointProbe}
 
     New-Gate `
         -Id "issuer_capacity_genesis_secrets" `
