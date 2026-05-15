@@ -4,6 +4,7 @@ using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using ArchrealmsPassport.Core.Protocol;
 using ArchrealmsPassport.Windows.Models;
 
 namespace ArchrealmsPassport.Windows.Services
@@ -231,11 +232,7 @@ namespace ArchrealmsPassport.Windows.Services
 
         private static string NormalizeAsset(string assetCode)
         {
-            var normalized = NormalizeRequired(assetCode, "asset code").ToUpperInvariant();
-            if (normalized == "CROWN_CREDIT" || normalized == "CROWN-CREDIT")
-            {
-                return PassportMonetaryLedgerService.AssetCrownCredit;
-            }
+            var normalized = PassportMonetaryProtocol.NormalizeAssetCode(NormalizeRequired(assetCode, "asset code"));
 
             if (!IsArchOrCrownCredit(normalized))
             {
@@ -247,8 +244,7 @@ namespace ArchrealmsPassport.Windows.Services
 
         private static bool IsArchOrCrownCredit(string assetCode)
         {
-            return string.Equals(assetCode, PassportMonetaryLedgerService.AssetArch, StringComparison.Ordinal)
-                || string.Equals(assetCode, PassportMonetaryLedgerService.AssetCrownCredit, StringComparison.Ordinal);
+            return PassportMonetaryProtocol.IsSupportedAssetCode(assetCode);
         }
 
         private static string NormalizeRequired(string value, string label)

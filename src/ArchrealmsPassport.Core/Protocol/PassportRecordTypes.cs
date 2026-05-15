@@ -14,6 +14,11 @@ public static class PassportRecordTypes
     public const string AdminRoleMembershipSignature = "passport_admin_authority_role_membership_signature";
     public const string TelemetryAccessRequest = "passport_telemetry_access_request";
     public const string TelemetryAccessRecord = "passport_telemetry_access_record";
+    public const string MonetaryLedgerEvent = "passport_monetary_ledger_event";
+    public const string WalletKeyBinding = "passport_wallet_key_binding";
+    public const string WalletKeyBindingSignature = "passport_wallet_key_binding_signature";
+    public const string WalletKeyRevocation = "passport_wallet_key_revocation";
+    public const string WalletKeyRevocationSignature = "passport_wallet_key_revocation_signature";
     public const string StorageServiceDeliveryRequest = "passport_storage_service_delivery_request";
     public const string StorageDeliveryAcceptance = "passport_storage_delivery_acceptance";
 }

@@ -16,6 +16,11 @@
   - AI session/chat endpoint paths;
   - AI gateway challenge audience.
 - Record type constants used across Windows and hosted services.
+- Monetary protocol constants and validation:
+  - ARCH and CC asset-code normalization;
+  - supported ARCH and CC ledger event types;
+  - shared monetary signature-status labels;
+  - wallet-authorized and wallet-prohibited scope semantics.
 - AI non-authority policy:
   - fields AI must not be allowed to set;
   - reusable non-authority boundary record creation;
@@ -24,13 +29,13 @@
 
 ## Consumers
 
-- Windows Passport references `ArchrealmsPassport.Core` for AI gateway defaults, record types, AI authority boundary validation, and secret-material prompt blocking.
-- `ArchrealmsPassport.HostedServices` references the same core package for hosted AI session/chat validation and hosted record-type creation.
+- Windows Passport references `ArchrealmsPassport.Core` for AI gateway defaults, record types, monetary asset/event constants, wallet authority scopes, AI authority boundary validation, and secret-material prompt blocking.
+- `ArchrealmsPassport.HostedServices` references the same core package for hosted AI session/chat validation, hosted record-type creation, admin authority record types, and telemetry access record types.
 
 ## Remaining Extraction
 
-- Move monetary record constants and validation into Core.
-- Move wallet-key binding semantics into Core while leaving OS key storage platform-specific.
+- Continue moving deeper monetary validation into Core.
+- Continue moving wallet-key binding validation into Core while leaving OS key storage platform-specific.
 - Move ledger replay/export verifier logic into Core.
 - Move registry record schemas and validation into Core.
 - Keep WPF, Windows tray behavior, MSIX packaging, DPAPI/Windows Hello, and Windows background process management outside Core.

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
+using ArchrealmsPassport.Core.Protocol;
 
 namespace ArchrealmsPassport.Windows.Models
 {
@@ -9,7 +10,7 @@ namespace ArchrealmsPassport.Windows.Models
         public int SchemaVersion { get; set; } = 1;
 
         [JsonPropertyName("record_type")]
-        public string RecordType { get; set; } = "passport_monetary_ledger_event";
+        public string RecordType { get; set; } = PassportRecordTypes.MonetaryLedgerEvent;
 
         [JsonPropertyName("event_id")]
         public string EventId { get; set; } = string.Empty;

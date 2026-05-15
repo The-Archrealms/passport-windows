@@ -5,6 +5,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using ArchrealmsPassport.Core.Protocol;
 using ArchrealmsPassport.Windows.Models;
 
 namespace ArchrealmsPassport.Windows.Services
@@ -81,7 +82,7 @@ namespace ArchrealmsPassport.Windows.Services
                 var bindingRecord = new Dictionary<string, object?>
                 {
                     ["schema_version"] = 1,
-                    ["record_type"] = "passport_wallet_key_binding",
+                    ["record_type"] = PassportRecordTypes.WalletKeyBinding,
                     ["record_id"] = timestamp + "-" + walletKeyId,
                     ["created_utc"] = createdUtc,
                     ["release_lane"] = releaseLane.Lane,
@@ -95,22 +96,8 @@ namespace ArchrealmsPassport.Windows.Services
                     ["wallet_key_size_bits"] = 3072,
                     ["wallet_public_key_path"] = ToWorkspaceRelativePath(resolvedWorkspaceRoot, walletPublicKeyPath),
                     ["wallet_public_key_sha256"] = ComputeSha256(publicKeyBytes),
-                    ["authorized_scopes"] = new[]
-                    {
-                        "sign_arch_operations",
-                        "sign_cc_operations",
-                        "sign_conversion_quotes",
-                        "sign_escrow_redemption"
-                    },
-                    ["prohibited_scopes"] = new[]
-                    {
-                        "alter_identity",
-                        "alter_citizenship",
-                        "alter_office",
-                        "alter_registry_authority",
-                        "alter_constitutional_status",
-                        "alter_crown_authority"
-                    },
+                    ["authorized_scopes"] = PassportMonetaryProtocol.WalletAuthorizedScopes,
+                    ["prohibited_scopes"] = PassportMonetaryProtocol.WalletProhibitedScopes,
                     ["summary"] = "Passport identity/device authorization binding a separate wallet key for monetary operations only."
                 };
                 File.WriteAllText(bindingRecordPath, JsonSerializer.Serialize(bindingRecord, JsonOptions), Encoding.UTF8);
@@ -122,7 +109,7 @@ namespace ArchrealmsPassport.Windows.Services
                 var signatureRecord = new Dictionary<string, object?>
                 {
                     ["schema_version"] = 1,
-                    ["record_type"] = "passport_wallet_key_binding_signature",
+                    ["record_type"] = PassportRecordTypes.WalletKeyBindingSignature,
                     ["record_id"] = timestamp + "-" + walletKeyId + "-signature",
                     ["created_utc"] = createdUtc,
                     ["release_lane"] = releaseLane.Lane,
@@ -256,7 +243,7 @@ namespace ArchrealmsPassport.Windows.Services
                 var revocationRecord = new Dictionary<string, object?>
                 {
                     ["schema_version"] = 1,
-                    ["record_type"] = "passport_wallet_key_revocation",
+                    ["record_type"] = PassportRecordTypes.WalletKeyRevocation,
                     ["record_id"] = timestamp + "-" + normalizedWalletKeyId,
                     ["created_utc"] = createdUtc,
                     ["release_lane"] = releaseLane.Lane,
@@ -281,7 +268,7 @@ namespace ArchrealmsPassport.Windows.Services
                 var signatureRecord = new Dictionary<string, object?>
                 {
                     ["schema_version"] = 1,
-                    ["record_type"] = "passport_wallet_key_revocation_signature",
+                    ["record_type"] = PassportRecordTypes.WalletKeyRevocationSignature,
                     ["record_id"] = timestamp + "-" + normalizedWalletKeyId + "-signature",
                     ["created_utc"] = createdUtc,
                     ["release_lane"] = releaseLane.Lane,
@@ -461,7 +448,7 @@ namespace ArchrealmsPassport.Windows.Services
 
                 using var document = JsonDocument.Parse(File.ReadAllText(file));
                 var root = document.RootElement.Clone();
-                if (Matches(root, "record_type", "passport_wallet_key_binding")
+                if (Matches(root, "record_type", PassportRecordTypes.WalletKeyBinding)
                     && Matches(root, "archrealms_identity_id", identityId)
                     && Matches(root, "wallet_key_id", walletKeyId))
                 {
@@ -491,7 +478,7 @@ namespace ArchrealmsPassport.Windows.Services
                     using var document = JsonDocument.Parse(File.ReadAllText(file));
                     return (RecordPath: file, RootElement: document.RootElement.Clone());
                 })
-                .Where(item => Matches(item.RootElement, "record_type", "passport_wallet_key_revocation")
+                .Where(item => Matches(item.RootElement, "record_type", PassportRecordTypes.WalletKeyRevocation)
                     && Matches(item.RootElement, "archrealms_identity_id", identityId)
                     && Matches(item.RootElement, "wallet_key_id", walletKeyId)
                     && MatchesCurrentReleaseLane(item.RootElement))

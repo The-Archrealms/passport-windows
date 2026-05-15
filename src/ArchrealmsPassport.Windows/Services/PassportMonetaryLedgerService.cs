@@ -5,24 +5,25 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using ArchrealmsPassport.Core.Protocol;
 using ArchrealmsPassport.Windows.Models;
 
 namespace ArchrealmsPassport.Windows.Services
 {
     public sealed class PassportMonetaryLedgerService
     {
-        public const string AssetArch = "ARCH";
-        public const string AssetCrownCredit = "CC";
-        public const string EventArchGenesisAllocation = "arch_genesis_allocation";
-        public const string EventArchTransferIn = "arch_transfer_in";
-        public const string EventArchTransferOut = "arch_transfer_out";
-        public const string EventCrownCreditIssue = "cc_issue";
-        public const string EventCrownCreditEscrow = "cc_escrow";
-        public const string EventCrownCreditBurn = "cc_burn";
-        public const string EventCrownCreditRefund = "cc_refund";
-        public const string EventCrownCreditRecredit = "cc_recredit";
-        public const string EventCrownCreditTransferIn = "cc_transfer_in";
-        public const string EventCrownCreditTransferOut = "cc_transfer_out";
+        public const string AssetArch = PassportMonetaryProtocol.AssetArch;
+        public const string AssetCrownCredit = PassportMonetaryProtocol.AssetCrownCredit;
+        public const string EventArchGenesisAllocation = PassportMonetaryProtocol.EventArchGenesisAllocation;
+        public const string EventArchTransferIn = PassportMonetaryProtocol.EventArchTransferIn;
+        public const string EventArchTransferOut = PassportMonetaryProtocol.EventArchTransferOut;
+        public const string EventCrownCreditIssue = PassportMonetaryProtocol.EventCrownCreditIssue;
+        public const string EventCrownCreditEscrow = PassportMonetaryProtocol.EventCrownCreditEscrow;
+        public const string EventCrownCreditBurn = PassportMonetaryProtocol.EventCrownCreditBurn;
+        public const string EventCrownCreditRefund = PassportMonetaryProtocol.EventCrownCreditRefund;
+        public const string EventCrownCreditRecredit = PassportMonetaryProtocol.EventCrownCreditRecredit;
+        public const string EventCrownCreditTransferIn = PassportMonetaryProtocol.EventCrownCreditTransferIn;
+        public const string EventCrownCreditTransferOut = PassportMonetaryProtocol.EventCrownCreditTransferOut;
 
         private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions
         {
@@ -104,7 +105,7 @@ namespace ArchrealmsPassport.Windows.Services
                     DeviceSessionId = string.IsNullOrWhiteSpace(deviceSessionId) ? "local-passport-session" : deviceSessionId.Trim(),
                     PolicyVersion = releaseLane.PolicyVersion,
                     EvidenceReferences = NormalizeEvidence(evidenceReferences),
-                    SignatureStatus = "unsigned-local-ledger-foundation"
+                    SignatureStatus = PassportMonetaryProtocol.SignatureUnsignedLocalFoundation
                 };
 
                 var adminAuthorityGate = ValidateAdminAuthorityGateIfPresent(resolvedWorkspaceRoot, ledgerEvent);
@@ -153,7 +154,7 @@ namespace ArchrealmsPassport.Windows.Services
                         return FailedAppend("The wallet signature could not be verified with the wallet public key.");
                     }
 
-                    ledgerEvent.SignatureStatus = "wallet_signed";
+                    ledgerEvent.SignatureStatus = PassportMonetaryProtocol.SignatureWalletSigned;
                     ledgerEvent.WalletSignatureAlgorithm = "RSA_PKCS1_SHA256";
                     ledgerEvent.WalletSignatureBase64 = Convert.ToBase64String(signatureBytes);
                     ledgerEvent.SignedEventHashSha256 = signedPayloadHash;
@@ -161,7 +162,7 @@ namespace ArchrealmsPassport.Windows.Services
                 }
                 else if (hasAdminAuthority)
                 {
-                    ledgerEvent.SignatureStatus = "dual_control_admin_authorized";
+                    ledgerEvent.SignatureStatus = PassportMonetaryProtocol.SignatureDualControlAdminAuthorized;
                     ledgerEvent.SignedEventHashSha256 = ComputeUnsignedEventPayloadHash(ledgerEvent);
                 }
 
@@ -895,7 +896,7 @@ namespace ArchrealmsPassport.Windows.Services
 
         private static bool IsAdminAuthorityStatus(string signatureStatus)
         {
-            return string.Equals(signatureStatus, "dual_control_admin_authorized", StringComparison.Ordinal);
+            return string.Equals(signatureStatus, PassportMonetaryProtocol.SignatureDualControlAdminAuthorized, StringComparison.Ordinal);
         }
 
         private static bool IsPendingEscrowMutation(PassportMonetaryLedgerEvent ledgerEvent)
@@ -927,7 +928,7 @@ namespace ArchrealmsPassport.Windows.Services
         private void ValidateEventSignature(string workspaceRoot, PassportMonetaryLedgerEvent ledgerEvent, List<string> failures)
         {
             if (releaseLane.ProductionLedger
-                && !string.Equals(ledgerEvent.SignatureStatus, "wallet_signed", StringComparison.Ordinal)
+                && !string.Equals(ledgerEvent.SignatureStatus, PassportMonetaryProtocol.SignatureWalletSigned, StringComparison.Ordinal)
                 && !IsAdminAuthorityStatus(ledgerEvent.SignatureStatus))
             {
                 failures.Add("Production monetary ledger event " + ledgerEvent.EventId + " is not wallet-signed.");
@@ -944,7 +945,7 @@ namespace ArchrealmsPassport.Windows.Services
                 return;
             }
 
-            if (!string.Equals(ledgerEvent.SignatureStatus, "wallet_signed", StringComparison.Ordinal))
+            if (!string.Equals(ledgerEvent.SignatureStatus, PassportMonetaryProtocol.SignatureWalletSigned, StringComparison.Ordinal))
             {
                 return;
             }
@@ -1738,14 +1739,7 @@ namespace ArchrealmsPassport.Windows.Services
 
         private static string NormalizeAssetCode(string assetCode)
         {
-            var normalized = NormalizeRequired(assetCode, "asset code").ToUpperInvariant();
-            if (string.Equals(normalized, "CROWN_CREDIT", StringComparison.Ordinal)
-                || string.Equals(normalized, "CROWN-CREDIT", StringComparison.Ordinal))
-            {
-                return AssetCrownCredit;
-            }
-
-            return normalized;
+            return PassportMonetaryProtocol.NormalizeAssetCode(NormalizeRequired(assetCode, "asset code"));
         }
 
         private static string NormalizeRequired(string value, string label)
