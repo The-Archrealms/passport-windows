@@ -803,6 +803,16 @@ To produce a prompt-to-artifact completion audit for the Token-Ready MVP PRD/ARD
 
 The report writes JSON and Markdown under `artifacts\release\`, maps PRD success criteria and ARD release gates to concrete evidence files, and separates passed, partial, blocked, and missing requirements. It is not a substitute for the final closeout gate; it makes the remaining blockers reviewable without treating a proxy report as production approval.
 
+Validate the completion audit schema and checklist coverage:
+
+```powershell
+.\tools\release\Test-PassportTokenReadyMvpCompletionAuditReport.ps1 `
+  -Generate `
+  -NoFail
+```
+
+The validator checks the generated JSON/Markdown reports, required source evidence files, status counts, checklist IDs, evidence references, and `completion_ready` consistency. Add `-RequireComplete` only for the final production-testing approval path.
+
 Validate the package-signing provisioning packet before loading production signing secrets:
 
 ```powershell
