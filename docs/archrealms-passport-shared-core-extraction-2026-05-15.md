@@ -25,7 +25,8 @@
   - required monetary signing scopes;
   - prohibited identity, citizenship, office, registry-authority, constitutional-status, and Crown-authority scopes;
   - wallet-key separation from identity and device identifiers;
-  - production-strength RSA wallet-key parameter checks.
+  - production-strength RSA wallet-key parameter checks;
+  - registry-inspector diagnostics for wallet-binding policy violations.
 - Monetary ledger replay semantics:
   - ARCH genesis, transfer-in, and transfer-out balance rules;
   - CC issue, escrow, burn, refund, re-credit, transfer-in, and transfer-out balance rules;

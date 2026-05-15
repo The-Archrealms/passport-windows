@@ -274,11 +274,65 @@ public static class PassportRegistryRecordInspector
                 validationFailures.Add("record_family_required_field_missing:" + field);
             }
         }
+
+        if (string.Equals(recordType, PassportRecordTypes.WalletKeyBinding, StringComparison.Ordinal))
+        {
+            ValidateWalletKeyBindingRecord(root, validationFailures);
+        }
     }
 
     private static bool HasRequiredValue(JsonElement property)
     {
         return property.ValueKind is not JsonValueKind.Undefined and not JsonValueKind.Null;
+    }
+
+    private static void ValidateWalletKeyBindingRecord(JsonElement root, List<string> validationFailures)
+    {
+        var validation = PassportWalletKeyBindingValidator.Validate(new PassportWalletKeyBindingDescriptor
+        {
+            IdentityId = ReadString(root, "archrealms_identity_id"),
+            AuthorizingDeviceId = ReadString(root, "authorizing_device_id"),
+            WalletKeyId = ReadString(root, "wallet_key_id"),
+            WalletKeyAlgorithm = ReadString(root, "wallet_key_algorithm"),
+            WalletKeySizeBits = ReadInt(root, "wallet_key_size_bits"),
+            WalletPublicKeyPath = ReadString(root, "wallet_public_key_path"),
+            WalletPublicKeySha256 = ReadString(root, "wallet_public_key_sha256"),
+            AuthorizedScopes = ReadStringArray(root, "authorized_scopes"),
+            ProhibitedScopes = ReadStringArray(root, "prohibited_scopes")
+        });
+
+        foreach (var failure in validation.Failures)
+        {
+            validationFailures.Add("wallet_key_binding_policy:" + failure);
+        }
+    }
+
+    private static int ReadInt(JsonElement root, string propertyName)
+    {
+        if (!root.TryGetProperty(propertyName, out var element))
+        {
+            return 0;
+        }
+
+        if (element.ValueKind == JsonValueKind.Number && element.TryGetInt32(out var value))
+        {
+            return value;
+        }
+
+        return 0;
+    }
+
+    private static string[] ReadStringArray(JsonElement root, string propertyName)
+    {
+        if (!root.TryGetProperty(propertyName, out var element) || element.ValueKind != JsonValueKind.Array)
+        {
+            return Array.Empty<string>();
+        }
+
+        return element.EnumerateArray()
+            .Where(item => item.ValueKind == JsonValueKind.String)
+            .Select(item => item.GetString() ?? string.Empty)
+            .ToArray();
     }
 
     private static bool IsTemplatePlaceholder(string value)

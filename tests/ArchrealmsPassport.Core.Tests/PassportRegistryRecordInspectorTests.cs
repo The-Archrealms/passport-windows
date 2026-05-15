@@ -118,6 +118,54 @@ public sealed class PassportRegistryRecordInspectorTests
         Assert.True(templateInspection.IsEnvelopeValid);
     }
 
+    [Fact]
+    public void ReportsWalletBindingPolicyFailures()
+    {
+        var json = """
+        {
+          "schema_version": 1,
+          "record_type": "passport_wallet_key_binding",
+          "record_id": "binding-1",
+          "created_utc": "2026-05-15T00:00:00Z",
+          "release_lane": "staging",
+          "ledger_namespace": "staging-ledger",
+          "policy_version": "passport-mvp-v1",
+          "status": "active",
+          "archrealms_identity_id": "identity-1",
+          "authorizing_device_id": "device-1",
+          "wallet_key_id": "wallet-1",
+          "wallet_key_algorithm": "RSA",
+          "wallet_key_size_bits": 3072,
+          "wallet_public_key_path": "records/passport/wallet/public-keys/wallet-1.spki.der",
+          "wallet_public_key_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "authorized_scopes": [
+            "sign_arch_operations",
+            "sign_cc_operations",
+            "sign_conversion_quotes",
+            "sign_escrow_redemption",
+            "alter_identity"
+          ],
+          "prohibited_scopes": [
+            "alter_identity",
+            "alter_citizenship",
+            "alter_office",
+            "alter_registry_authority",
+            "alter_constitutional_status",
+            "alter_crown_authority"
+          ],
+          "summary": "Wallet binding."
+        }
+        """;
+
+        var inspection = PassportRegistryRecordInspector.Inspect(Encoding.UTF8.GetBytes(json));
+
+        Assert.True(inspection.IsRecord);
+        Assert.False(inspection.IsEnvelopeValid);
+        Assert.Contains(
+            "wallet_key_binding_policy:authorized_scope_forbidden:alter_identity",
+            inspection.ValidationFailures);
+    }
+
     [Theory]
     [InlineData("record_id")]
     [InlineData("event_id")]
