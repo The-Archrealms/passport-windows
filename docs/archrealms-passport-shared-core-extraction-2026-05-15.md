@@ -47,6 +47,7 @@
 - Registry record inspection and envelope validation:
   - shared summary extraction for record type, record ID, created time, status, CID, signatures, wallet signatures, relative path, and SHA-256;
   - common envelope diagnostics for schema version, record type, identifier, created timestamp, signature object shape, and wallet-signature object shape;
+  - placeholder-aware template inspection and shared top-level required-field diagnostics for packaged registry record families;
   - BOM-tolerant UTF-8 parsing while preserving original-byte hash calculation;
   - shared filter semantics for registry browser records and validation failures.
 - AI non-authority policy:
@@ -64,5 +65,5 @@
 ## Remaining Extraction
 
 - Continue moving wallet-key binding validation into Core while leaving OS key storage platform-specific.
-- Continue expanding registry record-family validation beyond the common envelope as schemas stabilize.
+- Continue expanding nested registry semantics beyond top-level record-family fields as schemas stabilize.
 - Keep WPF, Windows tray behavior, MSIX packaging, DPAPI/Windows Hello, and Windows background process management outside Core.

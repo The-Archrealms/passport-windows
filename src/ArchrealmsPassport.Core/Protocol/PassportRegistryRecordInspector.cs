@@ -41,7 +41,39 @@ public sealed record PassportRegistryRecordInspection
 
 public static class PassportRegistryRecordInspector
 {
-    public static PassportRegistryRecordInspection Inspect(byte[] recordJson, string relativePath = "")
+    private static readonly IReadOnlyDictionary<string, string[]> RequiredFieldsByRecordType = new Dictionary<string, string[]>(StringComparer.Ordinal)
+    {
+        ["passport_admin_authority"] = new[] { "record_id", "created_utc", "release_lane", "ledger_namespace", "policy_version", "status", "action_type", "authority_scope", "reason_code", "target_record_path", "target_record_sha256", "requested_payload_sha256", "requester_device_id", "approver_device_id", "requester_signature_path", "approver_signature_path", "ai_authority", "summary" },
+        ["passport_arch_cc_conversion_execution"] = new[] { "execution_id", "created_utc", "release_lane", "ledger_namespace", "policy_version", "account_id", "archrealms_identity_id", "wallet_key_id", "quote_id", "quote_record_path", "quote_record_sha256", "source_ledger_event_path", "source_ledger_event_sha256", "destination_ledger_event_path", "destination_ledger_event_sha256", "status", "summary" },
+        ["passport_arch_cc_conversion_quote"] = new[] { "quote_id", "created_utc", "expires_utc", "release_lane", "ledger_namespace", "policy_version", "account_id", "archrealms_identity_id", "wallet_key_id", "source_asset_code", "destination_asset_code", "source_amount_base_units", "destination_amount_base_units", "rate_numerator", "rate_denominator", "rate_source", "liquidity_source", "quote_method", "counterparty_class", "crown_is_counterparty", "spread_fee_base_units", "max_slippage_bps", "liquidity_limit_base_units", "guaranteed_conversion", "fixed_parity", "stable_value_claim", "legal_tender_claim", "unlimited_convertibility", "summary" },
+        ["attestation_record"] = new[] { "record_id", "created_utc", "effective_utc", "status", "attestation_type", "subject_record_ids", "attestor_label", "attestation_statement", "evidence_refs", "summary" },
+        ["blockchain_settlement_batch_record"] = new[] { "record_id", "created_utc", "effective_utc", "status", "settlement_batch_id", "settlement_epoch_id", "policy_version", "registrar_id", "target_settlement_layer", "source_handoff_record_ids", "participant_outputs", "chain_submission", "correction_record_ids", "dispute_record_ids", "summary" },
+        ["blockchain_settlement_chain_evaluation"] = new[] { "record_id", "created_utc", "status", "candidate_chain", "finality", "cost_and_throughput", "contract_capability", "passport_read_only_access", "custody_and_authority", "legal_tax_treasury_review", "operational_risk", "decision", "release_gate_assessment", "summary" },
+        ["blockchain_settlement_status_record"] = new[] { "record_id", "created_utc", "effective_utc", "status", "archrealms_identity_id", "node_id", "settlement_batch_id", "settlement_epoch_id", "source_settlement_batch_record_id", "chain_status", "participant_settlement", "summary" },
+        ["passport_cc_capacity_report"] = new[] { "record_id", "created_utc", "release_lane", "ledger_namespace", "policy_version", "service_class", "reporting_period_start_utc", "reporting_period_end_utc", "conservative_service_liability_capacity_base_units", "outstanding_cc_before_base_units", "max_issuance_base_units", "capacity_haircut_basis_points", "independent_volume_qualified", "thin_market_issuance_zero", "continuity_reserve_excluded", "operational_reserve_excluded", "affiliate_trade_exclusion_applied", "proof_history_haircut", "uptime_haircut", "retrieval_haircut", "repair_haircut", "concentration_haircut", "churn_haircut", "audit_confidence_haircut", "capacity_evidence_refs", "summary" },
+        ["device_credential_record"] = new[] { "record_id", "created_utc", "effective_utc", "status", "archrealms_identity_id", "device_id", "device_label", "device_class", "client_platform", "credential_origin", "public_key_algorithm", "public_key_format", "public_key_path", "public_key_sha256", "authorized_scopes", "attestation_refs", "summary" },
+        ["device_revocation_record"] = new[] { "record_id", "created_utc", "effective_utc", "status", "archrealms_identity_id", "revoked_device_record_id", "device_id", "revocation_reason", "supersedes_credential_status", "summary" },
+        ["passport_ledger_correction"] = new[] { "correction_id", "created_utc", "release_lane", "ledger_namespace", "policy_version", "account_id", "archrealms_identity_id", "wallet_key_id", "asset_code", "correction_event_type", "amount_base_units", "reason_code", "target_record_path", "target_record_sha256", "admin_authority_path", "admin_authority_sha256", "ledger_event_path", "ledger_event_sha256", "summary" },
+        ["passport_metering_admission_record"] = new[] { "record_id", "created_utc", "effective_utc", "status", "admission_scope", "archrealms_identity_id", "device_id", "package_id", "package_root", "manifest_path", "package_verification_report_path", "source_metering_report_path", "source_metering_report_id", "package_verification", "admitted_metering", "settlement_status", "signature", "summary" },
+        ["passport_metering_audit_challenge_record"] = new[] { "record_id", "created_utc", "effective_utc", "status", "registrar_id", "admission_record_id", "package_id", "challenge_scope", "challenge_reason", "sample_policy", "challenged_records", "response_due_utc", "audit_result", "settlement_status", "summary" },
+        ["passport_metering_correction_record"] = new[] { "record_id", "created_utc", "effective_utc", "status", "registrar_id", "admission_record_id", "package_id", "correction_reason", "supersedes_record_ids", "affected_records", "prior_metering", "corrected_metering", "settlement_status", "summary" },
+        ["passport_metering_dispute_record"] = new[] { "record_id", "created_utc", "effective_utc", "status", "opened_by_role", "opened_by_id", "admission_record_id", "package_id", "dispute_scope", "challenged_records", "requested_remedy", "evidence_refs", "response_due_utc", "disposition", "settlement_status", "summary" },
+        ["passport_metering_settlement_handoff_record"] = new[] { "record_id", "created_utc", "effective_utc", "status", "registrar_id", "policy_version", "admission_record_id", "package_id", "audit_status", "dispute_status", "correction_record_ids", "excluded_record_ids", "final_metering", "handoff_status", "target_settlement_layer", "settlement_status", "summary" },
+        ["metering_status_record"] = new[] { "record_id", "created_utc", "effective_utc", "status", "archrealms_identity_id", "device_id", "node_id", "measurement_epoch", "source", "verified_service", "reliability", "settlement_preview", "summary" },
+        ["passport_monetary_account_export"] = new[] { "record_id", "created_utc", "release_lane", "ledger_namespace", "policy_version", "account_id", "event_count", "events", "balances", "account_hash_chain", "key_history", "transparency_root_sha256", "transparency_root_export_path", "verifier_replay_root", "verifier", "summary" },
+        ["passport_monetary_ledger_event"] = new[] { "event_id", "event_type", "created_utc", "release_lane", "telemetry_environment", "ledger_namespace", "production_token_record", "staging_record", "account_id", "archrealms_identity_id", "wallet_key_id", "asset_code", "amount_base_units", "global_sequence", "account_sequence", "prior_account_event_hash", "server_received_utc", "anti_replay_nonce", "device_session_id", "policy_version", "evidence_references", "signature_status", "wallet_signature_algorithm", "wallet_signature_base64", "signed_event_hash_sha256", "wallet_public_key_path", "event_hash_sha256", "summary" },
+        ["passport_monetary_transparency_root"] = new[] { "record_id", "created_utc", "release_lane", "ledger_namespace", "policy_version", "root_algorithm", "event_count", "first_global_sequence", "last_global_sequence", "event_hashes", "event_leaves", "epoch_root_sha256", "public_chain_anchor_status", "summary" },
+        ["node_capacity_snapshot_record"] = new[] { "record_id", "created_utc", "effective_utc", "status", "archrealms_identity_id", "device_id", "node_id", "client_platform", "passport_client", "storage_mode", "storage_limit_bytes", "local_repo_path_hash", "ipfs_peer_id", "participation_scopes", "measurement_epoch", "observed_capacity", "signature", "summary" },
+        ["passport_identity_record"] = new[] { "record_id", "created_utc", "effective_utc", "status", "archrealms_identity_id", "display_name", "identity_mode", "citizenship_class", "declared_scope", "recovery_authority", "attestation_refs", "summary" },
+        ["repair_participation_record"] = new[] { "record_id", "created_utc", "effective_utc", "status", "archrealms_identity_id", "device_id", "node_id", "repair_id", "service_class", "content_ref", "repair_trigger", "repair_action", "metering_claim", "signature", "summary" },
+        ["retrieval_observation_record"] = new[] { "record_id", "created_utc", "effective_utc", "status", "archrealms_identity_id", "device_id", "node_id", "service_class", "content_ref", "request", "delivery", "metering_claim", "signature", "summary" },
+        ["storage_assignment_acknowledgment_record"] = new[] { "record_id", "created_utc", "effective_utc", "status", "archrealms_identity_id", "device_id", "node_id", "assignment_id", "assignment_issuer", "service_class", "content_ref", "assigned_replica", "measurement_epoch", "acknowledgment", "signature", "summary" },
+        ["storage_epoch_proof_record"] = new[] { "record_id", "created_utc", "effective_utc", "status", "archrealms_identity_id", "device_id", "node_id", "assignment_id", "service_class", "content_ref", "measurement_epoch", "challenge", "proof_response", "metering_claim", "signature", "summary" },
+        ["passport_storage_redemption"] = new[] { "record_id", "record_stage", "created_utc", "release_lane", "ledger_namespace", "policy_version", "account_id", "archrealms_identity_id", "wallet_key_id", "service_class", "storage_gb", "epoch_count", "cc_rate_per_gb_epoch_base_units", "total_cc_base_units", "quote_expires_utc", "accepted_redemption_id", "escrow_ledger_event_path", "escrow_ledger_event_sha256", "proof_record_path", "proof_record_sha256", "verified_gb_days", "burn_cc_base_units", "refund_cc_base_units", "failure_remedy", "summary" },
+        ["passport_wallet_key_binding"] = new[] { "record_id", "created_utc", "release_lane", "ledger_namespace", "policy_version", "status", "archrealms_identity_id", "authorizing_device_id", "wallet_key_id", "wallet_key_algorithm", "wallet_key_size_bits", "wallet_public_key_path", "wallet_public_key_sha256", "authorized_scopes", "prohibited_scopes", "summary" },
+    };
+
+    public static PassportRegistryRecordInspection Inspect(byte[] recordJson, string relativePath = "", bool allowTemplatePlaceholders = false)
     {
         var sha256 = ComputeSha256(recordJson);
         try
@@ -80,8 +112,13 @@ public static class PassportRegistryRecordInspector
             }
             else if (!DateTimeOffset.TryParse(createdUtc, out _))
             {
-                validationFailures.Add("created_utc_invalid");
+                if (!allowTemplatePlaceholders || !IsTemplatePlaceholder(createdUtc))
+                {
+                    validationFailures.Add("created_utc_invalid");
+                }
             }
+
+            ValidateRecordFamily(root, recordType, validationFailures);
 
             var inspection = new PassportRegistryRecordInspection
             {
@@ -218,6 +255,36 @@ public static class PassportRegistryRecordInspector
             JsonValueKind.Number => property.GetRawText(),
             _ => string.Empty
         };
+    }
+
+    private static void ValidateRecordFamily(
+        JsonElement root,
+        string recordType,
+        List<string> validationFailures)
+    {
+        if (!RequiredFieldsByRecordType.TryGetValue(recordType, out var requiredFields))
+        {
+            return;
+        }
+
+        foreach (var field in requiredFields)
+        {
+            if (!root.TryGetProperty(field, out var property) || !HasRequiredValue(property))
+            {
+                validationFailures.Add("record_family_required_field_missing:" + field);
+            }
+        }
+    }
+
+    private static bool HasRequiredValue(JsonElement property)
+    {
+        return property.ValueKind is not JsonValueKind.Undefined and not JsonValueKind.Null;
+    }
+
+    private static bool IsTemplatePlaceholder(string value)
+    {
+        var trimmed = (value ?? string.Empty).Trim();
+        return trimmed.Length >= 2 && trimmed.StartsWith("<", StringComparison.Ordinal) && trimmed.EndsWith(">", StringComparison.Ordinal);
     }
 
     private static bool Contains(string value, string filter)

@@ -12,7 +12,7 @@ public sealed class PassportRegistryRecordInspectorTests
         var json = """
         {
           "schema_version": 1,
-          "record_type": "passport_monetary_ledger_event",
+          "record_type": "passport_test_record",
           "event_id": "event-1",
           "created_utc": "2026-05-15T00:00:00Z",
           "signature_status": "wallet_signed",
@@ -36,7 +36,7 @@ public sealed class PassportRegistryRecordInspectorTests
         Assert.True(inspection.IsRecord);
         Assert.True(inspection.IsEnvelopeValid);
         Assert.Equal("1", inspection.SchemaVersion);
-        Assert.Equal("passport_monetary_ledger_event", inspection.RecordType);
+        Assert.Equal("passport_test_record", inspection.RecordType);
         Assert.Equal("event-1", inspection.RecordId);
         Assert.Equal("wallet_signed", inspection.Status);
         Assert.Equal("bafytest", inspection.Cid);
@@ -66,6 +66,56 @@ public sealed class PassportRegistryRecordInspectorTests
         Assert.Contains("record_identifier_required", inspection.ValidationFailures);
         Assert.Contains("created_utc_required", inspection.ValidationFailures);
         Assert.True(PassportRegistryRecordInspector.MatchesFilter(inspection, "created_utc_required"));
+    }
+
+    [Fact]
+    public void ReportsKnownRecordFamilyMissingFields()
+    {
+        var json = """
+        {
+          "schema_version": 1,
+          "record_type": "passport_identity_record",
+          "record_id": "identity-1",
+          "created_utc": "2026-05-15T00:00:00Z",
+          "effective_utc": "2026-05-15T00:00:00Z",
+          "status": "active",
+          "archrealms_identity_id": "archrealms:citizen:dan",
+          "identity_mode": "citizen",
+          "citizenship_class": "citizen",
+          "declared_scope": "mvp",
+          "recovery_authority": {},
+          "attestation_refs": [],
+          "summary": "Identity record."
+        }
+        """;
+
+        var inspection = PassportRegistryRecordInspector.Inspect(Encoding.UTF8.GetBytes(json));
+
+        Assert.True(inspection.IsRecord);
+        Assert.False(inspection.IsEnvelopeValid);
+        Assert.Contains("record_family_required_field_missing:display_name", inspection.ValidationFailures);
+    }
+
+    [Fact]
+    public void AllowsTemplatePlaceholderDatesWhenRequested()
+    {
+        var json = """
+        {
+          "schema_version": 1,
+          "record_type": "passport_test_record",
+          "record_id": "<record-id>",
+          "created_utc": "<YYYY-MM-DDTHH:MM:SSZ>"
+        }
+        """;
+
+        var strictInspection = PassportRegistryRecordInspector.Inspect(Encoding.UTF8.GetBytes(json));
+        var templateInspection = PassportRegistryRecordInspector.Inspect(
+            Encoding.UTF8.GetBytes(json),
+            "passport-test.template.json",
+            allowTemplatePlaceholders: true);
+
+        Assert.Contains("created_utc_invalid", strictInspection.ValidationFailures);
+        Assert.True(templateInspection.IsEnvelopeValid);
     }
 
     [Theory]

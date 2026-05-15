@@ -19,9 +19,13 @@ public sealed class PassportRegistryTemplateTests
             Assert.True(document.RootElement.TryGetProperty("schema_version", out _), templatePath);
             Assert.True(document.RootElement.TryGetProperty("record_type", out _), templatePath);
 
-            var inspection = PassportRegistryRecordInspector.Inspect(File.ReadAllBytes(templatePath), Path.GetFileName(templatePath));
+            var inspection = PassportRegistryRecordInspector.Inspect(
+                File.ReadAllBytes(templatePath),
+                Path.GetFileName(templatePath),
+                allowTemplatePlaceholders: true);
             Assert.True(inspection.IsRecord, templatePath);
             Assert.False(string.IsNullOrWhiteSpace(inspection.SchemaVersion), templatePath);
+            Assert.Empty(inspection.ValidationFailures);
         }
     }
 
