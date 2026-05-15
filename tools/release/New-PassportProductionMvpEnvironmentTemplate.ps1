@@ -2,7 +2,13 @@ param(
     [ValidateSet("Json", "PowerShell", "Env")]
     [string]$Format = "Json",
 
-    [string]$OutputPath
+    [string]$OutputPath,
+
+    [switch]$IncludeCurrentPreMvpReport,
+
+    [string]$PreMvpReportPath = "artifacts\release\pre-mvp-internal-verification-report.json",
+
+    [switch]$GenerateOperatorKey
 )
 
 $ErrorActionPreference = "Stop"
@@ -25,6 +31,48 @@ function New-Variable {
         description = $Description
         example = $Example
     }
+}
+
+function Get-Sha256Hex {
+    param(
+        [byte[]]$Bytes
+    )
+
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        return [System.BitConverter]::ToString($sha256.ComputeHash($Bytes)).Replace("-", "").ToLowerInvariant()
+    }
+    finally {
+        $sha256.Dispose()
+    }
+}
+
+function New-OperatorKey {
+    $bytes = New-Object byte[] 32
+    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    try {
+        $rng.GetBytes($bytes)
+    }
+    finally {
+        $rng.Dispose()
+    }
+
+    return [Convert]::ToBase64String($bytes)
+}
+
+function Set-VariableExample {
+    param(
+        [object[]]$Variables,
+        [string]$Name,
+        [string]$Example
+    )
+
+    $variable = $Variables | Where-Object { $_.name -eq $Name } | Select-Object -First 1
+    if ($null -eq $variable) {
+        throw "Template variable not found: $Name"
+    }
+
+    $variable.example = $Example
 }
 
 $variables = @(
@@ -81,11 +129,34 @@ $variables = @(
     New-Variable -Gate "production_release_approvals" -Name "ARCHREALMS_PASSPORT_CROWN_MONETARY_AUTHORITY_SIGNOFF_ID" -Description "Crown monetary authority signoff reference for production MVP release."
 )
 
+$generatedOperatorKey = ""
+$generatedOperatorKeySha256 = ""
+if ($IncludeCurrentPreMvpReport) {
+    $resolvedReportPath = [System.IO.Path]::GetFullPath($PreMvpReportPath)
+    if (-not (Test-Path -LiteralPath $resolvedReportPath -PathType Leaf)) {
+        throw "Pre-MVP verification report was not found: $resolvedReportPath"
+    }
+
+    $reportSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $resolvedReportPath).Hash.ToLowerInvariant()
+    Set-VariableExample -Variables $variables -Name "ARCHREALMS_PASSPORT_PRE_MVP_VERIFICATION_REPORT_PATH" -Example $resolvedReportPath
+    Set-VariableExample -Variables $variables -Name "ARCHREALMS_PASSPORT_PRE_MVP_VERIFICATION_REPORT_SHA256" -Example $reportSha256
+}
+
+if ($GenerateOperatorKey) {
+    $generatedOperatorKey = New-OperatorKey
+    $generatedOperatorKeySha256 = Get-Sha256Hex -Bytes ([System.Text.Encoding]::UTF8.GetBytes($generatedOperatorKey.Trim()))
+    Set-VariableExample -Variables $variables -Name "ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY" -Example $generatedOperatorKey
+    Set-VariableExample -Variables $variables -Name "ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY_SHA256" -Example $generatedOperatorKeySha256
+}
+
 $template = [pscustomobject][ordered]@{
     schema = "archrealms.passport.production_mvp_environment_template.v1"
     created_utc = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
     readiness_gate = "tools/release/Test-PassportProductionMvpReadiness.ps1"
     note = "Fill the values in a secure deployment environment. Do not commit populated env files."
+    current_pre_mvp_report_included = [bool]$IncludeCurrentPreMvpReport
+    generated_operator_key_included = [bool]$GenerateOperatorKey
+    generated_operator_key_sha256 = $generatedOperatorKeySha256
     variables = $variables
 }
 
@@ -97,6 +168,12 @@ function Convert-ToPowerShellTemplate {
         "# Fill values in a secure shell or deployment secret store. Do not commit populated files.",
         ""
     )
+    if ($GenerateOperatorKey) {
+        $lines += "# A new operator key was generated for this template. Store it only in the secure production secret store."
+        $lines += "# Operator key SHA-256: $generatedOperatorKeySha256"
+        $lines += ""
+    }
+
     foreach ($variable in $Variables) {
         $lines += "# gate: $($variable.gate)"
         $lines += "# $($variable.description)"
@@ -120,6 +197,12 @@ function Convert-ToEnvTemplate {
         "# Fill values in a secure deployment environment. Do not commit populated files.",
         ""
     )
+    if ($GenerateOperatorKey) {
+        $lines += "# A new operator key was generated for this template. Store it only in the secure production secret store."
+        $lines += "# Operator key SHA-256: $generatedOperatorKeySha256"
+        $lines += ""
+    }
+
     foreach ($variable in $Variables) {
         $lines += "# gate: $($variable.gate)"
         $lines += "# $($variable.description)"
