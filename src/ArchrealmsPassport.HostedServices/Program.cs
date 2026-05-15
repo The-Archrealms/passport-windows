@@ -5,6 +5,8 @@ var builder = WebApplication.CreateBuilder(args);
 var app = builder.Build();
 
 var store = PassportHostedFileStore.FromEnvironment();
+var signer = PassportHostedServiceSigner.FromDataRoot(store.Root);
+var operatorGate = PassportHostedOperatorGate.FromEnvironment();
 
 app.MapGet("/health", () => Results.Json(new
 {
@@ -33,49 +35,94 @@ app.MapPost("/ai/chat", (HttpRequest httpRequest, PassportAiChatRequest request)
     return result.Succeeded ? Results.Json(result) : Results.BadRequest(result);
 });
 
-app.MapPost("/capacity/reports/cc", (PassportCcCapacityReportRequest request) =>
+app.MapPost("/capacity/reports/cc", (HttpRequest httpRequest, PassportCcCapacityReportRequest request) =>
 {
+    var operatorAuthorization = AuthorizeOperator(httpRequest, operatorGate);
+    if (operatorAuthorization != null)
+    {
+        return operatorAuthorization;
+    }
+
     var result = PassportHostedPolicy.CreateCcCapacityReport(request);
     if (!result.Succeeded || result.Record == null)
     {
         return Results.BadRequest(result);
     }
 
-    store.SaveRecord(result.RecordId, result.Record, result.RecordSha256);
+    result = signer.Sign(result, "cc_capacity_report");
+    store.SaveRecord(result.RecordId, result.Record!, result.RecordSha256);
     return Results.Json(result);
 });
 
-app.MapPost("/arch/genesis/manifests", (PassportArchGenesisManifestRequest request) =>
+app.MapPost("/arch/genesis/manifests", (HttpRequest httpRequest, PassportArchGenesisManifestRequest request) =>
 {
+    var operatorAuthorization = AuthorizeOperator(httpRequest, operatorGate);
+    if (operatorAuthorization != null)
+    {
+        return operatorAuthorization;
+    }
+
     var result = PassportHostedPolicy.CreateArchGenesisManifest(request);
     if (!result.Succeeded || result.Record == null)
     {
         return Results.BadRequest(result);
     }
 
-    store.SaveRecord(result.RecordId, result.Record, result.RecordSha256);
+    result = signer.Sign(result, "arch_genesis_manifest");
+    store.SaveRecord(result.RecordId, result.Record!, result.RecordSha256);
     return Results.Json(result);
 });
 
-app.MapPost("/admin/authority/validate", (PassportAdminAuthorityValidationRequest request) =>
+app.MapPost("/admin/authority/validate", (HttpRequest httpRequest, PassportAdminAuthorityValidationRequest request) =>
 {
+    var operatorAuthorization = AuthorizeOperator(httpRequest, operatorGate);
+    if (operatorAuthorization != null)
+    {
+        return operatorAuthorization;
+    }
+
     var result = PassportHostedPolicy.ValidateAdminAuthority(request);
     return result.Succeeded ? Results.Json(result) : Results.BadRequest(result);
 });
 
-app.MapPost("/storage/delivery/requests", (PassportStorageDeliveryRequest request) =>
+app.MapPost("/storage/delivery/requests", (HttpRequest httpRequest, PassportStorageDeliveryRequest request) =>
 {
+    var operatorAuthorization = AuthorizeOperator(httpRequest, operatorGate);
+    if (operatorAuthorization != null)
+    {
+        return operatorAuthorization;
+    }
+
     var result = PassportHostedPolicy.AcceptStorageDeliveryRequest(request);
     if (!result.Succeeded || result.Record == null)
     {
         return Results.BadRequest(result);
     }
 
-    store.SaveRecord(result.RecordId, result.Record, result.RecordSha256);
+    result = signer.Sign(result, "storage_delivery_acceptance");
+    store.SaveRecord(result.RecordId, result.Record!, result.RecordSha256);
     return Results.Json(result);
 });
 
 app.Run();
+
+static IResult? AuthorizeOperator(HttpRequest request, PassportHostedOperatorGate operatorGate)
+{
+    var authorization = operatorGate.Authorize(request.Headers[PassportHostedOperatorGate.HeaderName].ToString());
+    if (authorization.Succeeded)
+    {
+        return null;
+    }
+
+    var body = new
+    {
+        succeeded = false,
+        message = authorization.Message
+    };
+    return authorization.ConfigurationMissing
+        ? Results.Json(body, statusCode: StatusCodes.Status503ServiceUnavailable)
+        : Results.Json(body, statusCode: StatusCodes.Status401Unauthorized);
+}
 
 public partial class Program
 {

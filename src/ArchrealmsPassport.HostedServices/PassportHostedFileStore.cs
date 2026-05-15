@@ -23,6 +23,8 @@ public sealed class PassportHostedFileStore : IPassportHostedStore
         Directory.CreateDirectory(AppendLogRoot);
     }
 
+    public string Root => root;
+
     private string SessionRoot => Path.Combine(root, "records", "ai", "sessions");
 
     private string RecordRoot => Path.Combine(root, "records", "hosted");

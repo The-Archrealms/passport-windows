@@ -27,9 +27,16 @@ The hosted services project provides the production-facing API boundary that Win
 - AI session records are written without bearer tokens.
 - Hosted records are written with SHA-256 sidecars and append-log entries under `append-log/*.jsonl`.
 
+## Operator And Signing Controls
+
+- Authority-bearing endpoints require `X-Archrealms-Operator-Key` when `ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY_SHA256` is configured.
+- Missing operator-key configuration is allowed only in local/development mode.
+- Hosted records returned by capacity, genesis, and storage-delivery endpoints are signed with the hosted service signing key.
+- Set `ARCHREALMS_PASSPORT_HOSTED_SIGNING_KEY_PATH` to control the service signing-key location.
+
 ## Current Limits
 
-- Production deployment still needs managed durable storage, backups, service signing-key custody, operator authentication, role membership lookup, telemetry, rate limits, incident logging, and release-lane configuration.
+- Production deployment still needs managed durable storage, backups, managed signing-key custody, role membership lookup, telemetry, rate limits, incident logging, and release-lane configuration.
 - The AI chat endpoint currently returns a gateway-contract response; production still needs the open-weight model runtime and vector store behind the gateway.
 - The service does not make fiat, exchange, external wallet, staking, yield, governance, or public stable-value claims.
 
