@@ -13,6 +13,7 @@ The hosted services project provides the production-facing API boundary that Win
 | Endpoint | Purpose | Current implementation |
 |---|---|---|
 | `GET /health` | Liveness and contract version | Returns `passport-hosted-services-v1` |
+| `GET /ai/runtime/status` | Non-secret hosted open-weight AI readiness | Reports whether inference URL, approved model ID, model artifact hash, license approval, vector store, and knowledge approval root are configured |
 | `POST /ai/session` | Authorize a Passport-signed AI session request | Verifies request hash, device signature evidence, token/key separation, expiry, and non-authority boundaries |
 | `POST /ai/chat` | Authenticated AI guide response | Requires matching bearer session token; blocks private key, seed, and recovery-secret prompts; retrieves approved knowledge-pack chunks; calls an OpenAI-compatible open-weight runtime when configured; otherwise returns the deterministic gateway-contract fallback |
 | `POST /capacity/reports/cc` | Create conservative CC capacity reports | Enforces positive conservative capacity, no thin-market issuance, qualified independent volume, reserve exclusion, haircut range, and authority hash evidence |
@@ -49,6 +50,7 @@ The hosted services project provides the production-facing API boundary that Win
 - Set `ARCHREALMS_PASSPORT_AI_MODEL_ID` to the approved model ID for the release lane.
 - Set `ARCHREALMS_PASSPORT_AI_INFERENCE_API_KEY` when the runtime endpoint requires bearer authentication.
 - Optional controls: `ARCHREALMS_PASSPORT_AI_SYSTEM_PROMPT`, `ARCHREALMS_PASSPORT_AI_MAX_OUTPUT_TOKENS`, and `ARCHREALMS_PASSPORT_AI_TEMPERATURE`.
+- Set `ARCHREALMS_PASSPORT_AI_MODEL_ARTIFACT_SHA256`, `ARCHREALMS_PASSPORT_AI_MODEL_LICENSE_APPROVAL_ID`, `ARCHREALMS_PASSPORT_AI_VECTOR_STORE_PROVIDER`, `ARCHREALMS_PASSPORT_AI_VECTOR_STORE_ID`, and `ARCHREALMS_PASSPORT_AI_KNOWLEDGE_APPROVAL_ROOT` so `/ai/runtime/status` can prove the production AI lane is configured before clients rely on it.
 - Passport clients call only the hosted gateway. They do not receive model runtime credentials and do not call vLLM/TGI directly.
 
 ## Release-Lane Configuration

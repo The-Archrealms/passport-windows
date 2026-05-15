@@ -95,6 +95,46 @@ public sealed class PassportHostedAiRuntimeTests
         Assert.Contains("\"model\":\"Qwen/Qwen3-8B\"", handler.RequestBody, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void RuntimeReadinessRequiresApprovedModelVectorStoreAndKnowledgeRoot()
+    {
+        var readiness = PassportHostedAiRuntimeReadiness.FromValues(
+            "https://model-runtime.example/v1",
+            "Qwen/Qwen3-8B",
+            new string('a', 64),
+            "license-approval-1",
+            "managed-vector-store",
+            "archrealms-passport-mvp",
+            "knowledge-root-2026-05-15");
+
+        Assert.True(readiness.Ready, string.Join("; ", readiness.Missing));
+        Assert.True(readiness.InferenceBaseUrlConfigured);
+        Assert.Equal("Qwen/Qwen3-8B", readiness.ModelId);
+        Assert.Equal(new string('a', 64), readiness.ModelArtifactSha256);
+    }
+
+    [Fact]
+    public void RuntimeReadinessRejectsMissingOrUnsafeConfiguration()
+    {
+        var readiness = PassportHostedAiRuntimeReadiness.FromValues(
+            "http://model-runtime.example/v1",
+            "",
+            "not-a-sha",
+            "",
+            "",
+            "",
+            "");
+
+        Assert.False(readiness.Ready);
+        Assert.Contains("ARCHREALMS_PASSPORT_AI_INFERENCE_BASE_URL", readiness.Missing);
+        Assert.Contains("ARCHREALMS_PASSPORT_AI_MODEL_ID", readiness.Missing);
+        Assert.Contains("ARCHREALMS_PASSPORT_AI_MODEL_ARTIFACT_SHA256", readiness.Missing);
+        Assert.Contains("ARCHREALMS_PASSPORT_AI_MODEL_LICENSE_APPROVAL_ID", readiness.Missing);
+        Assert.Contains("ARCHREALMS_PASSPORT_AI_VECTOR_STORE_PROVIDER", readiness.Missing);
+        Assert.Contains("ARCHREALMS_PASSPORT_AI_VECTOR_STORE_ID", readiness.Missing);
+        Assert.Contains("ARCHREALMS_PASSPORT_AI_KNOWLEDGE_APPROVAL_ROOT", readiness.Missing);
+    }
+
     private sealed class CapturingHandler : HttpMessageHandler
     {
         public string RequestUri { get; private set; } = string.Empty;

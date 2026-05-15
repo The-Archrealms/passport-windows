@@ -20,6 +20,8 @@ app.MapGet("/health", () => Results.Json(new
     utc = DateTimeOffset.UtcNow
 }));
 
+app.MapGet("/ai/runtime/status", () => Results.Json(PassportHostedAiRuntimeReadiness.FromEnvironment()));
+
 app.MapPost("/ai/session", (HttpRequest httpRequest, PassportAiSessionAuthorizationRequest request) =>
 {
     var rateLimit = AuthorizeRate(httpRequest, rateLimiter, "ai-session", maxRequests: 30, window: TimeSpan.FromMinutes(1));
