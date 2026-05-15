@@ -625,6 +625,18 @@ Then run:
   -OutputPath .\artifacts\release\staging-readiness-report.json
 ```
 
+For operator closeout after the staging packet is filled, use the fail-closed wrapper. It validates the packet, builds a closeout environment from the packet plus pre-MVP/artifact evidence, runs staging readiness, and writes the staging report path/hash values needed by canary and production:
+
+```powershell
+.\tools\release\Complete-PassportStagingReadinessEvidencePacket.ps1 `
+  -PacketRoot C:\secure\passport-staging `
+  -EnvironmentFile .\artifacts\release\staging.env `
+  -PreMvpReportPath .\artifacts\release\pre-mvp-internal-verification-report.json `
+  -PreMvpReportSha256 <sha256> `
+  -StagingArtifactValidationReportPath .\artifacts\release\staging-artifact-validation-report.json `
+  -StagingArtifactValidationReportSha256 <sha256>
+```
+
 Canary MVP readiness is the first citizen-facing real-token lane. Generate a canary environment template after the staging report and a `CanaryMvp` artifact validation report exist, then complete a canary readiness evidence packet with policy, incident-review, balance-reconciliation, service-delivery, support-readiness, and production-promotion records:
 
 ```powershell

@@ -28,6 +28,20 @@ Validate the filled packet before running the staging readiness gate:
   -RequireNoPlaceholders
 ```
 
+After the packet is filled and the pre-MVP plus staging artifact report paths and hashes are available, use the closeout command to validate the packet, build the staging closeout environment, run the readiness gate, and emit the report/hash values required by canary and production:
+
+```powershell
+.\tools\release\Complete-PassportStagingReadinessEvidencePacket.ps1 `
+  -PacketRoot C:\secure\passport-staging `
+  -OutputDirectory .\artifacts\release\staging-readiness-closeout `
+  -StagingReadinessReportPath .\artifacts\release\staging-readiness-report.json `
+  -EnvironmentFile .\artifacts\release\staging.env `
+  -PreMvpReportPath .\artifacts\release\pre-mvp-internal-verification-report.json `
+  -PreMvpReportSha256 <pre-mvp-report-sha256> `
+  -StagingArtifactValidationReportPath .\artifacts\release\staging-artifact-validation-report.json `
+  -StagingArtifactValidationReportSha256 <staging-artifact-validation-report-sha256>
+```
+
 The readiness gate validates:
 
 - operational drill schema, lane, matching operational drill ID, endpoint/ledger/telemetry values, package version, policy version, operator, incident owner, evidence references, upgrade validation, endpoint failover, signing verification, ledger export replay, recovery/revocation, storage proof, storage redemption dry-run, conversion disclosure dry-run, telemetry/privacy, incident response, support access controls, AI gateway auth/privacy, and prohibited monetary claim blocking;
