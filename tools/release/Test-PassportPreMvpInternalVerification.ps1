@@ -214,6 +214,30 @@ function Test-RequiredTrueField {
     return ""
 }
 
+function Test-EvidenceReferences {
+    param(
+        [object]$Object,
+        [string]$Name,
+        [int]$MinimumCount
+    )
+
+    $failures = @()
+    $references = @($Object.evidence_references)
+    if ($references.Count -lt $MinimumCount) {
+        $failures += "$Name must include at least $MinimumCount evidence references"
+    }
+
+    for ($index = 0; $index -lt $references.Count; $index++) {
+        $reference = ([string]$references[$index]).Trim()
+        $failure = Test-NotPlaceholderValue -Name "$Name evidence reference $($index + 1)" -Value $reference
+        if ($failure) {
+            $failures += $failure
+        }
+    }
+
+    return $failures
+}
+
 function Test-EvidenceFile {
     param(
         [string]$Path,
@@ -322,9 +346,7 @@ function Test-PreMvpSimulationRunEvidence {
         }
     }
 
-    if (@($report.evidence_references).Count -lt 3) {
-        $failures += "Pre-MVP simulation run report must include at least three evidence references"
-    }
+    $failures += Test-EvidenceReferences -Object $report -Name "Pre-MVP simulation run report" -MinimumCount 3
 
     return [pscustomobject][ordered]@{
         passed = ($failures.Count -eq 0)
@@ -388,9 +410,7 @@ function Test-PreMvpStaffStewardPilotEvidence {
         }
     }
 
-    if (@($report.evidence_references).Count -lt 3) {
-        $failures += "Pre-MVP staff/steward pilot report must include at least three evidence references"
-    }
+    $failures += Test-EvidenceReferences -Object $report -Name "Pre-MVP staff/steward pilot report" -MinimumCount 3
 
     return [pscustomobject][ordered]@{
         passed = ($failures.Count -eq 0)

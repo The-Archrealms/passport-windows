@@ -7,7 +7,17 @@ Pre-MVP verification is required before citizen-facing token release, but it is 
 - simulation runs;
 - staff/steward pilots.
 
-Copy the templates in this folder into the controlled verification evidence system, fill every placeholder, approve or sign them under the internal verification policy, then pass the file paths and SHA-256 hashes to the verifier:
+Generate the simulation-run report from the local test harness, then record the output path and SHA-256 in the controlled verification evidence system:
+
+```powershell
+.\tools\release\New-PassportPreMvpSimulationRunReport.ps1 `
+  -OutputPath .\artifacts\release\pre-mvp-simulation-run-report.json `
+  -EvidenceRoot .\artifacts\release\pre-mvp-simulation-run-evidence
+
+$simulationHash = (Get-FileHash -Algorithm SHA256 .\artifacts\release\pre-mvp-simulation-run-report.json).Hash.ToLowerInvariant()
+```
+
+Copy the staff/steward pilot template in this folder into the controlled verification evidence system, fill every placeholder, approve or sign it under the internal verification policy, then pass both evidence file paths and SHA-256 hashes to the verifier:
 
 ```powershell
 .\tools\release\Test-PassportPreMvpInternalVerification.ps1 `
@@ -27,4 +37,4 @@ ARCHREALMS_PASSPORT_PRE_MVP_STAFF_STEWARD_PILOT_REPORT_PATH
 ARCHREALMS_PASSPORT_PRE_MVP_STAFF_STEWARD_PILOT_REPORT_SHA256
 ```
 
-The reports must use the `internal-verification` lane and must prove that no production ARCH, production CC, Crown reserve balance, citizen production account history, or production service-liability record was created.
+The reports must use the `internal-verification` lane, include real non-placeholder evidence references, and prove that no production ARCH, production CC, Crown reserve balance, citizen production account history, or production service-liability record was created.

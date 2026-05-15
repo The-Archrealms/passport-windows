@@ -526,15 +526,19 @@ The packaging script accepts a stable signing certificate through either:
 
 If those are not provided, the script falls back to a generated self-signed test certificate. That fallback is suitable for preview and sideload testing, but a stable certificate should be configured before treating public sideload `MSIX` upgrades as production-grade.
 
-Pre-MVP internal verification has its own gate. Run it after building an `InternalVerification` lane artifact and after copying/filling the simulation-run and staff/steward pilot evidence templates under `deploy/pre-mvp-internal-verification/` into the controlled verification evidence system. The report must prove the named PRD/ARD pre-MVP checks ran and that synthetic/fake records cannot migrate into production balances:
+Pre-MVP internal verification has its own gate. Run it after building an `InternalVerification` lane artifact, generating the simulation-run evidence, and copying/filling the staff/steward pilot evidence template under `deploy/pre-mvp-internal-verification/` into the controlled verification evidence system. The report must prove the named PRD/ARD pre-MVP checks ran and that synthetic/fake records cannot migrate into production balances:
 
 ```powershell
 .\tools\release\Publish-PassportWindows.ps1 `
   -Lane InternalVerification `
   -SkipIpfsRuntimeBootstrap
 
+.\tools\release\New-PassportPreMvpSimulationRunReport.ps1 `
+  -OutputPath .\artifacts\release\pre-mvp-simulation-run-report.json `
+  -EvidenceRoot .\artifacts\release\pre-mvp-simulation-run-evidence
+
 .\tools\release\Test-PassportPreMvpInternalVerification.ps1 `
-  -SimulationRunReportPath <controlled-simulation-run-report.json> `
+  -SimulationRunReportPath .\artifacts\release\pre-mvp-simulation-run-report.json `
   -SimulationRunReportSha256 <sha256> `
   -StaffStewardPilotReportPath <controlled-staff-steward-pilot-report.json> `
   -StaffStewardPilotReportSha256 <sha256> `
