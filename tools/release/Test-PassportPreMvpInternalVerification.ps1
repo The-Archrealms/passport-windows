@@ -757,6 +757,11 @@ if ($SkipDeploymentValidation) {
         -Passed $false `
         -Failures @("Production release evidence packet validation was skipped; pre-MVP verification cannot pass with skipped deployment validation.")
     $checks += New-Check `
+        -Id "staff_steward_pilot_handoff_validation" `
+        -Description "Staff/steward pilot handoff generation and fail-closed validation are exercised before the external pilot evidence gate can be closed." `
+        -Passed $false `
+        -Failures @("Staff/steward pilot handoff validation was skipped; pre-MVP verification cannot pass with skipped deployment validation.")
+    $checks += New-Check `
         -Id "staging_readiness_gate_validation" `
         -Description "Staging readiness gate generation and validation are exercised before production release gating can depend on it." `
         -Passed $false `
@@ -836,6 +841,10 @@ else {
         -Id "production_release_evidence_packet_validation" `
         -Description "Production release evidence packet generation and redaction are validated before release signoff." `
         -Result (Invoke-Tool -FilePath "powershell" -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "tools\release\Test-PassportProductionMvpReleaseEvidencePacket.ps1", "-UseSyntheticFixtures", "-OutputPath", "artifacts\release\production-mvp-release-evidence-packet-validation-report.json"))
+    $checks += New-ToolCheck `
+        -Id "staff_steward_pilot_handoff_validation" `
+        -Description "Staff/steward pilot handoff generation and fail-closed validation are exercised before the external pilot evidence gate can be closed." `
+        -Result (Invoke-Tool -FilePath "powershell" -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "tools\release\Test-PassportPreMvpStaffStewardPilotHandoff.ps1", "-UseGeneratedFixture", "-OutputPath", "artifacts\release\pre-mvp-staff-steward-pilot-handoff-validation-report.json"))
     $checks += New-ToolCheck `
         -Id "staging_readiness_gate_validation" `
         -Description "Staging readiness gate generation and validation are exercised before production release gating can depend on it." `
@@ -991,6 +1000,7 @@ $requirements = @(
     New-Requirement -Id "production_provisioning_packet" -Description "The full production provisioning packet can be validated as one operator handoff before ProductionMvp readiness values are loaded." -CheckIds @("production_provisioning_packet_validation") -Checks $checks -Evidence "Consolidated packet validation runs signing, endpoint, storage, signing-custody, hosted-services, managed-signing, AI runtime, ops, and monetary validators."
     New-Requirement -Id "production_provisioning_packet_scaffold" -Description "The production provisioning packet can be generated as a controlled working copy and validated through PacketRoot mode." -CheckIds @("production_provisioning_packet_scaffold_validation") -Checks $checks -Evidence "Scaffolder copies production provisioning folders, writes a manifest, and validates the generated packet through Test-PassportProductionProvisioningPacket.ps1 -PacketRoot."
     New-Requirement -Id "production_release_evidence_packet" -Description "The production release evidence packet can be generated without serializing environment secrets and can summarize readiness blockers for signoff." -CheckIds @("production_release_evidence_packet_validation") -Checks $checks -Evidence "Release evidence validator uses synthetic fixtures to exercise packet generation, report copying, SHA-256 recording, environment-value redaction, and blocking-gate summary output."
+    New-Requirement -Id "staff_steward_pilot_handoff" -Description "The staff/steward pilot has an operator handoff that generates a packet, runbook, manifest, and fail-closed validation before the real pilot evidence is accepted." -CheckIds @("staff_steward_pilot_handoff_validation") -Checks $checks -Evidence "Pilot handoff validation generates the staff/steward evidence packet, proves template validation passes, proves final validation fails closed with placeholders, and records the exact commands for report generation and pre-MVP rerun."
     New-Requirement -Id "staging_readiness_gate" -Description "The staging readiness gate can prove staging artifact isolation, staging endpoint configuration, operational drill evidence, rollback evidence, and signed promotion approvals before canary or production release." -CheckIds @("staging_readiness_gate_validation") -Checks $checks -Evidence "Staging readiness validator uses synthetic fixtures to exercise report/hash validation, staging artifact validation, endpoint isolation, operational drill evidence, rollback evidence, promotion approvals, and no staging-to-production migration checks."
     New-Requirement -Id "staging_readiness_evidence_packet" -Description "The staging readiness evidence packet can be generated and validated before staging readiness values are loaded." -CheckIds @("staging_readiness_evidence_packet_validation") -Checks $checks -Evidence "Staging readiness evidence packet validation checks operational drill, rollback drill, promotion approval, hashes, and cross-references."
     New-Requirement -Id "canary_mvp_readiness_gate" -Description "The Canary MVP readiness gate can prove incident review, balance reconciliation, service-delivery reconciliation, support readiness, and signed production-promotion approvals before ProductionMvp release." -CheckIds @("canary_mvp_readiness_gate_validation") -Checks $checks -Evidence "Canary MVP readiness validator uses synthetic fixtures to exercise staging evidence, CanaryMvp artifact validation, policy limits, incident review, balance reconciliation, service delivery reconciliation, support readiness, and production-promotion approval checks."

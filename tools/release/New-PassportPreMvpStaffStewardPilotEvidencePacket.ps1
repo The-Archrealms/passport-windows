@@ -7,6 +7,9 @@ param(
     [string]$AppCommit,
     [string]$ArtifactManifestPath = "<internal-verification-artifact-manifest-path>",
     [string]$ArtifactManifestSha256 = "<sha256>",
+    [string]$ProductionReadinessReportPath = "<production-mvp-readiness-report-path>",
+    [string]$ProductionReadinessReportSha256 = "<sha256>",
+    [string[]]$RemainingProductionBlocker = @("<known-production-readiness-blocker>"),
     [switch]$Force
 )
 
@@ -122,14 +125,14 @@ $issueReview = [pscustomobject][ordered]@{
     pilot_id = $PilotId
     pilot_owner = $PilotOwner
     policy_version = $PolicyVersion
-    production_readiness_report_path = "<production-mvp-readiness-report-path>"
-    production_readiness_report_sha256 = "<sha256>"
+    production_readiness_report_path = $ProductionReadinessReportPath
+    production_readiness_report_sha256 = $ProductionReadinessReportSha256
     production_readiness_blockers_reviewed = $false
     pilot_signoff_signed = $false
     no_pilot_blocking_defects = $false
     no_production_records_created = $false
     pilot_blockers = @()
-    remaining_production_blockers = @("<known-production-readiness-blocker>")
+    remaining_production_blockers = @($RemainingProductionBlocker)
     review_signoff_reference = "<signature-or-controlled-approval-id>"
 }
 

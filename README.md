@@ -537,14 +537,17 @@ Pre-MVP internal verification has its own gate. Run it after building an `Intern
   -OutputPath .\artifacts\release\pre-mvp-simulation-run-report.json `
   -EvidenceRoot .\artifacts\release\pre-mvp-simulation-run-evidence
 
-.\tools\release\New-PassportPreMvpStaffStewardPilotEvidencePacket.ps1 `
-  -OutputDirectory C:\secure\passport-pilot `
+.\tools\release\New-PassportPreMvpStaffStewardPilotHandoff.ps1 `
+  -OutputDirectory C:\secure\passport-pilot-handoff `
   -PilotId <pre-mvp-staff-steward-pilot-id> `
   -PilotOwner <pilot-owner> `
   -ParticipantCount 1
 
+.\tools\release\Test-PassportPreMvpStaffStewardPilotHandoff.ps1 `
+  -HandoffRoot C:\secure\passport-pilot-handoff
+
 .\tools\release\Test-PassportPreMvpStaffStewardPilotEvidencePacket.ps1 `
-  -PacketRoot C:\secure\passport-pilot `
+  -PacketRoot C:\secure\passport-pilot-handoff\pilot-evidence `
   -RequireNoPlaceholders
 
 .\tools\release\New-PassportPreMvpStaffStewardPilotReport.ps1 `
@@ -552,7 +555,7 @@ Pre-MVP internal verification has its own gate. Run it after building an `Intern
   -PilotId <pre-mvp-staff-steward-pilot-id> `
   -PilotOwner <pilot-owner> `
   -ParticipantCount 1 `
-  -EvidencePacketPath C:\secure\passport-pilot `
+  -EvidencePacketPath C:\secure\passport-pilot-handoff\pilot-evidence `
   -ConfirmCompleted `
   -ConfirmStaffOrStewardParticipants `
   -ConfirmCrownOwnedDevices `

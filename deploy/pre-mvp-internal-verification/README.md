@@ -17,7 +17,20 @@ Generate the simulation-run report from the local test harness, then record the 
 $simulationHash = (Get-FileHash -Algorithm SHA256 .\artifacts\release\pre-mvp-simulation-run-report.json).Hash.ToLowerInvariant()
 ```
 
-Create a staff/steward pilot evidence packet before the controlled pilot, then fill the generated JSON records after the pilot is complete:
+Create a staff/steward pilot handoff before the controlled pilot. The handoff writes the evidence packet, operator runbook, manifest, template validation report, and a `-RequireNoPlaceholders` preview that must fail until real pilot evidence is filled:
+
+```powershell
+.\tools\release\New-PassportPreMvpStaffStewardPilotHandoff.ps1 `
+  -OutputDirectory C:\secure\passport-pilot-handoff `
+  -PilotId <pre-mvp-staff-steward-pilot-id> `
+  -PilotOwner <pilot-owner> `
+  -ParticipantCount 1
+
+.\tools\release\Test-PassportPreMvpStaffStewardPilotHandoff.ps1 `
+  -HandoffRoot C:\secure\passport-pilot-handoff
+```
+
+If the controlled evidence system needs the packet only, create a staff/steward pilot evidence packet before the controlled pilot, then fill the generated JSON records after the pilot is complete:
 
 ```powershell
 .\tools\release\New-PassportPreMvpStaffStewardPilotEvidencePacket.ps1 `
@@ -84,3 +97,5 @@ ARCHREALMS_PASSPORT_PRE_MVP_STAFF_STEWARD_PILOT_REPORT_SHA256
 ```
 
 The reports must use the `internal-verification` lane, include real non-placeholder evidence references and evidence files, and prove that no production ARCH, production CC, Crown reserve balance, citizen production account history, or production service-liability record was created.
+
+`Test-PassportPreMvpInternalVerification.ps1` also validates the handoff generator through `staff_steward_pilot_handoff_validation`. That automated check does not close the external pilot gate; it only proves the operator path is available and fails closed until real pilot evidence exists.
