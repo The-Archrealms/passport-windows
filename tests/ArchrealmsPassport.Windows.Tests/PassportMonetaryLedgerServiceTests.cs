@@ -474,6 +474,69 @@ public sealed class PassportMonetaryLedgerServiceTests
     }
 
     [Fact]
+    public void ProductionLedgerAcceptsArchGenesisAllocationWithManifestEvidence()
+    {
+        using var workspace = PassportTestWorkspace.Create();
+        var releaseLane = PassportReleaseLane.CreateDefault("production-mvp");
+        var wallet = new PassportWalletKeyService(releaseLane).CreateAndBindWalletKey(
+            workspace.Root,
+            workspace.IdentityId,
+            workspace.DeviceId,
+            workspace.KeyReferencePath);
+        Assert.True(wallet.Succeeded, wallet.Message);
+
+        var accountId = "account-test";
+        var evidence = CreateArchGenesisEvidence(workspace.Root, releaseLane, accountId, workspace.IdentityId, wallet.WalletKeyId, 1_000);
+        var service = new PassportMonetaryLedgerService(releaseLane);
+        var append = service.AppendEvent(
+            workspace.Root,
+            accountId,
+            workspace.IdentityId,
+            wallet.WalletKeyId,
+            PassportMonetaryLedgerService.EventArchGenesisAllocation,
+            PassportMonetaryLedgerService.AssetArch,
+            1_000,
+            evidence,
+            walletKeyReferencePath: wallet.WalletKeyReferencePath,
+            walletPublicKeyPath: wallet.WalletPublicKeyPath);
+        AssertAppend(append);
+
+        var replay = service.Replay(workspace.Root);
+
+        Assert.True(replay.Succeeded, string.Join("; ", replay.Failures));
+        var arch = replay.Balances.Single(balance => balance.AssetCode == PassportMonetaryLedgerService.AssetArch);
+        Assert.Equal(1_000, arch.AvailableBaseUnits);
+    }
+
+    [Fact]
+    public void ProductionLedgerRejectsArchGenesisAllocationWithoutManifestEvidence()
+    {
+        using var workspace = PassportTestWorkspace.Create();
+        var releaseLane = PassportReleaseLane.CreateDefault("production-mvp");
+        var wallet = new PassportWalletKeyService(releaseLane).CreateAndBindWalletKey(
+            workspace.Root,
+            workspace.IdentityId,
+            workspace.DeviceId,
+            workspace.KeyReferencePath);
+        Assert.True(wallet.Succeeded, wallet.Message);
+
+        var append = new PassportMonetaryLedgerService(releaseLane).AppendEvent(
+            workspace.Root,
+            "account-test",
+            workspace.IdentityId,
+            wallet.WalletKeyId,
+            PassportMonetaryLedgerService.EventArchGenesisAllocation,
+            PassportMonetaryLedgerService.AssetArch,
+            1_000,
+            new Dictionary<string, string>(),
+            walletKeyReferencePath: wallet.WalletKeyReferencePath,
+            walletPublicKeyPath: wallet.WalletPublicKeyPath);
+
+        Assert.False(append.Succeeded);
+        Assert.Contains("arch_genesis_manifest_path", append.Message, System.StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void ProductionLedgerRejectsCcIssueWithoutIssuerAuthorityEvidence()
     {
         using var workspace = PassportTestWorkspace.Create();
@@ -558,6 +621,39 @@ public sealed class PassportMonetaryLedgerServiceTests
         {
             ["capacity_report_path"] = capacity.ReportPath,
             ["capacity_report_sha256"] = capacity.ReportSha256
+        };
+    }
+
+    private static Dictionary<string, string> CreateArchGenesisEvidence(
+        string workspaceRoot,
+        PassportReleaseLane releaseLane,
+        string accountId,
+        string identityId,
+        string walletKeyId,
+        long amountBaseUnits)
+    {
+        var allocationId = "arch-genesis-allocation-test";
+        var manifest = new PassportArchGenesisService(releaseLane).CreateGenesisManifest(
+            workspaceRoot,
+            totalSupplyBaseUnits: amountBaseUnits,
+            baseUnitPrecision: 18,
+            new[]
+            {
+                new PassportArchGenesisAllocation
+                {
+                    AllocationId = allocationId,
+                    AccountId = accountId,
+                    IdentityId = identityId,
+                    WalletKeyId = walletKeyId,
+                    AmountBaseUnits = amountBaseUnits
+                }
+            });
+        Assert.True(manifest.Succeeded, manifest.Message);
+        return new Dictionary<string, string>
+        {
+            ["arch_genesis_manifest_path"] = manifest.ManifestPath,
+            ["arch_genesis_manifest_sha256"] = manifest.ManifestSha256,
+            ["arch_genesis_allocation_id"] = allocationId
         };
     }
 

@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using ArchrealmsPassport.Windows.Models;
 using ArchrealmsPassport.Windows.Services;
 using ArchrealmsPassport.Windows.Tests.Infrastructure;
 using Xunit;
@@ -147,6 +149,13 @@ public sealed class PassportConversionQuoteServiceTests
         Assert.True(wallet.Succeeded, wallet.Message);
 
         var ledger = new PassportMonetaryLedgerService(releaseLane);
+        var genesisEvidence = CreateArchGenesisEvidence(
+            workspace.Root,
+            releaseLane,
+            "account-test",
+            workspace.IdentityId,
+            wallet.WalletKeyId,
+            1_000);
         var genesis = ledger.AppendEvent(
             workspace.Root,
             "account-test",
@@ -155,7 +164,7 @@ public sealed class PassportConversionQuoteServiceTests
             PassportMonetaryLedgerService.EventArchGenesisAllocation,
             PassportMonetaryLedgerService.AssetArch,
             1_000,
-            new System.Collections.Generic.Dictionary<string, string> { ["arch_genesis_hash"] = "genesis-test" },
+            genesisEvidence,
             walletKeyReferencePath: wallet.WalletKeyReferencePath,
             walletPublicKeyPath: wallet.WalletPublicKeyPath);
         Assert.True(genesis.Succeeded, genesis.Message);
@@ -248,5 +257,38 @@ public sealed class PassportConversionQuoteServiceTests
 
         Assert.False(execution.Succeeded);
         Assert.Contains("insufficient", execution.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static Dictionary<string, string> CreateArchGenesisEvidence(
+        string workspaceRoot,
+        PassportReleaseLane releaseLane,
+        string accountId,
+        string identityId,
+        string walletKeyId,
+        long amountBaseUnits)
+    {
+        var allocationId = "arch-genesis-conversion-test";
+        var manifest = new PassportArchGenesisService(releaseLane).CreateGenesisManifest(
+            workspaceRoot,
+            totalSupplyBaseUnits: amountBaseUnits,
+            baseUnitPrecision: 18,
+            new[]
+            {
+                new PassportArchGenesisAllocation
+                {
+                    AllocationId = allocationId,
+                    AccountId = accountId,
+                    IdentityId = identityId,
+                    WalletKeyId = walletKeyId,
+                    AmountBaseUnits = amountBaseUnits
+                }
+            });
+        Assert.True(manifest.Succeeded, manifest.Message);
+        return new Dictionary<string, string>
+        {
+            ["arch_genesis_manifest_path"] = manifest.ManifestPath,
+            ["arch_genesis_manifest_sha256"] = manifest.ManifestSha256,
+            ["arch_genesis_allocation_id"] = allocationId
+        };
     }
 }

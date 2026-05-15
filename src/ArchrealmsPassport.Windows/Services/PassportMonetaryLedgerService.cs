@@ -177,6 +177,17 @@ namespace ArchrealmsPassport.Windows.Services
                 }
 
                 if (releaseLane.ProductionLedger
+                    && string.Equals(ledgerEvent.AssetCode, AssetArch, StringComparison.Ordinal)
+                    && string.Equals(ledgerEvent.EventType, EventArchGenesisAllocation, StringComparison.Ordinal))
+                {
+                    var genesisGate = ValidateProductionArchGenesisGate(resolvedWorkspaceRoot, ledgerEvent);
+                    if (!genesisGate.Succeeded)
+                    {
+                        return FailedAppend(genesisGate.Message);
+                    }
+                }
+
+                if (releaseLane.ProductionLedger
                     && string.Equals(ledgerEvent.AssetCode, AssetCrownCredit, StringComparison.Ordinal)
                     && string.Equals(ledgerEvent.EventType, EventCrownCreditRecredit, StringComparison.Ordinal)
                     && !hasAdminAuthority)
@@ -233,6 +244,7 @@ namespace ArchrealmsPassport.Windows.Services
                 var readEvents = ReadEvents(resolvedWorkspaceRoot).ToArray();
                 var duplicateEventIds = new HashSet<string>(StringComparer.Ordinal);
                 var duplicateNonces = new HashSet<string>(StringComparer.Ordinal);
+                var archGenesisAllocationIds = new HashSet<string>(StringComparer.Ordinal);
                 foreach (var item in readEvents)
                 {
                     var ledgerEvent = item.Event;
@@ -245,6 +257,16 @@ namespace ArchrealmsPassport.Windows.Services
                         && !duplicateNonces.Add(ledgerEvent.AntiReplayNonce))
                     {
                         result.Failures.Add("Duplicate monetary ledger anti-replay nonce: " + ledgerEvent.AntiReplayNonce);
+                    }
+
+                    if (releaseLane.ProductionLedger
+                        && string.Equals(ledgerEvent.AssetCode, AssetArch, StringComparison.Ordinal)
+                        && string.Equals(ledgerEvent.EventType, EventArchGenesisAllocation, StringComparison.Ordinal)
+                        && ledgerEvent.EvidenceReferences.TryGetValue("arch_genesis_allocation_id", out var allocationId)
+                        && !string.IsNullOrWhiteSpace(allocationId)
+                        && !archGenesisAllocationIds.Add(allocationId.Trim()))
+                    {
+                        result.Failures.Add("Duplicate ARCH genesis allocation ID: " + allocationId.Trim() + ".");
                     }
 
                     ValidateEventEnvelope(resolvedWorkspaceRoot, ledgerEvent, item.Path, result.Failures);
@@ -740,6 +762,17 @@ namespace ArchrealmsPassport.Windows.Services
                     failures.Add("CC issuance authority validation failed for event " + ledgerEvent.EventId + ": " + issuanceGate.Message);
                 }
             }
+
+            if (releaseLane.ProductionLedger
+                && string.Equals(ledgerEvent.AssetCode, AssetArch, StringComparison.Ordinal)
+                && string.Equals(ledgerEvent.EventType, EventArchGenesisAllocation, StringComparison.Ordinal))
+            {
+                var genesisGate = ValidateProductionArchGenesisGate(workspaceRoot, ledgerEvent);
+                if (!genesisGate.Succeeded)
+                {
+                    failures.Add("ARCH genesis validation failed for event " + ledgerEvent.EventId + ": " + genesisGate.Message);
+                }
+            }
         }
 
         private PassportMonetaryLedgerAppendResult ValidateProductionCrownCreditIssuanceGate(
@@ -782,6 +815,30 @@ namespace ArchrealmsPassport.Windows.Services
             {
                 Succeeded = true,
                 Message = "Production CC issuance authority is valid."
+            };
+        }
+
+        private PassportMonetaryLedgerAppendResult ValidateProductionArchGenesisGate(
+            string workspaceRoot,
+            PassportMonetaryLedgerEvent ledgerEvent)
+        {
+            var genesisValidation = new PassportArchGenesisService(releaseLane)
+                .ValidateAllocation(
+                    workspaceRoot,
+                    ledgerEvent.AccountId,
+                    ledgerEvent.IdentityId,
+                    ledgerEvent.WalletKeyId,
+                    ledgerEvent.AmountBaseUnits,
+                    ledgerEvent.EvidenceReferences);
+            if (!genesisValidation.Succeeded)
+            {
+                return FailedAppend(genesisValidation.Message);
+            }
+
+            return new PassportMonetaryLedgerAppendResult
+            {
+                Succeeded = true,
+                Message = "Production ARCH genesis allocation is valid."
             };
         }
 
