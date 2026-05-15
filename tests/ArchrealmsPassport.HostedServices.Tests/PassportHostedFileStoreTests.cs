@@ -63,6 +63,32 @@ public sealed class PassportHostedFileStoreTests
         Assert.Equal("passport_hosted_append_log_entry", appendEntry.RootElement.GetProperty("record_type").GetString());
     }
 
+    [Fact]
+    public void FileStoreReadsRedactedAppendLogTelemetry()
+    {
+        using var workspace = TemporaryDirectory.Create();
+        var store = new PassportHostedFileStore(workspace.Path);
+        var record = new Dictionary<string, object?>
+        {
+            ["schema_version"] = 1,
+            ["record_type"] = "passport_storage_delivery_acceptance",
+            ["record_id"] = "storage-delivery-1"
+        };
+
+        store.SaveRecord("storage-delivery-1", record, new string('c', 64));
+
+        var entries = store.ReadAppendLogTelemetry(
+            DateTimeOffset.UtcNow.AddMinutes(-5),
+            DateTimeOffset.UtcNow.AddMinutes(5),
+            10);
+
+        var entry = Assert.Single(entries);
+        Assert.Equal("passport_storage_delivery_acceptance", entry.HostedRecordType);
+        Assert.Equal("storage-delivery-1", entry.HostedRecordId);
+        Assert.Equal(new string('c', 64), entry.HostedRecordSha256);
+        Assert.DoesNotContain("hosted_record_path", JsonSerializer.Serialize(entries), StringComparison.OrdinalIgnoreCase);
+    }
+
     private sealed class TemporaryDirectory : IDisposable
     {
         private TemporaryDirectory(string path)

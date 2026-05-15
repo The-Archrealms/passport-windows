@@ -240,6 +240,78 @@ public sealed record PassportStorageDeliveryRequest
     public string ServiceDeliveryRequestSha256 { get; init; } = string.Empty;
 }
 
+public sealed record PassportTelemetryAccessRequest
+{
+    [JsonPropertyName("release_lane")]
+    public string ReleaseLane { get; init; } = string.Empty;
+
+    [JsonPropertyName("ledger_namespace")]
+    public string LedgerNamespace { get; init; } = string.Empty;
+
+    [JsonPropertyName("policy_version")]
+    public string PolicyVersion { get; init; } = string.Empty;
+
+    [JsonPropertyName("telemetry_scope")]
+    public string TelemetryScope { get; init; } = "hosted_append_log";
+
+    [JsonPropertyName("from_utc")]
+    public string FromUtc { get; init; } = string.Empty;
+
+    [JsonPropertyName("to_utc")]
+    public string ToUtc { get; init; } = string.Empty;
+
+    [JsonPropertyName("max_entries")]
+    public int MaxEntries { get; init; } = 100;
+
+    [JsonPropertyName("include_personal_data")]
+    public bool IncludePersonalData { get; init; }
+
+    [JsonPropertyName("include_raw_ai_prompts")]
+    public bool IncludeRawAiPrompts { get; init; }
+
+    [JsonPropertyName("include_storage_payload_details")]
+    public bool IncludeStoragePayloadDetails { get; init; }
+
+    [JsonPropertyName("admin_authority")]
+    public PassportAdminAuthorityValidationRequest AdminAuthority { get; init; } = new();
+}
+
+public sealed record PassportHostedTelemetryEntry
+{
+    [JsonPropertyName("created_utc")]
+    public string CreatedUtc { get; init; } = string.Empty;
+
+    [JsonPropertyName("hosted_record_type")]
+    public string HostedRecordType { get; init; } = string.Empty;
+
+    [JsonPropertyName("hosted_record_id")]
+    public string HostedRecordId { get; init; } = string.Empty;
+
+    [JsonPropertyName("hosted_record_sha256")]
+    public string HostedRecordSha256 { get; init; } = string.Empty;
+}
+
+public sealed record PassportTelemetryAccessResponse
+{
+    [JsonPropertyName("succeeded")]
+    public bool Succeeded { get; init; }
+
+    [JsonPropertyName("message")]
+    public string Message { get; init; } = string.Empty;
+
+    [JsonPropertyName("record_id")]
+    public string RecordId { get; init; } = string.Empty;
+
+    [JsonPropertyName("record_sha256")]
+    public string RecordSha256 { get; init; } = string.Empty;
+
+    [JsonPropertyName("record")]
+    public Dictionary<string, object?>? Record { get; init; }
+
+    [JsonPropertyName("entries")]
+    public PassportHostedTelemetryEntry[] Entries { get; init; } = Array.Empty<PassportHostedTelemetryEntry>();
+}
+
 public sealed record PassportHostedRecordResponse
 {
     [JsonPropertyName("succeeded")]

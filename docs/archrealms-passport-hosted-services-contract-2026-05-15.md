@@ -18,6 +18,7 @@ The hosted services project provides the production-facing API boundary that Win
 | `POST /capacity/reports/cc` | Create conservative CC capacity reports | Enforces positive conservative capacity, no thin-market issuance, qualified independent volume, reserve exclusion, haircut range, and authority hash evidence |
 | `POST /arch/genesis/manifests` | Create sealed ARCH genesis manifests | Enforces fixed supply, base-unit precision, unique allocation IDs, allocation total equals supply, no post-genesis minting, and authority hash evidence |
 | `POST /admin/authority/validate` | Validate dual-control admin authority evidence | Checks action/scope/hash binding, distinct requester and approver devices, non-AI approval, and requester/approver signature record types |
+| `POST /telemetry/access` | Authorize redacted hosted telemetry access | Requires operator authentication, strict `telemetry_access` dual-control authority, request-payload hash binding, metadata-only access, and bounded time windows |
 | `POST /storage/delivery/requests` | Accept storage delivery requests | Verifies storage delivery request hash, positive storage/epoch terms, and returns proof requirements before burn |
 
 ## Storage
@@ -37,6 +38,7 @@ The hosted services project provides the production-facing API boundary that Win
 - The admin authority endpoint validates signed admin action payloads against requester/approver public keys stored in the hosted registry.
 - The admin authority endpoint requires active hosted role-membership records for both requester and approver devices.
 - Hosted role-membership records are verified with issuer signatures and hosted registry public keys.
+- The telemetry access endpoint returns redacted append-log metadata only; it blocks personal data, raw AI prompts, and storage payload details.
 
 ## Release-Lane Configuration
 
@@ -46,7 +48,7 @@ The hosted services project provides the production-facing API boundary that Win
 
 ## Current Limits
 
-- Production deployment still needs managed durable storage, backups, managed signing-key custody, telemetry access controls, incident logging, and managed release-lane deployment configuration.
+- Production deployment still needs managed durable storage, backups, managed signing-key custody, incident logging, and managed release-lane deployment configuration.
 - The AI chat endpoint currently returns a gateway-contract response; production still needs the open-weight model runtime and vector store behind the gateway.
 - The service does not make fiat, exchange, external wallet, staking, yield, governance, or public stable-value claims.
 

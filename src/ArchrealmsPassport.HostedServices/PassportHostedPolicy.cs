@@ -427,6 +427,102 @@ public static class PassportHostedPolicy
         };
     }
 
+    public static string ComputeTelemetryAccessPayloadSha256(PassportTelemetryAccessRequest request)
+    {
+        return ComputeSha256(JsonSerializer.SerializeToUtf8Bytes(CreateTelemetryAccessPayload(request), JsonOptions));
+    }
+
+    public static PassportHostedRecordResponse CreateTelemetryAccessRecord(
+        PassportTelemetryAccessRequest request,
+        PassportHostedRegistryStore registryStore)
+    {
+        var releaseLane = NormalizeRequiredValue(request.ReleaseLane);
+        var ledgerNamespace = NormalizeRequiredValue(request.LedgerNamespace);
+        var policyVersion = NormalizeRequiredValue(request.PolicyVersion);
+        if (string.IsNullOrWhiteSpace(releaseLane)
+            || string.IsNullOrWhiteSpace(ledgerNamespace)
+            || string.IsNullOrWhiteSpace(policyVersion))
+        {
+            return FailedRecord("Telemetry access requires release lane, ledger namespace, and policy version.");
+        }
+
+        var telemetryScope = NormalizeSlug(request.TelemetryScope);
+        if (!string.Equals(telemetryScope, "hosted_append_log", StringComparison.Ordinal))
+        {
+            return FailedRecord("Telemetry access is currently limited to hosted append-log metadata.");
+        }
+
+        if (request.IncludePersonalData || request.IncludeRawAiPrompts || request.IncludeStoragePayloadDetails)
+        {
+            return FailedRecord("Telemetry access is metadata-only and cannot include personal data, raw AI prompts, or storage payload details.");
+        }
+
+        if (!TryReadUtc(request.FromUtc, out var fromUtc)
+            || !TryReadUtc(request.ToUtc, out var toUtc)
+            || toUtc <= fromUtc)
+        {
+            return FailedRecord("Telemetry access requires a valid UTC time window.");
+        }
+
+        if (toUtc - fromUtc > TimeSpan.FromDays(7))
+        {
+            return FailedRecord("Telemetry access windows cannot exceed seven days.");
+        }
+
+        if (request.MaxEntries is < 1 or > 500)
+        {
+            return FailedRecord("Telemetry access max_entries must be between 1 and 500.");
+        }
+
+        if (!string.Equals(NormalizeSlug(request.AdminAuthority.ActionType), "telemetry_access", StringComparison.Ordinal))
+        {
+            return FailedRecord("Telemetry access requires telemetry_access admin authority.");
+        }
+
+        if (!string.Equals(NormalizeSlug(request.AdminAuthority.AuthorityScope), NormalizeSlug(releaseLane), StringComparison.Ordinal))
+        {
+            return FailedRecord("Telemetry access authority scope must match the release lane.");
+        }
+
+        var payloadSha256 = ComputeTelemetryAccessPayloadSha256(request);
+        if (!string.Equals(request.AdminAuthority.RequestedPayloadSha256, payloadSha256, StringComparison.OrdinalIgnoreCase))
+        {
+            return FailedRecord("Telemetry access authority is not bound to the requested telemetry payload.");
+        }
+
+        var authority = ValidateAdminAuthority(request.AdminAuthority, registryStore);
+        if (!authority.Succeeded)
+        {
+            return FailedRecord("Telemetry access authority validation failed: " + authority.Message);
+        }
+
+        var recordId = NewRecordId("telemetry-access-" + telemetryScope);
+        var record = new Dictionary<string, object?>
+        {
+            ["schema_version"] = 1,
+            ["record_type"] = PassportRecordTypes.TelemetryAccessRecord,
+            ["record_id"] = recordId,
+            ["created_utc"] = DateTimeOffset.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+            ["contract_version"] = ContractVersion,
+            ["release_lane"] = releaseLane,
+            ["ledger_namespace"] = ledgerNamespace,
+            ["policy_version"] = policyVersion,
+            ["telemetry_scope"] = telemetryScope,
+            ["from_utc"] = fromUtc.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+            ["to_utc"] = toUtc.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+            ["max_entries"] = request.MaxEntries,
+            ["admin_authority_record_sha256"] = authority.RecordSha256,
+            ["requested_payload_sha256"] = payloadSha256,
+            ["include_personal_data"] = false,
+            ["include_raw_ai_prompts"] = false,
+            ["include_storage_payload_details"] = false,
+            ["redaction_policy"] = "metadata_only_no_raw_prompts_no_personal_data_no_storage_payload_details",
+            ["summary"] = "Hosted telemetry access authorization. The returned telemetry lane is redacted append-log metadata only."
+        };
+
+        return RecordResponse("Telemetry access authorized.", recordId, record);
+    }
+
     public static PassportHostedRecordResponse AcceptStorageDeliveryRequest(PassportStorageDeliveryRequest request)
     {
         var source = request.ServiceDeliveryRequestRecord;
@@ -639,6 +735,25 @@ public static class PassportHostedPolicy
         return JsonSerializer.Deserialize<Dictionary<string, object?>>(property.GetRawText()) ?? new Dictionary<string, object?>();
     }
 
+    private static Dictionary<string, object?> CreateTelemetryAccessPayload(PassportTelemetryAccessRequest request)
+    {
+        return new Dictionary<string, object?>
+        {
+            ["schema_version"] = 1,
+            ["record_type"] = PassportRecordTypes.TelemetryAccessRequest,
+            ["release_lane"] = NormalizeRequiredValue(request.ReleaseLane),
+            ["ledger_namespace"] = NormalizeRequiredValue(request.LedgerNamespace),
+            ["policy_version"] = NormalizeRequiredValue(request.PolicyVersion),
+            ["telemetry_scope"] = NormalizeSlug(request.TelemetryScope),
+            ["from_utc"] = (request.FromUtc ?? string.Empty).Trim(),
+            ["to_utc"] = (request.ToUtc ?? string.Empty).Trim(),
+            ["max_entries"] = request.MaxEntries,
+            ["include_personal_data"] = request.IncludePersonalData,
+            ["include_raw_ai_prompts"] = request.IncludeRawAiPrompts,
+            ["include_storage_payload_details"] = request.IncludeStoragePayloadDetails
+        };
+    }
+
     private static bool Matches(JsonElement root, string propertyName, string expected)
     {
         return string.Equals(ReadString(root, propertyName), expected, StringComparison.Ordinal);
@@ -672,13 +787,18 @@ public static class PassportHostedPolicy
 
     private static string NormalizeRequired(string value, string label)
     {
-        var normalized = (value ?? string.Empty).Trim();
+        var normalized = NormalizeRequiredValue(value);
         if (string.IsNullOrWhiteSpace(normalized))
         {
             throw new InvalidOperationException("A " + label + " is required.");
         }
 
         return normalized;
+    }
+
+    private static string NormalizeRequiredValue(string value)
+    {
+        return (value ?? string.Empty).Trim();
     }
 
     private static string NormalizeSlug(string value)
@@ -702,6 +822,18 @@ public static class PassportHostedPolicy
     private static string NewRecordId(string prefix)
     {
         return DateTime.UtcNow.ToString("yyyyMMddTHHmmssZ") + "-" + prefix + "-" + Guid.NewGuid().ToString("N")[..10];
+    }
+
+    public static bool TryReadUtc(string value, out DateTimeOffset utc)
+    {
+        if (DateTimeOffset.TryParse(value, out var parsed))
+        {
+            utc = parsed.ToUniversalTime();
+            return true;
+        }
+
+        utc = default;
+        return false;
     }
 
     private static PassportAiSessionAuthorizationResponse FailedAiSession(string message)

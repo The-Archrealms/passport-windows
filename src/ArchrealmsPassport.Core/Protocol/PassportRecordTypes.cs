@@ -12,6 +12,8 @@ public static class PassportRecordTypes
     public const string AdminDualControlApproverSignature = "passport_admin_dual_control_approver_signature";
     public const string AdminRoleMembership = "passport_admin_authority_role_membership";
     public const string AdminRoleMembershipSignature = "passport_admin_authority_role_membership_signature";
+    public const string TelemetryAccessRequest = "passport_telemetry_access_request";
+    public const string TelemetryAccessRecord = "passport_telemetry_access_record";
     public const string StorageServiceDeliveryRequest = "passport_storage_service_delivery_request";
     public const string StorageDeliveryAcceptance = "passport_storage_delivery_acceptance";
 }

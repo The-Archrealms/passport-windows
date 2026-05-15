@@ -315,6 +315,72 @@ public sealed class PassportHostedPolicyTests
         Assert.Contains("unexpected device", badSignature.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void TelemetryAccessRequiresBoundedAdminAuthorityAndMetadataOnlyPolicy()
+    {
+        using var workspace = TemporaryDirectory.Create();
+        using var issuer = RSA.Create(2048);
+        using var requester = RSA.Create(2048);
+        using var approver = RSA.Create(2048);
+        var registry = new PassportHostedRegistryStore(workspace.Path);
+        registry.SavePublicKey("issuer-device", issuer.ExportSubjectPublicKeyInfo());
+        registry.SavePublicKey("requester-device", requester.ExportSubjectPublicKeyInfo());
+        registry.SavePublicKey("approver-device", approver.ExportSubjectPublicKeyInfo());
+        AddRole(registry, issuer, "role-requester", "authority-identity", "requester-device", "telemetry_access", "production_mvp");
+        AddRole(registry, issuer, "role-approver", "authority-identity", "approver-device", "telemetry_access", "production_mvp");
+
+        var baseRequest = new PassportTelemetryAccessRequest
+        {
+            ReleaseLane = "production-mvp",
+            LedgerNamespace = "archrealms-passport-production-mvp",
+            PolicyVersion = "passport-release-lanes-v1",
+            TelemetryScope = "hosted_append_log",
+            FromUtc = DateTimeOffset.UtcNow.AddHours(-1).ToString("yyyy-MM-ddTHH:mm:ssZ"),
+            ToUtc = DateTimeOffset.UtcNow.AddMinutes(1).ToString("yyyy-MM-ddTHH:mm:ssZ"),
+            MaxEntries = 50
+        };
+        var payloadHash = PassportHostedPolicy.ComputeTelemetryAccessPayloadSha256(baseRequest);
+        var request = baseRequest with
+        {
+            AdminAuthority = CreateSignedAdminRequest(
+                requester,
+                approver,
+                "authority-identity",
+                "requester-device",
+                "approver-device",
+                "telemetry_access",
+                "production_mvp",
+                payloadHash: payloadHash)
+        };
+
+        var result = PassportHostedPolicy.CreateTelemetryAccessRecord(request, registry);
+
+        Assert.True(result.Succeeded, result.Message);
+        Assert.Equal("passport_telemetry_access_record", result.Record!["record_type"]);
+        Assert.Equal("metadata_only_no_raw_prompts_no_personal_data_no_storage_payload_details", result.Record["redaction_policy"]);
+
+        var rawPromptRequest = request with { IncludeRawAiPrompts = true };
+        var rejectedRawPromptAccess = PassportHostedPolicy.CreateTelemetryAccessRecord(rawPromptRequest, registry);
+        Assert.False(rejectedRawPromptAccess.Succeeded);
+        Assert.Contains("metadata-only", rejectedRawPromptAccess.Message, StringComparison.OrdinalIgnoreCase);
+
+        var unboundAuthority = request with
+        {
+            AdminAuthority = CreateSignedAdminRequest(
+                requester,
+                approver,
+                "authority-identity",
+                "requester-device",
+                "approver-device",
+                "telemetry_access",
+                "production_mvp",
+                payloadHash: new string('a', 64))
+        };
+        var rejectedUnbound = PassportHostedPolicy.CreateTelemetryAccessRecord(unboundAuthority, registry);
+        Assert.False(rejectedUnbound.Succeeded);
+        Assert.Contains("not bound", rejectedUnbound.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static PassportAiSessionAuthorizationRequest CreateAiSessionRequest(RSA rsa)
     {
         var record = new Dictionary<string, object?>
@@ -386,10 +452,12 @@ public sealed class PassportHostedPolicyTests
         string requesterDeviceId,
         string approverDeviceId,
         string actionType,
-        string authorityScope)
+        string authorityScope,
+        string? targetHash = null,
+        string? payloadHash = null)
     {
-        var targetHash = new string('e', 64);
-        var payloadHash = new string('f', 64);
+        targetHash ??= new string('e', 64);
+        payloadHash ??= new string('f', 64);
         var action = new Dictionary<string, object?>
         {
             ["schema_version"] = 1,

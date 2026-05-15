@@ -117,6 +117,43 @@ app.MapPost("/admin/authority/validate", (HttpRequest httpRequest, PassportAdmin
     return result.Succeeded ? Results.Json(result) : Results.BadRequest(result);
 });
 
+app.MapPost("/telemetry/access", (HttpRequest httpRequest, PassportTelemetryAccessRequest request) =>
+{
+    var operatorAuthorization = AuthorizeOperator(httpRequest, operatorGate);
+    if (operatorAuthorization != null)
+    {
+        return operatorAuthorization;
+    }
+
+    var rateLimit = AuthorizeRate(httpRequest, rateLimiter, "operator-telemetry", maxRequests: 30, window: TimeSpan.FromMinutes(1));
+    if (rateLimit != null)
+    {
+        return rateLimit;
+    }
+
+    var result = PassportHostedPolicy.CreateTelemetryAccessRecord(request, registryStore);
+    if (!result.Succeeded || result.Record == null)
+    {
+        return Results.BadRequest(result);
+    }
+
+    result = signer.Sign(result, "telemetry_access");
+    store.SaveRecord(result.RecordId, result.Record!, result.RecordSha256);
+    var entries = PassportHostedPolicy.TryReadUtc(request.FromUtc, out var fromUtc)
+        && PassportHostedPolicy.TryReadUtc(request.ToUtc, out var toUtc)
+            ? store.ReadAppendLogTelemetry(fromUtc, toUtc, request.MaxEntries)
+            : Array.Empty<PassportHostedTelemetryEntry>();
+    return Results.Json(new PassportTelemetryAccessResponse
+    {
+        Succeeded = true,
+        Message = result.Message,
+        RecordId = result.RecordId,
+        RecordSha256 = result.RecordSha256,
+        Record = result.Record,
+        Entries = entries
+    });
+});
+
 app.MapPost("/storage/delivery/requests", (HttpRequest httpRequest, PassportStorageDeliveryRequest request) =>
 {
     var operatorAuthorization = AuthorizeOperator(httpRequest, operatorGate);

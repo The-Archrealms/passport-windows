@@ -118,6 +118,50 @@ public sealed class PassportHostedFileStore : IPassportHostedStore
         return true;
     }
 
+    public PassportHostedTelemetryEntry[] ReadAppendLogTelemetry(DateTimeOffset fromUtc, DateTimeOffset toUtc, int maxEntries)
+    {
+        var limit = Math.Clamp(maxEntries, 1, 500);
+        if (!Directory.Exists(AppendLogRoot))
+        {
+            return Array.Empty<PassportHostedTelemetryEntry>();
+        }
+
+        var entries = new List<PassportHostedTelemetryEntry>();
+        foreach (var file in Directory.GetFiles(AppendLogRoot, "*.jsonl").OrderByDescending(Path.GetFileName))
+        {
+            foreach (var line in File.ReadLines(file).Where(line => !string.IsNullOrWhiteSpace(line)).Reverse())
+            {
+                using var document = JsonDocument.Parse(line);
+                var root = document.RootElement;
+                if (!DateTimeOffset.TryParse(ReadString(root, "created_utc"), out var created))
+                {
+                    continue;
+                }
+
+                var createdUtc = created.ToUniversalTime();
+                if (createdUtc < fromUtc || createdUtc > toUtc)
+                {
+                    continue;
+                }
+
+                entries.Add(new PassportHostedTelemetryEntry
+                {
+                    CreatedUtc = createdUtc.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+                    HostedRecordType = ReadString(root, "hosted_record_type"),
+                    HostedRecordId = ReadString(root, "hosted_record_id"),
+                    HostedRecordSha256 = ReadString(root, "hosted_record_sha256")
+                });
+
+                if (entries.Count >= limit)
+                {
+                    return entries.ToArray();
+                }
+            }
+        }
+
+        return entries.ToArray();
+    }
+
     private void Append(string recordType, string recordId, string recordSha256, string path)
     {
         var appendPath = Path.Combine(AppendLogRoot, DateTime.UtcNow.ToString("yyyyMMdd") + ".jsonl");
