@@ -238,6 +238,107 @@ function Test-EvidenceReferences {
     return $failures
 }
 
+function Test-ReportEvidenceFiles {
+    param(
+        [object]$Object,
+        [string]$Name,
+        [int]$MinimumCount
+    )
+
+    $failures = @()
+    $files = @($Object.evidence_files)
+    if ($files.Count -lt $MinimumCount) {
+        $failures += "$Name must include at least $MinimumCount hashed evidence files"
+    }
+
+    for ($index = 0; $index -lt $files.Count; $index++) {
+        $file = $files[$index]
+        $id = Read-ObjectString -Object $file -Name "id"
+        $path = Read-ObjectString -Object $file -Name "path"
+        $sha256 = Read-ObjectString -Object $file -Name "sha256"
+
+        foreach ($failure in @(
+            Test-NotPlaceholderValue -Name "$Name evidence file $($index + 1) id" -Value $id
+            Test-NotPlaceholderValue -Name "$Name evidence file $($index + 1) path" -Value $path
+            Test-NotPlaceholderValue -Name "$Name evidence file $($index + 1) sha256" -Value $sha256
+        )) {
+            if ($failure) {
+                $failures += $failure
+            }
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace($sha256) -and $sha256 -notmatch '^[0-9a-fA-F]{64}$') {
+            $failures += "$Name evidence file $($index + 1) SHA-256 must be a SHA-256 hex string"
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace($path)) {
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+                $failures += "$Name evidence file $($index + 1) was not found: $path"
+            }
+            elseif ($sha256 -match '^[0-9a-fA-F]{64}$') {
+                $actualHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $path).Hash.ToLowerInvariant()
+                if (-not [string]::Equals($actualHash, $sha256, [System.StringComparison]::OrdinalIgnoreCase)) {
+                    $failures += "$Name evidence file $($index + 1) SHA-256 does not match the file"
+                }
+            }
+        }
+    }
+
+    return $failures
+}
+
+function Test-SimulationCommandEvidence {
+    param(
+        [object]$Object,
+        [int]$MinimumCount
+    )
+
+    $failures = @()
+    $commands = @($Object.command_results)
+    if ($commands.Count -lt $MinimumCount) {
+        $failures += "Pre-MVP simulation run report must include at least $MinimumCount command evidence results"
+    }
+
+    for ($index = 0; $index -lt $commands.Count; $index++) {
+        $command = $commands[$index]
+        if (-not (Read-ObjectBool -Object $command -Name "passed")) {
+            $failures += "Pre-MVP simulation command evidence $($index + 1) must have passed=true"
+        }
+
+        $id = Read-ObjectString -Object $command -Name "id"
+        $logPath = Read-ObjectString -Object $command -Name "log_path"
+        $logSha256 = Read-ObjectString -Object $command -Name "log_sha256"
+
+        foreach ($failure in @(
+            Test-NotPlaceholderValue -Name "Pre-MVP simulation command evidence $($index + 1) id" -Value $id
+            Test-NotPlaceholderValue -Name "Pre-MVP simulation command evidence $($index + 1) log_path" -Value $logPath
+            Test-NotPlaceholderValue -Name "Pre-MVP simulation command evidence $($index + 1) log_sha256" -Value $logSha256
+        )) {
+            if ($failure) {
+                $failures += $failure
+            }
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace($logSha256) -and $logSha256 -notmatch '^[0-9a-fA-F]{64}$') {
+            $failures += "Pre-MVP simulation command evidence $($index + 1) log SHA-256 must be a SHA-256 hex string"
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace($logPath)) {
+            if (-not (Test-Path -LiteralPath $logPath -PathType Leaf)) {
+                $failures += "Pre-MVP simulation command evidence $($index + 1) log file was not found: $logPath"
+            }
+            elseif ($logSha256 -match '^[0-9a-fA-F]{64}$') {
+                $actualHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $logPath).Hash.ToLowerInvariant()
+                if (-not [string]::Equals($actualHash, $logSha256, [System.StringComparison]::OrdinalIgnoreCase)) {
+                    $failures += "Pre-MVP simulation command evidence $($index + 1) log SHA-256 does not match the file"
+                }
+            }
+        }
+    }
+
+    return $failures
+}
+
 function Test-EvidenceFile {
     param(
         [string]$Path,
@@ -347,6 +448,7 @@ function Test-PreMvpSimulationRunEvidence {
     }
 
     $failures += Test-EvidenceReferences -Object $report -Name "Pre-MVP simulation run report" -MinimumCount 3
+    $failures += Test-SimulationCommandEvidence -Object $report -MinimumCount 5
 
     return [pscustomobject][ordered]@{
         passed = ($failures.Count -eq 0)
@@ -411,6 +513,7 @@ function Test-PreMvpStaffStewardPilotEvidence {
     }
 
     $failures += Test-EvidenceReferences -Object $report -Name "Pre-MVP staff/steward pilot report" -MinimumCount 3
+    $failures += Test-ReportEvidenceFiles -Object $report -Name "Pre-MVP staff/steward pilot report" -MinimumCount 3
 
     return [pscustomobject][ordered]@{
         passed = ($failures.Count -eq 0)

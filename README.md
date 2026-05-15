@@ -542,9 +542,11 @@ Pre-MVP internal verification has its own gate. Run it after building an `Intern
   -PilotId <pre-mvp-staff-steward-pilot-id> `
   -PilotOwner <pilot-owner> `
   -ParticipantCount 1 `
-  -EvidenceReference <pilot-session-record-id-or-uri> `
-  -EvidenceReference <participant-signoff-id-or-uri> `
-  -EvidenceReference <pilot-issue-review-id-or-uri> `
+  -EvidenceFilePath @(
+    "C:\secure\passport-pilot\pilot-session-record.json",
+    "C:\secure\passport-pilot\participant-signoff.json",
+    "C:\secure\passport-pilot\pilot-issue-review.json"
+  ) `
   -ConfirmCompleted `
   -ConfirmStaffOrStewardParticipants `
   -ConfirmCrownOwnedDevices `

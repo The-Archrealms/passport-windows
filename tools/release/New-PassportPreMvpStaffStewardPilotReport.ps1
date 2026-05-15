@@ -5,6 +5,7 @@ param(
     [string]$PolicyVersion = "token-ready-passport-mvp-pre-mvp-internal-verification-v1",
     [int]$ParticipantCount,
     [string[]]$EvidenceReference,
+    [string[]]$EvidenceFilePath,
     [switch]$ConfirmCompleted,
     [switch]$ConfirmStaffOrStewardParticipants,
     [switch]$ConfirmCrownOwnedDevices,
@@ -61,6 +62,16 @@ function Assert-Confirmed {
     }
 }
 
+function Get-Sha256Hex {
+    param([string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        return ""
+    }
+
+    return (Get-FileHash -Algorithm SHA256 -LiteralPath $Path).Hash.ToLowerInvariant()
+}
+
 foreach ($field in @(
     @{ Name = "PilotId"; Value = $PilotId },
     @{ Name = "PilotOwner"; Value = $PilotOwner },
@@ -77,15 +88,43 @@ if ($ParticipantCount -lt 1) {
 }
 
 $references = @($EvidenceReference | ForEach-Object { ([string]$_).Trim() } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-if ($references.Count -lt 3) {
-    throw "At least three EvidenceReference values are required."
-}
-
 for ($index = 0; $index -lt $references.Count; $index++) {
     $failure = Test-NotPlaceholder -Name "EvidenceReference[$index]" -Value $references[$index]
     if ($failure) {
         throw $failure
     }
+}
+
+$evidenceFiles = @()
+foreach ($path in @($EvidenceFilePath)) {
+    $trimmedPath = ([string]$path).Trim()
+    if ([string]::IsNullOrWhiteSpace($trimmedPath)) {
+        continue
+    }
+
+    $failure = Test-NotPlaceholder -Name "EvidenceFilePath" -Value $trimmedPath
+    if ($failure) {
+        throw $failure
+    }
+
+    $resolvedPath = Resolve-RepoPath -Path $trimmedPath
+    if (-not (Test-Path -LiteralPath $resolvedPath -PathType Leaf)) {
+        throw "Evidence file was not found: $resolvedPath"
+    }
+
+    $evidenceFiles += [pscustomobject][ordered]@{
+        id = [System.IO.Path]::GetFileNameWithoutExtension($resolvedPath)
+        path = $resolvedPath
+        sha256 = Get-Sha256Hex -Path $resolvedPath
+    }
+}
+
+if ($evidenceFiles.Count -lt 3) {
+    throw "At least three EvidenceFilePath values are required."
+}
+
+if ($references.Count -eq 0) {
+    $references = @($evidenceFiles | ForEach-Object { $_.path })
 }
 
 Assert-Confirmed -Name "ConfirmCompleted" -Value $ConfirmCompleted
@@ -126,6 +165,7 @@ $report = [pscustomobject][ordered]@{
     pilot_signoff_signed = $true
     no_production_records_created = $true
     evidence_references = $references
+    evidence_files = $evidenceFiles
 }
 
 Set-Content -LiteralPath $resolvedOutputPath -Value ($report | ConvertTo-Json -Depth 8) -Encoding UTF8
