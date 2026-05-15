@@ -186,67 +186,118 @@ $readinessActionMap = @{
     pre_mvp_internal_verification = New-Action `
         -Id "pre_mvp_internal_verification" `
         -Title "Complete staff/steward pilot evidence" `
-        -Action "Fill the controlled staff/steward pilot packet, validate it with no placeholders, generate the final pilot report, and rerun pre-MVP internal verification with the report path and SHA-256."
+        -Action "Fill the controlled staff/steward pilot packet, validate it with no placeholders, generate the final pilot report, and rerun pre-MVP internal verification with the report path and SHA-256." `
+        -Commands @(
+            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Complete-PassportPreMvpStaffStewardPilotHandoff.ps1 -HandoffRoot <filled-staff-steward-handoff-root> -SimulationRunReportPath artifacts\release\pre-mvp-simulation-run-report.json -SimulationRunReportSha256 <simulation-run-sha256> -Force"
+        )
     staging_readiness = New-Action `
         -Id "staging_readiness" `
         -Title "Close out staging readiness" `
-        -Action "Fill staging endpoint, ledger/telemetry, operational drill, rollback drill, and promotion approval evidence; then run the staging closeout command with real non-synthetic values."
+        -Action "Fill staging endpoint, ledger/telemetry, operational drill, rollback drill, and promotion approval evidence; then run the staging closeout command with real non-synthetic values." `
+        -Commands @(
+            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Complete-PassportStagingReadinessEvidencePacket.ps1 -PacketRoot <filled-staging-evidence-root> -EnvironmentFile artifacts\release\staging.env -Force"
+        )
     canary_mvp_readiness = New-Action `
         -Id "canary_mvp_readiness" `
         -Title "Close out canary MVP readiness" `
-        -Action "Fill the canary policy, incident review, balance reconciliation, service-delivery reconciliation, support readiness, and production-promotion evidence; then run the canary closeout command."
+        -Action "Fill the canary policy, incident review, balance reconciliation, service-delivery reconciliation, support readiness, and production-promotion evidence; then run the canary closeout command." `
+        -Commands @(
+            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Complete-PassportCanaryMvpReadinessEvidencePacket.ps1 -PacketRoot <filled-canary-evidence-root> -EnvironmentFile artifacts\release\canary-mvp.env -Force"
+        )
     package_signing = New-Action `
         -Id "package_signing" `
         -Title "Configure production package signing" `
-        -Action "Acquire the production MSIX signing certificate, configure PFX material or secure PFX path plus password, set publisher and timestamp URL, and validate the signing certificate report."
+        -Action "Acquire the production MSIX signing certificate, configure PFX material or secure PFX path plus password, set publisher and timestamp URL, and validate the signing certificate report." `
+        -Commands @(
+            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportPackageSigningProvisioning.ps1 -PackageSigningPath <filled-package-signing-root> -RequireNoPlaceholders",
+            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportWindowsSigningCertificate.ps1 -EnvironmentFile artifacts\release\production-mvp.env -OutputPath artifacts\release\production-signing-certificate-report.json"
+        )
     release_lane_endpoints = New-Action `
         -Id "release_lane_endpoints" `
         -Title "Provision production API and AI gateway endpoints" `
-        -Action "Deploy stable HTTPS production API and AI gateway endpoints, fill endpoint provisioning evidence, and load approved URLs into the production environment."
+        -Action "Deploy stable HTTPS production API and AI gateway endpoints, fill endpoint provisioning evidence, and load approved URLs into the production environment." `
+        -Commands @(
+            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportReleaseLaneEndpointProvisioning.ps1 -EndpointProvisioningPath <filled-release-lane-endpoints-root> -RequireNoPlaceholders"
+        )
     hosted_runtime_status = New-Action `
         -Id "hosted_runtime_status" `
         -Title "Make hosted runtime status ready" `
-        -Action "Ensure the production hosted API and AI gateway report ready runtime status using the approved endpoints and non-secret operations configuration."
+        -Action "Ensure the production hosted API and AI gateway report ready runtime status using the approved endpoints and non-secret operations configuration." `
+        -Commands @(
+            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportProductionMvpReadiness.ps1 -EnvironmentFile artifacts\release\production-mvp.env -NoFail -OutputPath artifacts\release\production-mvp-readiness-report.json"
+        )
     hosted_ai_runtime_probe = New-Action `
         -Id "hosted_ai_runtime_probe" `
         -Title "Make hosted AI runtime probe pass" `
-        -Action "Deploy the approved open-weight inference endpoint and configure the hosted AI gateway so the operator-authenticated non-mutating probe receives an answer."
+        -Action "Deploy the approved open-weight inference endpoint and configure the hosted AI gateway so the operator-authenticated non-mutating probe receives an answer." `
+        -Commands @(
+            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportOpenWeightAiRuntimeDeployment.ps1 -RequireNoPlaceholders -ProbeRuntime",
+            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportProductionMvpReadiness.ps1 -EnvironmentFile artifacts\release\production-mvp.env -NoFail -OutputPath artifacts\release\production-mvp-readiness-report.json"
+        )
     hosted_operator_status = New-Action `
         -Id "hosted_operator_status" `
         -Title "Verify hosted operator authentication" `
-        -Action "Configure the production hosted API URL and operator key hash, provide the operator secret only to the secure readiness environment, and confirm /ops/operator/status authorizes it."
+        -Action "Configure the production hosted API URL and operator key hash, provide the operator secret only to the secure readiness environment, and confirm /ops/operator/status authorizes it." `
+        -Commands @(
+            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportProductionMvpReadiness.ps1 -EnvironmentFile artifacts\release\production-mvp.env -NoFail -OutputPath artifacts\release\production-mvp-readiness-report.json"
+        )
     managed_storage_backups = New-Action `
         -Id "managed_storage_backups" `
         -Title "Provision managed storage and backups" `
-        -Action "Fill managed data-root, storage provider, backup policy, and restore runbook values, then validate managed storage provisioning with no placeholders."
+        -Action "Fill managed data-root, storage provider, backup policy, and restore runbook values, then validate managed storage provisioning with no placeholders." `
+        -Commands @(
+            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportManagedStorageProvisioning.ps1 -ManagedStoragePath <filled-managed-storage-root> -RequireNoPlaceholders"
+        )
     managed_storage_status = New-Action `
         -Id "managed_storage_status" `
         -Title "Make managed storage status ready" `
-        -Action "Bring the production hosted API online with durable records and append-log roots, then verify /ops/storage/status write/delete and backup-manifest enumeration probes."
+        -Action "Bring the production hosted API online with durable records and append-log roots, then verify /ops/storage/status write/delete and backup-manifest enumeration probes." `
+        -Commands @(
+            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportProductionMvpReadiness.ps1 -EnvironmentFile artifacts\release\production-mvp.env -NoFail -OutputPath artifacts\release\production-mvp-readiness-report.json"
+        )
     managed_signing_key_custody = New-Action `
         -Id "managed_signing_key_custody" `
         -Title "Provision managed signing custody" `
-        -Action "Move hosted service signing and Crown authority signing keys into managed, KMS, HSM, managed-HSM, or cloud-KMS custody and fill the custody evidence packet."
+        -Action "Move hosted service signing and Crown authority signing keys into managed, KMS, HSM, managed-HSM, or cloud-KMS custody and fill the custody evidence packet." `
+        -Commands @(
+            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportManagedSigningCustodyProvisioning.ps1 -ManagedSigningCustodyPath <filled-managed-signing-custody-root> -RequireNoPlaceholders"
+        )
     managed_signing_endpoint_probe = New-Action `
         -Id "managed_signing_endpoint_probe" `
         -Title "Make managed signing endpoint probe pass" `
-        -Action "Deploy an HTTPS managed signing endpoint that returns non-local RSA signature and public-key evidence for the ProductionMvp readiness probe."
+        -Action "Deploy an HTTPS managed signing endpoint that returns non-local RSA signature and public-key evidence for the ProductionMvp readiness probe." `
+        -Commands @(
+            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportProductionMvpReadiness.ps1 -EnvironmentFile artifacts\release\production-mvp.env -NoFail -OutputPath artifacts\release\production-mvp-readiness-report.json"
+        )
     issuer_capacity_genesis_secrets = New-Action `
         -Id "issuer_capacity_genesis_secrets" `
         -Title "Configure issuer, capacity, genesis, and ledger IDs" `
-        -Action "Approve and load the CC issuer authority ID, capacity report issuer ID, ARCH genesis manifest ID, and production ledger namespace."
+        -Action "Approve and load the CC issuer authority ID, capacity report issuer ID, ARCH genesis manifest ID, and production ledger namespace." `
+        -Commands @(
+            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportProductionMonetaryProvisioning.ps1 -ProductionMonetaryPath <filled-production-monetary-root> -RequireNoPlaceholders"
+        )
     open_weight_ai_runtime = New-Action `
         -Id "open_weight_ai_runtime" `
         -Title "Provision approved open-weight AI runtime" `
-        -Action "Approve the model artifact/license, deploy vLLM or TGI-compatible inference, configure vector store and knowledge approval root, and validate the runtime deployment/probe."
+        -Action "Approve the model artifact/license, deploy vLLM or TGI-compatible inference, configure vector store and knowledge approval root, and validate the runtime deployment/probe." `
+        -Commands @(
+            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportOpenWeightAiRuntimeDeployment.ps1 -RequireNoPlaceholders -ProbeRuntime"
+        )
     telemetry_incident_response = New-Action `
         -Id "telemetry_incident_response" `
         -Title "Configure telemetry and incident response" `
-        -Action "Fill the telemetry destination, retention policy URI, incident-response runbook URI, and incident owner, then validate production ops documents."
+        -Action "Fill the telemetry destination, retention policy URI, incident-response runbook URI, and incident owner, then validate production ops documents." `
+        -Commands @(
+            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportProductionOpsDocuments.ps1 -ProductionOpsPath <filled-production-ops-root> -RequireNoPlaceholders"
+        )
     production_release_approvals = New-Action `
         -Id "production_release_approvals" `
         -Title "Record production release approvals" `
-        -Action "Record product, engineering, security/privacy, and Crown monetary authority signoff IDs in the approved release-approval record."
+        -Action "Record product, engineering, security/privacy, and Crown monetary authority signoff IDs in the approved release-approval record." `
+        -Commands @(
+            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportProductionOpsDocuments.ps1 -ProductionOpsPath <filled-production-ops-root> -RequireNoPlaceholders",
+            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Complete-PassportProductionMvpCloseout.ps1 -EnvironmentFile artifacts\release\production-mvp.env -ProductionProvisioningPacketRoot <controlled-production-packet-root> -OutputDirectory artifacts\release\production-mvp-closeout -Force"
+        )
 }
 
 $provisioningActionMap = @{
@@ -692,6 +743,11 @@ if (-not [string]::IsNullOrWhiteSpace($MarkdownOutputPath)) {
             $lines.Add("- ``$($gate.id)``: $title")
             foreach ($missing in @($gate.missing | Select-Object -First 5)) {
                 $lines.Add("  - $missing")
+            }
+            foreach ($command in @($gate.operator_action.commands | Select-Object -First 4)) {
+                if (-not [string]::IsNullOrWhiteSpace($command)) {
+                    $lines.Add("  - Next command: ``$command``")
+                }
             }
         }
     }
