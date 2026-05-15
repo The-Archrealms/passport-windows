@@ -606,7 +606,7 @@ Then run:
   -OutputPath .\artifacts\release\staging-readiness-report.json
 ```
 
-Canary MVP readiness is the first citizen-facing real-token lane. Generate a canary environment template after the staging report and a `CanaryMvp` artifact validation report exist, then complete the policy, incident-review, balance-reconciliation, service-delivery, support-readiness, and production-promotion evidence templates under `deploy/canary-readiness/`:
+Canary MVP readiness is the first citizen-facing real-token lane. Generate a canary environment template after the staging report and a `CanaryMvp` artifact validation report exist, then complete a canary readiness evidence packet with policy, incident-review, balance-reconciliation, service-delivery, support-readiness, and production-promotion records:
 
 ```powershell
 .\tools\release\New-PassportCanaryMvpEnvironmentTemplate.ps1 `
@@ -615,7 +615,24 @@ Canary MVP readiness is the first citizen-facing real-token lane. Generate a can
   -IncludeCurrentArtifactValidationReport `
   -BlankUnconfiguredValues `
   -OutputPath .\artifacts\release\canary-mvp.env
+```
 
+The canary evidence packet is the operator handoff for the canary readiness environment values. Fill every placeholder, update the production approval hashes after editing the component reports, and validate the packet before loading the paths and hashes into `canary-mvp.env`:
+
+```powershell
+.\tools\release\New-PassportCanaryMvpReadinessEvidencePacket.ps1 `
+  -OutputDirectory .\artifacts\release\canary-mvp-readiness-evidence `
+  -StagingReadinessReportSha256 "<staging-readiness-report-sha256>" `
+  -CanaryArtifactValidationReportSha256 "<canary-artifact-validation-report-sha256>"
+
+.\tools\release\Test-PassportCanaryMvpReadinessEvidencePacket.ps1 `
+  -PacketRoot .\artifacts\release\canary-mvp-readiness-evidence `
+  -RequireNoPlaceholders
+```
+
+Then run:
+
+```powershell
 .\tools\release\Test-PassportCanaryMvpReadiness.ps1 `
   -EnvironmentFile .\artifacts\release\canary-mvp.env `
   -OutputPath .\artifacts\release\canary-mvp-readiness-report.json

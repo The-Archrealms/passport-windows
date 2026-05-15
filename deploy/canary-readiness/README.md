@@ -15,5 +15,23 @@ The canary readiness gate validates:
 - support and recovery readiness;
 - signed product, engineering, security/privacy, and Crown monetary authority approval for Production MVP promotion.
 
-Synthetic canary readiness reports are valid only for validator self-tests. ProductionMvp readiness rejects synthetic canary reports.
+Generate a controlled canary evidence packet, fill every placeholder, approve the records, then load the paths and SHA-256 hashes into `artifacts/release/canary-mvp.env` or the canary secret store:
 
+```powershell
+.\tools\release\New-PassportCanaryMvpReadinessEvidencePacket.ps1 `
+  -OutputDirectory .\artifacts\release\canary-mvp-readiness-evidence `
+  -StagingReadinessReportSha256 "<staging-readiness-report-sha256>" `
+  -CanaryArtifactValidationReportSha256 "<canary-artifact-validation-report-sha256>"
+```
+
+Validate the filled packet before running the canary readiness gate:
+
+```powershell
+.\tools\release\Test-PassportCanaryMvpReadinessEvidencePacket.ps1 `
+  -PacketRoot .\artifacts\release\canary-mvp-readiness-evidence `
+  -RequireNoPlaceholders
+```
+
+The packet validator checks that canary policy limits prohibit non-MVP token behavior, incident review is complete, ARCH/CC/escrow/burn/refund/re-credit balances reconcile, service delivery reconciles to storage proofs and verified burn epochs, support and recovery coverage is ready, and production-promotion approval hashes match the filled canary evidence files.
+
+Synthetic canary readiness reports are valid only for validator self-tests. ProductionMvp readiness rejects synthetic canary reports.
