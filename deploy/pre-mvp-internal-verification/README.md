@@ -100,6 +100,18 @@ $staffPilotHash = (Get-FileHash -Algorithm SHA256 .\artifacts\release\pre-mvp-st
   -ReportSha256 $staffPilotHash
 ```
 
+Alternatively, once the handoff packet has been filled with real controlled pilot evidence, run the fail-closed closeout command. It validates the handoff, validates the filled packet with `-RequireNoPlaceholders`, generates the pilot report, validates the report hash, and reruns the umbrella pre-MVP gate:
+
+```powershell
+.\tools\release\Complete-PassportPreMvpStaffStewardPilotHandoff.ps1 `
+  -HandoffRoot C:\secure\passport-pilot-handoff `
+  -OutputDirectory .\artifacts\release\pre-mvp-staff-steward-pilot-closeout `
+  -PilotReportPath .\artifacts\release\pre-mvp-staff-steward-pilot-report.json `
+  -PreMvpReportPath .\artifacts\release\pre-mvp-internal-verification-report.json `
+  -SimulationRunReportPath .\artifacts\release\pre-mvp-simulation-run-report.json `
+  -SimulationRunReportSha256 $simulationHash
+```
+
 The templates remain available for controlled document-system review. The generated report includes hashed `evidence_files`; `Test-PassportPreMvpStaffStewardPilotReport.ps1` and `Test-PassportPreMvpInternalVerification.ps1` verify those files exist, match their recorded SHA-256 values, and pass the staff/steward pilot evidence packet schema validation. Pass both evidence report paths and SHA-256 hashes to the verifier:
 
 ```powershell
@@ -122,4 +134,4 @@ ARCHREALMS_PASSPORT_PRE_MVP_STAFF_STEWARD_PILOT_REPORT_SHA256
 
 The reports must use the `internal-verification` lane, include real non-placeholder evidence references and evidence files, and prove that no production ARCH, production CC, Crown reserve balance, citizen production account history, or production service-liability record was created.
 
-`Test-PassportPreMvpInternalVerification.ps1` also validates the handoff generator through `staff_steward_pilot_handoff_validation` and the supporting dry-run helper through `staff_steward_pilot_dry_run_validation`. Those automated checks do not close the external pilot gate; they only prove the operator path is available, scenario evidence references are structured, and final acceptance still fails closed until real pilot evidence exists.
+`Test-PassportPreMvpInternalVerification.ps1` also validates the handoff generator through `staff_steward_pilot_handoff_validation`, the supporting dry-run helper through `staff_steward_pilot_dry_run_validation`, the final report validator through `staff_steward_pilot_report_validation`, and the closeout path through `staff_steward_pilot_closeout_validation`. Those automated checks do not close the external pilot gate; they only prove the operator path is available, scenario evidence references are structured, filled-evidence closeout is repeatable, and final acceptance still fails closed until real pilot evidence exists.

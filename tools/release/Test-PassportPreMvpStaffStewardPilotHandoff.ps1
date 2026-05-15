@@ -2,6 +2,7 @@ param(
     [string]$HandoffRoot,
     [string]$OutputPath = "artifacts\release\pre-mvp-staff-steward-pilot-handoff-validation-report.json",
     [switch]$UseGeneratedFixture,
+    [switch]$AllowFilledEvidencePacket,
     [switch]$NoFail
 )
 
@@ -113,6 +114,21 @@ function Test-FileRecord {
     return $failures
 }
 
+function Test-ExistingFileRecord {
+    param(
+        [object]$Record,
+        [string]$Description
+    )
+
+    $failures = @()
+    $path = Read-ObjectString -Object $Record -Name "path"
+    if ([string]::IsNullOrWhiteSpace($path) -or -not (Test-Path -LiteralPath $path -PathType Leaf)) {
+        $failures += "$Description file is missing: $path"
+    }
+
+    return $failures
+}
+
 function New-Check {
     param(
         [string]$Id,
@@ -204,7 +220,13 @@ $checks += New-Check -Id "pilot_handoff_manifest" -Failures $manifestFailures -E
 $fileFailures = @()
 if ($null -ne $manifest) {
     foreach ($record in @($manifest.generated_evidence_files)) {
-        $fileFailures += Test-FileRecord -Record $record -Description "generated evidence file $((Read-ObjectString -Object $record -Name "id"))"
+        $description = "generated evidence file $((Read-ObjectString -Object $record -Name "id"))"
+        if ($AllowFilledEvidencePacket) {
+            $fileFailures += Test-ExistingFileRecord -Record $record -Description $description
+        }
+        else {
+            $fileFailures += Test-FileRecord -Record $record -Description $description
+        }
     }
 
     foreach ($record in @($manifest.handoff_files)) {
@@ -280,6 +302,7 @@ $report = [pscustomobject][ordered]@{
     created_utc = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
     handoff_root = $resolvedHandoffRoot
     generated_fixture = $generatedFixture
+    allow_filled_evidence_packet = [bool]$AllowFilledEvidencePacket
     generation = $generationResult
     passed = ($failed.Count -eq 0)
     failed_check_count = $failed.Count
