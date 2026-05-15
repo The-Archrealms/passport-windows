@@ -301,15 +301,152 @@ $readinessActionMap = @{
 }
 
 $provisioningActionMap = @{
-    package_signing_provisioning = "Fill and approve production MSIX signing request, sideload trust policy, and Store signing policy."
-    release_lane_endpoint_provisioning = "Fill and approve production endpoint, TLS/DNS/routing, and endpoint readiness evidence."
-    managed_storage_provisioning = "Fill and approve managed storage, backup schedule, and storage readiness evidence."
-    managed_signing_custody_provisioning = "Fill and approve key custody, signing endpoint policy, and signing readiness evidence."
-    canary_readiness_provisioning = "Fill and approve the canary policy, incident, reconciliation, support, and production-promotion evidence templates."
-    canary_readiness_evidence_packet = "Complete and validate the canary readiness evidence packet with no placeholders."
-    open_weight_ai_runtime_deployment = "Fill model approval, vector store, runtime readiness evidence, and runtime env values for the approved open-weight deployment."
-    production_ops_documents = "Fill backup, restore, telemetry retention, incident response, and release approval documents."
-    production_monetary_provisioning = "Fill issuer/capacity/genesis provisioning, ARCH genesis request, and CC capacity request records."
+    package_signing_provisioning = New-Action `
+        -Id "package_signing_provisioning" `
+        -Title "Fill package-signing provisioning" `
+        -Action "Fill and approve production MSIX signing request, sideload trust policy, and Store signing policy." `
+        -Commands @(
+            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportPackageSigningProvisioning.ps1 -PackageSigningPath <filled-package-signing-root> -RequireNoPlaceholders"
+        )
+    release_lane_endpoint_provisioning = New-Action `
+        -Id "release_lane_endpoint_provisioning" `
+        -Title "Fill release-lane endpoint provisioning" `
+        -Action "Fill and approve production endpoint, TLS/DNS/routing, and endpoint readiness evidence." `
+        -Commands @(
+            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportReleaseLaneEndpointProvisioning.ps1 -EndpointProvisioningPath <filled-release-lane-endpoints-root> -RequireNoPlaceholders"
+        )
+    managed_storage_provisioning = New-Action `
+        -Id "managed_storage_provisioning" `
+        -Title "Fill managed-storage provisioning" `
+        -Action "Fill and approve managed storage, backup schedule, and storage readiness evidence." `
+        -Commands @(
+            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportManagedStorageProvisioning.ps1 -ManagedStoragePath <filled-managed-storage-root> -RequireNoPlaceholders"
+        )
+    managed_signing_custody_provisioning = New-Action `
+        -Id "managed_signing_custody_provisioning" `
+        -Title "Fill managed-signing custody provisioning" `
+        -Action "Fill and approve key custody, signing endpoint policy, and signing readiness evidence." `
+        -Commands @(
+            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportManagedSigningCustodyProvisioning.ps1 -ManagedSigningCustodyPath <filled-managed-signing-custody-root> -RequireNoPlaceholders"
+        )
+    canary_readiness_provisioning = New-Action `
+        -Id "canary_readiness_provisioning" `
+        -Title "Fill canary readiness provisioning" `
+        -Action "Fill and approve the canary policy, incident, reconciliation, support, and production-promotion evidence templates." `
+        -Commands @(
+            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportCanaryReadinessProvisioning.ps1 -CanaryReadinessPath <filled-canary-readiness-root> -RequireNoPlaceholders"
+        )
+    canary_readiness_evidence_packet = New-Action `
+        -Id "canary_readiness_evidence_packet" `
+        -Title "Complete canary readiness evidence packet" `
+        -Action "Complete and validate the canary readiness evidence packet with no placeholders." `
+        -Commands @(
+            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportCanaryMvpReadinessEvidencePacket.ps1 -PacketRoot <filled-canary-evidence-root> -RequireNoPlaceholders"
+        )
+    open_weight_ai_runtime_deployment = New-Action `
+        -Id "open_weight_ai_runtime_deployment" `
+        -Title "Fill open-weight AI runtime provisioning" `
+        -Action "Fill model approval, vector store, runtime readiness evidence, and runtime env values for the approved open-weight deployment." `
+        -Commands @(
+            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportOpenWeightAiRuntimeDeployment.ps1 -RequireNoPlaceholders -ProbeRuntime"
+        )
+    production_ops_documents = New-Action `
+        -Id "production_ops_documents" `
+        -Title "Fill production ops documents" `
+        -Action "Fill backup, restore, telemetry retention, incident response, and release approval documents." `
+        -Commands @(
+            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportProductionOpsDocuments.ps1 -ProductionOpsPath <filled-production-ops-root> -RequireNoPlaceholders"
+        )
+    production_monetary_provisioning = New-Action `
+        -Id "production_monetary_provisioning" `
+        -Title "Fill production monetary provisioning" `
+        -Action "Fill issuer/capacity/genesis provisioning, ARCH genesis request, and CC capacity request records." `
+        -Commands @(
+            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportProductionMonetaryProvisioning.ps1 -ProductionMonetaryPath <filled-production-monetary-root> -RequireNoPlaceholders"
+        )
+}
+
+$releaseEvidenceActionMap = @{
+    pre_mvp_passed = New-Action `
+        -Id "pre_mvp_passed" `
+        -Title "Close pre-MVP evidence" `
+        -Action "Complete the staff/steward pilot packet and rerun pre-MVP verification until the report passes." `
+        -Commands @(
+            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Complete-PassportPreMvpStaffStewardPilotHandoff.ps1 -HandoffRoot <filled-staff-steward-handoff-root> -SimulationRunReportPath artifacts\release\pre-mvp-simulation-run-report.json -SimulationRunReportSha256 <simulation-run-sha256> -Force"
+        )
+    provisioning_packet_passed = New-Action `
+        -Id "provisioning_packet_passed" `
+        -Title "Validate filled production provisioning" `
+        -Action "Fill the controlled production provisioning packet and validate it with no placeholders." `
+        -Commands @(
+            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportProductionProvisioningPacket.ps1 -PacketRoot <controlled-production-packet-root> -RequireNoPlaceholders"
+        )
+    reviewable_for_signoff = New-Action `
+        -Id "reviewable_for_signoff" `
+        -Title "Regenerate reviewable release evidence" `
+        -Action "Regenerate and validate the production release evidence packet after pre-MVP, staging, canary, readiness, and provisioning inputs are complete." `
+        -Commands @(
+            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\New-PassportProductionMvpReleaseEvidencePacket.ps1 -EnvironmentFile artifacts\release\production-mvp.env -OutputDirectory artifacts\release\production-mvp-release-evidence-packet -Force",
+            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportProductionMvpReleaseEvidencePacket.ps1 -RequireReady -OutputPath artifacts\release\production-mvp-closeout\production-mvp-release-evidence-validation-report.json"
+        )
+    readiness_ready = New-Action `
+        -Id "readiness_ready" `
+        -Title "Make production readiness pass" `
+        -Action "Load approved production values and rerun the ProductionMvp readiness report until all gates pass." `
+        -Commands @(
+            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportProductionMvpReadiness.ps1 -EnvironmentFile artifacts\release\production-mvp.env -OutputPath artifacts\release\production-mvp-readiness-report.json"
+        )
+    staging_readiness_report_ready = New-Action `
+        -Id "staging_readiness_report_ready" `
+        -Title "Close staging readiness" `
+        -Action "Complete the filled staging evidence packet and produce a non-synthetic ready staging report." `
+        -Commands @(
+            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Complete-PassportStagingReadinessEvidencePacket.ps1 -PacketRoot <filled-staging-evidence-root> -EnvironmentFile artifacts\release\staging.env -Force"
+        )
+    staging_readiness_report_promotion_approved = New-Action `
+        -Id "staging_readiness_report_promotion_approved" `
+        -Title "Approve staging promotion" `
+        -Action "Record signed staging promotion approval evidence and rerun the staging closeout." `
+        -Commands @(
+            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Complete-PassportStagingReadinessEvidencePacket.ps1 -PacketRoot <filled-staging-evidence-root> -EnvironmentFile artifacts\release\staging.env -Force"
+        )
+    canary_mvp_readiness_report_ready = New-Action `
+        -Id "canary_mvp_readiness_report_ready" `
+        -Title "Close canary MVP readiness" `
+        -Action "Complete the filled canary evidence packet and produce a non-synthetic ready canary report." `
+        -Commands @(
+            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Complete-PassportCanaryMvpReadinessEvidencePacket.ps1 -PacketRoot <filled-canary-evidence-root> -EnvironmentFile artifacts\release\canary-mvp.env -Force"
+        )
+    canary_mvp_readiness_report_production_approved = New-Action `
+        -Id "canary_mvp_readiness_report_production_approved" `
+        -Title "Approve ProductionMvp promotion" `
+        -Action "Record signed canary-to-production approval evidence and rerun the canary closeout." `
+        -Commands @(
+            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Complete-PassportCanaryMvpReadinessEvidencePacket.ps1 -PacketRoot <filled-canary-evidence-root> -EnvironmentFile artifacts\release\canary-mvp.env -Force"
+        )
+}
+
+$packageSigningReleaseEvidenceAction = New-Action `
+    -Id "package_signing_certificate_evidence" `
+    -Title "Attach package-signing certificate evidence" `
+    -Action "Validate the production MSIX signing certificate and regenerate release evidence so certificate details are included." `
+    -Commands @(
+        "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportWindowsSigningCertificate.ps1 -EnvironmentFile artifacts\release\production-mvp.env -OutputPath artifacts\release\production-signing-certificate-report.json",
+        "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\New-PassportProductionMvpReleaseEvidencePacket.ps1 -EnvironmentFile artifacts\release\production-mvp.env -OutputDirectory artifacts\release\production-mvp-release-evidence-packet -Force"
+    )
+
+foreach ($id in @(
+    "package_signing_certificate_included_when_gate_passes",
+    "package_signing_certificate_passed_when_gate_passes",
+    "package_signing_certificate_material",
+    "package_signing_certificate_subject",
+    "package_signing_certificate_thumbprint",
+    "package_signing_certificate_private_key",
+    "package_signing_certificate_code_signing_eku",
+    "package_signing_certificate_timestamp_url",
+    "package_signing_expected_publisher"
+)) {
+    $releaseEvidenceActionMap[$id] = $packageSigningReleaseEvidenceAction
 }
 
 if ($UseGeneratedFixture) {
@@ -518,12 +655,14 @@ if ($null -ne $provisioning -and $provisioning.PSObject.Properties["checks"]) {
         $resolvedChildReportPath = Resolve-RepoPath -Path $childReportPath
         $childReportExists = (-not [string]::IsNullOrWhiteSpace($resolvedChildReportPath)) -and (Test-Path -LiteralPath $resolvedChildReportPath -PathType Leaf)
         $childFailedChecks = if ($childReportExists) { @(Get-FailedChildChecks -Path $resolvedChildReportPath) } else { @() }
+        $action = $(if ($provisioningActionMap.ContainsKey([string]$check.id)) { $provisioningActionMap[[string]$check.id] } else { $null })
 
         $failedProvisioningChecks += [pscustomobject][ordered]@{
             id = [string]$check.id
             description = ConvertTo-ReportText -Value $check.description
             failures = @($check.failures | ForEach-Object { ConvertTo-ReportText -Value $_ })
-            operator_action = $(if ($provisioningActionMap.ContainsKey([string]$check.id)) { [string]$provisioningActionMap[[string]$check.id] } else { "" })
+            operator_action = $(if ($null -ne $action) { $action } else { $null })
+            operator_action_text = $(if ($null -ne $action) { [string]$action.action } else { "" })
             child_report_path = $childReportPath
             child_report_exists = $childReportExists
             child_report_sha256 = $(if ($childReportExists) { Get-Sha256Hex -Path $resolvedChildReportPath } else { "" })
@@ -536,9 +675,12 @@ if ($null -ne $provisioning -and $provisioning.PSObject.Properties["checks"]) {
 $failedReleaseEvidenceChecks = @()
 if ($null -ne $releaseEvidence -and $releaseEvidence.PSObject.Properties["checks"]) {
     foreach ($check in @($releaseEvidence.checks | Where-Object { $_.passed -ne $true })) {
+        $action = $(if ($releaseEvidenceActionMap.ContainsKey([string]$check.id)) { $releaseEvidenceActionMap[[string]$check.id] } else { $null })
         $failedReleaseEvidenceChecks += [pscustomobject][ordered]@{
             id = [string]$check.id
             failures = @($check.failures | ForEach-Object { ConvertTo-ReportText -Value $_ })
+            operator_action = $(if ($null -ne $action) { $action } else { $null })
+            operator_action_text = $(if ($null -ne $action) { [string]$action.action } else { "" })
         }
     }
 }
@@ -597,6 +739,7 @@ foreach ($check in $failedReleaseEvidenceChecks) {
     $releaseEvidenceItems += [pscustomobject][ordered]@{
         id = [string]$check.id
         failures = @($check.failures)
+        operator_action = [string]$check.operator_action_text
     }
 }
 
@@ -759,7 +902,7 @@ if (-not [string]::IsNullOrWhiteSpace($MarkdownOutputPath)) {
     }
     else {
         foreach ($check in $failedProvisioningChecks) {
-            $detail = if ([string]::IsNullOrWhiteSpace($check.operator_action)) { $check.description } else { $check.operator_action }
+            $detail = if ([string]::IsNullOrWhiteSpace($check.operator_action_text)) { $check.description } else { $check.operator_action_text }
             $lines.Add("- ``$($check.id)``: $detail")
             if (-not [string]::IsNullOrWhiteSpace($check.child_report_path)) {
                 $lines.Add("  - Child report: $($check.child_report_path)")
@@ -770,6 +913,11 @@ if (-not [string]::IsNullOrWhiteSpace($MarkdownOutputPath)) {
                     $message = "failed"
                 }
                 $lines.Add("  - ``$($child.id)``: $message")
+            }
+            foreach ($command in @($check.operator_action.commands | Select-Object -First 4)) {
+                if (-not [string]::IsNullOrWhiteSpace($command)) {
+                    $lines.Add("  - Next command: ``$command``")
+                }
             }
         }
     }
@@ -783,6 +931,14 @@ if (-not [string]::IsNullOrWhiteSpace($MarkdownOutputPath)) {
         foreach ($check in $failedReleaseEvidenceChecks) {
             $message = (@($check.failures) -join "; ")
             $lines.Add("- ``$($check.id)``: $message")
+            if (-not [string]::IsNullOrWhiteSpace($check.operator_action_text)) {
+                $lines.Add("  - Action: $($check.operator_action_text)")
+            }
+            foreach ($command in @($check.operator_action.commands | Select-Object -First 4)) {
+                if (-not [string]::IsNullOrWhiteSpace($command)) {
+                    $lines.Add("  - Next command: ``$command``")
+                }
+            }
         }
     }
 
