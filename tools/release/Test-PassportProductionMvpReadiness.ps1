@@ -343,6 +343,48 @@ function Test-HostedOperatorStatusEndpoint {
     return ""
 }
 
+function Test-HostedAiRuntimeProbeEndpoint {
+    $aiGatewayUrl = Get-FirstEnvironmentValue -Names @(
+        "PASSPORT_WINDOWS_PRODUCTION_MVP_AI_GATEWAY_URL",
+        "PASSPORT_WINDOWS_RELEASE_LANE_AI_GATEWAY_URL"
+    )
+    $operatorKey = [System.Environment]::GetEnvironmentVariable("ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY")
+    if ([string]::IsNullOrWhiteSpace($aiGatewayUrl) -or [string]::IsNullOrWhiteSpace($operatorKey)) {
+        return ""
+    }
+
+    $url = Join-EndpointPath -BaseUrl $aiGatewayUrl -Path "/ai/runtime/probe"
+    try {
+        $response = Invoke-RestMethod `
+            -Method Get `
+            -Uri $url `
+            -Headers @{ "X-Archrealms-Operator-Key" = $operatorKey } `
+            -TimeoutSec $EndpointTimeoutSeconds
+    }
+    catch {
+        return "hosted AI runtime probe endpoint check failed for $url`: $($_.Exception.Message)"
+    }
+
+    if ($null -eq $response) {
+        return "hosted AI runtime probe endpoint returned no JSON for $url"
+    }
+
+    if ($response.schema -ne "archrealms.passport.hosted_ai_runtime_probe.v1" -or $response.ready -ne $true -or $response.runtime_answer_received -ne $true) {
+        $missing = @()
+        if ($response.missing) {
+            $missing = @($response.missing)
+        }
+
+        if ($missing.Count -gt 0) {
+            return "hosted AI runtime probe endpoint is not ready for $url`: " + ($missing -join ", ")
+        }
+
+        return "hosted AI runtime probe endpoint is not ready for $url"
+    }
+
+    return ""
+}
+
 function Test-HostedStorageStatusEndpoint {
     $apiBaseUrl = Get-FirstEnvironmentValue -Names @(
         "PASSPORT_WINDOWS_PRODUCTION_MVP_API_BASE_URL",
@@ -663,6 +705,12 @@ $gates = @(
         -Description "Configured production hosted API and AI gateway runtime status endpoints are reachable and ready." `
         -RequiredEnvironment @() `
         -ExtraCheck ${function:Test-HostedRuntimeStatusEndpoints}
+
+    New-Gate `
+        -Id "hosted_ai_runtime_probe" `
+        -Description "Configured hosted AI gateway can obtain a non-mutating answer from the approved model runtime." `
+        -RequiredEnvironment @() `
+        -ExtraCheck ${function:Test-HostedAiRuntimeProbeEndpoint}
 
     New-Gate `
         -Id "hosted_operator_gate" `

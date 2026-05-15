@@ -14,6 +14,7 @@ The hosted services project provides the production-facing API boundary that Win
 |---|---|---|
 | `GET /health` | Liveness and contract version | Returns `passport-hosted-services-v1` |
 | `GET /ai/runtime/status` | Non-secret hosted open-weight AI readiness | Reports whether inference URL, approved model ID, model artifact hash, license approval, vector store, and knowledge approval root are configured |
+| `GET /ai/runtime/probe` | Non-mutating hosted AI inference probe | Requires `X-Archrealms-Operator-Key`, sends a readiness prompt through the configured runtime, and verifies a non-empty answer |
 | `GET /ops/runtime/status` | Non-secret hosted operations readiness | Reports managed data root, storage/backup/restore policy, managed signing-key custody, telemetry, and incident-response configuration without exposing secrets |
 | `GET /ops/operator/status` | Non-mutating operator authentication probe | Requires `X-Archrealms-Operator-Key` and returns authorization status for production readiness checks |
 | `GET /ops/storage/status` | Non-mutating managed-storage readiness probe | Requires `X-Archrealms-Operator-Key`, verifies hosted data-root write/delete probes and backup-manifest enumeration |
@@ -62,6 +63,7 @@ The hosted services project provides the production-facing API boundary that Win
 - Set `ARCHREALMS_PASSPORT_AI_INFERENCE_API_KEY` when the runtime endpoint requires bearer authentication.
 - Optional controls: `ARCHREALMS_PASSPORT_AI_SYSTEM_PROMPT`, `ARCHREALMS_PASSPORT_AI_MAX_OUTPUT_TOKENS`, and `ARCHREALMS_PASSPORT_AI_TEMPERATURE`.
 - Set `ARCHREALMS_PASSPORT_AI_MODEL_ARTIFACT_SHA256`, `ARCHREALMS_PASSPORT_AI_MODEL_LICENSE_APPROVAL_ID`, `ARCHREALMS_PASSPORT_AI_VECTOR_STORE_PROVIDER`, `ARCHREALMS_PASSPORT_AI_VECTOR_STORE_ID`, and `ARCHREALMS_PASSPORT_AI_KNOWLEDGE_APPROVAL_ROOT` so `/ai/runtime/status` can prove the production AI lane is configured before clients rely on it.
+- Production readiness calls `/ai/runtime/probe` with the operator key to prove the configured hosted AI gateway can obtain a non-mutating answer from the approved model runtime.
 - Passport clients call only the hosted gateway. They do not receive model runtime credentials and do not call vLLM/TGI directly.
 
 ## Release-Lane Configuration

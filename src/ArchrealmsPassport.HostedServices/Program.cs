@@ -22,6 +22,24 @@ app.MapGet("/health", () => Results.Json(new
 
 app.MapGet("/ai/runtime/status", () => Results.Json(PassportHostedAiRuntimeReadiness.FromEnvironment()));
 
+app.MapGet("/ai/runtime/probe", async (HttpRequest httpRequest, CancellationToken cancellationToken) =>
+{
+    var operatorAuthorization = AuthorizeOperator(httpRequest, operatorGate);
+    if (operatorAuthorization != null)
+    {
+        return operatorAuthorization;
+    }
+
+    var rateLimit = AuthorizeRate(httpRequest, rateLimiter, "operator-ai-runtime-probe", maxRequests: 10, window: TimeSpan.FromMinutes(1));
+    if (rateLimit != null)
+    {
+        return rateLimit;
+    }
+
+    var probe = await PassportHostedAiRuntimeProbe.CreateAsync(aiInferenceGateway, cancellationToken);
+    return Results.Json(probe, statusCode: probe.Ready ? StatusCodes.Status200OK : StatusCodes.Status503ServiceUnavailable);
+});
+
 app.MapGet("/ops/runtime/status", () => Results.Json(PassportHostedOperationsReadiness.FromEnvironment()));
 
 app.MapGet("/ops/operator/status", (HttpRequest httpRequest) =>

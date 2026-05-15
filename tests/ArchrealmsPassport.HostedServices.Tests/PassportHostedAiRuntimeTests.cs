@@ -135,6 +135,28 @@ public sealed class PassportHostedAiRuntimeTests
         Assert.Contains("ARCHREALMS_PASSPORT_AI_KNOWLEDGE_APPROVAL_ROOT", readiness.Missing);
     }
 
+    [Fact]
+    public async Task RuntimeProbeRequiresConfiguredRuntimeAndAnswer()
+    {
+        var notConfigured = await PassportHostedAiRuntimeProbe.CreateAsync(new FakeInferenceGateway(false, false), CancellationToken.None);
+        Assert.False(notConfigured.Ready);
+        Assert.Contains("ARCHREALMS_PASSPORT_AI_INFERENCE_BASE_URL", notConfigured.Missing);
+
+        var failed = await PassportHostedAiRuntimeProbe.CreateAsync(new FakeInferenceGateway(true, false), CancellationToken.None);
+        Assert.False(failed.Ready);
+        Assert.Contains("hosted AI runtime answer", failed.Missing);
+
+        var exception = await PassportHostedAiRuntimeProbe.CreateAsync(new FakeInferenceGateway(true, false, throws: true), CancellationToken.None);
+        Assert.False(exception.Ready);
+        Assert.Contains("hosted AI runtime answer", exception.Missing);
+        Assert.Contains("probe failed", exception.Message, StringComparison.OrdinalIgnoreCase);
+
+        var ready = await PassportHostedAiRuntimeProbe.CreateAsync(new FakeInferenceGateway(true, true), CancellationToken.None);
+        Assert.True(ready.Ready, string.Join("; ", ready.Missing));
+        Assert.True(ready.RuntimeAnswerReceived);
+        Assert.Equal("Qwen/Qwen3-8B", ready.ModelId);
+    }
+
     private sealed class CapturingHandler : HttpMessageHandler
     {
         public string RequestUri { get; private set; } = string.Empty;
@@ -152,6 +174,37 @@ public sealed class PassportHostedAiRuntimeTests
                     Encoding.UTF8,
                     "application/json")
             };
+        }
+    }
+
+    private sealed class FakeInferenceGateway : IPassportHostedAiInferenceGateway
+    {
+        private readonly bool succeeds;
+        private readonly bool throws;
+
+        public FakeInferenceGateway(bool isConfigured, bool succeeds, bool throws = false)
+        {
+            IsConfigured = isConfigured;
+            this.succeeds = succeeds;
+            this.throws = throws;
+        }
+
+        public bool IsConfigured { get; }
+
+        public Task<PassportHostedAiInferenceResult> CreateAnswerAsync(
+            PassportAiChatRequest request,
+            Dictionary<string, object?> sessionRecord,
+            IReadOnlyList<PassportHostedKnowledgeChunk> retrievedChunks,
+            CancellationToken cancellationToken = default)
+        {
+            if (throws)
+            {
+                throw new InvalidOperationException("Runtime unavailable.");
+            }
+
+            return Task.FromResult(succeeds
+                ? PassportHostedAiInferenceResult.Success("Readiness answer.", "Qwen/Qwen3-8B")
+                : PassportHostedAiInferenceResult.Failed("Runtime failed."));
         }
     }
 
