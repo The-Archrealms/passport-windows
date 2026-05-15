@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using ArchrealmsPassport.Core.Protocol;
 using ArchrealmsPassport.HostedServices;
 using ArchrealmsPassport.HostedServices.Contracts;
 using Xunit;
@@ -129,6 +130,8 @@ public sealed class PassportHostedPolicyTests
         });
         Assert.True(accepted.Succeeded, accepted.Message);
         Assert.Equal("passport_cc_capacity_report", accepted.Record!["record_type"]);
+        var inspection = PassportRegistryRecordInspector.Inspect(JsonSerializer.SerializeToUtf8Bytes(accepted.Record, JsonOptions));
+        Assert.True(inspection.IsEnvelopeValid, string.Join("; ", inspection.ValidationFailures));
 
         var rejected = PassportHostedPolicy.CreateCcCapacityReport(new PassportCcCapacityReportRequest
         {

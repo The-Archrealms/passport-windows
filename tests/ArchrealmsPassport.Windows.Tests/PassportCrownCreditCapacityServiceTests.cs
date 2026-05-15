@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
+using ArchrealmsPassport.Core.Protocol;
 using ArchrealmsPassport.Windows.Services;
 using ArchrealmsPassport.Windows.Tests.Infrastructure;
 using Xunit;
@@ -27,6 +28,8 @@ public sealed class PassportCrownCreditCapacityServiceTests
             operationalReserveExcluded: true);
         Assert.True(report.Succeeded, report.Message);
         Assert.True(File.Exists(report.ReportPath));
+        var inspection = PassportRegistryRecordInspector.Inspect(File.ReadAllBytes(report.ReportPath), report.ReportPath);
+        Assert.True(inspection.IsEnvelopeValid, string.Join("; ", inspection.ValidationFailures));
 
         var validation = service.ValidateIssuance(
             workspace.Root,

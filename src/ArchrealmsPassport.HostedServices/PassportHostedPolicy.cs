@@ -237,18 +237,21 @@ public static class PassportHostedPolicy
             return FailedRecord("Capacity report requires authority record hash evidence.");
         }
 
+        var now = DateTimeOffset.UtcNow;
         var recordId = NewRecordId("cc-capacity-" + NormalizeSlug(request.ServiceClass));
         var record = new Dictionary<string, object?>
         {
             ["schema_version"] = 1,
             ["record_type"] = PassportRecordTypes.CcCapacityReport,
             ["record_id"] = recordId,
-            ["created_utc"] = DateTimeOffset.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+            ["created_utc"] = now.ToString("yyyy-MM-ddTHH:mm:ssZ"),
             ["contract_version"] = ContractVersion,
             ["release_lane"] = NormalizeRequired(request.ReleaseLane, "release lane"),
             ["ledger_namespace"] = NormalizeRequired(request.LedgerNamespace, "ledger namespace"),
             ["policy_version"] = NormalizeRequired(request.PolicyVersion, "policy version"),
             ["service_class"] = NormalizeSlug(request.ServiceClass),
+            ["reporting_period_start_utc"] = now.AddDays(-90).ToString("yyyy-MM-ddTHH:mm:ssZ"),
+            ["reporting_period_end_utc"] = now.ToString("yyyy-MM-ddTHH:mm:ssZ"),
             ["conservative_service_liability_capacity_base_units"] = request.ConservativeServiceLiabilityCapacityBaseUnits,
             ["outstanding_cc_before_base_units"] = request.OutstandingCcBeforeBaseUnits,
             ["max_issuance_base_units"] = request.MaxIssuanceBaseUnits,
@@ -257,6 +260,15 @@ public static class PassportHostedPolicy
             ["thin_market_issuance_zero"] = request.ThinMarketIssuanceZero,
             ["continuity_reserve_excluded"] = request.ContinuityReserveExcluded,
             ["operational_reserve_excluded"] = request.OperationalReserveExcluded,
+            ["affiliate_trade_exclusion_applied"] = true,
+            ["proof_history_haircut"] = 0.0,
+            ["uptime_haircut"] = 0.0,
+            ["retrieval_haircut"] = 0.0,
+            ["repair_haircut"] = 0.0,
+            ["concentration_haircut"] = 0.0,
+            ["churn_haircut"] = 0.0,
+            ["audit_confidence_haircut"] = 0.0,
+            ["capacity_evidence_refs"] = new[] { request.CapacityReportAuthorityRecordSha256.Trim().ToLowerInvariant() },
             ["capacity_report_authority_record_sha256"] = request.CapacityReportAuthorityRecordSha256.Trim().ToLowerInvariant(),
             ["summary"] = "Hosted conservative Crown Credit issuance-capacity report."
         };

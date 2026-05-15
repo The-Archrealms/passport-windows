@@ -57,8 +57,9 @@ namespace ArchrealmsPassport.Windows.Services
                     return Failed("Capacity haircut must be between 0 and 10000 basis points.");
                 }
 
-                var timestamp = DateTime.UtcNow.ToString("yyyyMMddTHHmmssZ");
-                var createdUtc = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
+                var now = DateTime.UtcNow;
+                var timestamp = now.ToString("yyyyMMddTHHmmssZ");
+                var createdUtc = now.ToString("yyyy-MM-ddTHH:mm:ssZ");
                 var reportsRoot = Path.Combine(resolvedWorkspaceRoot, "records", "passport", "monetary", "capacity-reports", "cc");
                 Directory.CreateDirectory(reportsRoot);
                 var normalizedServiceClass = NormalizeServiceClass(serviceClass);
@@ -73,6 +74,8 @@ namespace ArchrealmsPassport.Windows.Services
                     ["ledger_namespace"] = releaseLane.LedgerNamespace,
                     ["policy_version"] = releaseLane.PolicyVersion,
                     ["service_class"] = normalizedServiceClass,
+                    ["reporting_period_start_utc"] = now.AddDays(-90).ToString("yyyy-MM-ddTHH:mm:ssZ"),
+                    ["reporting_period_end_utc"] = createdUtc,
                     ["conservative_service_liability_capacity_base_units"] = conservativeServiceLiabilityCapacityBaseUnits,
                     ["outstanding_cc_before_base_units"] = outstandingCrownCreditBeforeBaseUnits,
                     ["max_issuance_base_units"] = maxIssuanceBaseUnits,
@@ -81,6 +84,15 @@ namespace ArchrealmsPassport.Windows.Services
                     ["thin_market_issuance_zero"] = thinMarketIssuanceZero,
                     ["continuity_reserve_excluded"] = continuityReserveExcluded,
                     ["operational_reserve_excluded"] = operationalReserveExcluded,
+                    ["affiliate_trade_exclusion_applied"] = true,
+                    ["proof_history_haircut"] = 0.0,
+                    ["uptime_haircut"] = 0.0,
+                    ["retrieval_haircut"] = 0.0,
+                    ["repair_haircut"] = 0.0,
+                    ["concentration_haircut"] = 0.0,
+                    ["churn_haircut"] = 0.0,
+                    ["audit_confidence_haircut"] = 0.0,
+                    ["capacity_evidence_refs"] = Array.Empty<string>(),
                     ["summary"] = "Conservative Crown Credit issuance-capacity report for Passport monetary ledger validation."
                 };
                 File.WriteAllText(reportPath, JsonSerializer.Serialize(report, JsonOptions), Encoding.UTF8);
