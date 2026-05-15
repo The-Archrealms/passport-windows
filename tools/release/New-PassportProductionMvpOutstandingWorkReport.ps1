@@ -193,6 +193,60 @@ function Get-ActionCommandArray {
     return ,[string[]]$commands
 }
 
+function Get-ReportReferenceRefreshRecord {
+    param(
+        [string]$GateId,
+        [string]$MissingText
+    )
+
+    if ([string]::IsNullOrWhiteSpace($MissingText) -or $MissingText -notmatch "SHA256 does not match") {
+        return $null
+    }
+
+    $record = switch ($GateId) {
+        "pre_mvp_internal_verification" {
+            [pscustomobject][ordered]@{
+                variable = "ARCHREALMS_PASSPORT_PRE_MVP_VERIFICATION_REPORT_SHA256"
+                update_switch = "-IncludeCurrentPreMvpReport"
+                title = "Refresh pre-MVP report reference"
+            }
+            break
+        }
+        "staging_readiness" {
+            [pscustomobject][ordered]@{
+                variable = "ARCHREALMS_PASSPORT_STAGING_READINESS_REPORT_SHA256"
+                update_switch = "-IncludeCurrentStagingReadinessReport"
+                title = "Refresh staging readiness report reference"
+            }
+            break
+        }
+        "canary_mvp_readiness" {
+            [pscustomobject][ordered]@{
+                variable = "ARCHREALMS_PASSPORT_CANARY_MVP_READINESS_REPORT_SHA256"
+                update_switch = "-IncludeCurrentCanaryMvpReadinessReport"
+                title = "Refresh canary MVP readiness report reference"
+            }
+            break
+        }
+        default { $null }
+    }
+
+    if ($null -eq $record -or $MissingText -notmatch [regex]::Escape($record.variable)) {
+        return $null
+    }
+
+    $command = "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Update-PassportProductionMvpReportReferences.ps1 -EnvironmentFile artifacts\release\production-mvp.env $($record.update_switch)"
+
+    return [pscustomobject][ordered]@{
+        readiness_gate_id = $GateId
+        variable = $record.variable
+        missing_text = $MissingText
+        title = $record.title
+        action = "Refresh only the report path and SHA-256 reference in the production MVP environment file, preserving unrelated endpoint, signing, and secret values."
+        operator_action_commands = @($command)
+    }
+}
+
 $readinessActionMap = @{
     pre_mvp_internal_verification = New-Action `
         -Id "pre_mvp_internal_verification" `
@@ -491,8 +545,17 @@ if ($UseGeneratedFixture) {
         schema = "archrealms.passport.production_mvp_readiness.v1"
         created_utc = $createdUtc
         ready = $false
-        failed_gate_count = 1
+        failed_gate_count = 2
         gates = @(
+            [pscustomobject][ordered]@{
+                id = "pre_mvp_internal_verification"
+                description = "Pre-MVP internal verification must pass before citizen-facing token release."
+                passed = $false
+                missing = @(
+                    "ARCHREALMS_PASSPORT_PRE_MVP_VERIFICATION_REPORT_SHA256 does not match the report file",
+                    "pre-MVP internal verification report did not pass"
+                )
+            },
             [pscustomobject][ordered]@{
                 id = "package_signing"
                 description = "Production MVP package signing uses a stable certificate and timestamping, not a generated test certificate."
@@ -697,9 +760,18 @@ if ($null -ne $releaseEvidence -and $releaseEvidence.PSObject.Properties["checks
 }
 
 $environmentVariableMap = @{}
+$reportReferenceRefreshMap = @{}
 $readinessEvidenceItems = @()
 foreach ($gate in $failedReadinessGates) {
     foreach ($missing in @($gate.missing)) {
+        $refreshRecord = Get-ReportReferenceRefreshRecord -GateId ([string]$gate.id) -MissingText ([string]$missing)
+        if ($null -ne $refreshRecord) {
+            $refreshKey = "$($refreshRecord.readiness_gate_id)|$($refreshRecord.variable)"
+            if (-not $reportReferenceRefreshMap.ContainsKey($refreshKey)) {
+                $reportReferenceRefreshMap[$refreshKey] = $refreshRecord
+            }
+        }
+
         $envNames = @(Get-EnvironmentVariableNames -Text ([string]$missing))
         foreach ($envName in $envNames) {
             if (-not $environmentVariableMap.ContainsKey($envName)) {
@@ -733,6 +805,7 @@ foreach ($gate in $failedReadinessGates) {
 }
 
 $requiredEnvironmentVariables = @($environmentVariableMap.Keys | Sort-Object | ForEach-Object { $environmentVariableMap[$_] })
+$reportReferenceRefreshes = @($reportReferenceRefreshMap.Keys | Sort-Object | ForEach-Object { $reportReferenceRefreshMap[$_] })
 
 $requiredProvisioningEvidenceFiles = @()
 foreach ($check in $failedProvisioningChecks) {
@@ -778,6 +851,14 @@ foreach ($item in @($releaseEvidenceItems)) {
         $contractFailures += "release_evidence_items operator_action_commands must serialize as an array for $($item.id)."
     }
 }
+foreach ($item in @($reportReferenceRefreshes)) {
+    if ($item.operator_action_commands -isnot [array]) {
+        $contractFailures += "report_reference_refreshes operator_action_commands must serialize as an array for $($item.readiness_gate_id)."
+    }
+}
+if ($UseGeneratedFixture -and @($reportReferenceRefreshes).Count -eq 0) {
+    $contractFailures += "generated fixture must include a report reference refresh command."
+}
 if ($contractFailures.Count -gt 0) {
     throw "Outstanding-work report contract validation failed: $($contractFailures -join '; ')"
 }
@@ -812,6 +893,7 @@ $report = [pscustomobject][ordered]@{
         failed_provisioning_child_check_count = [int]$failedProvisioningChildCheckCount
         failed_release_evidence_check_count = $failedReleaseEvidenceChecks.Count
         required_environment_variable_count = $requiredEnvironmentVariables.Count
+        report_reference_refresh_count = $reportReferenceRefreshes.Count
         required_readiness_evidence_item_count = $readinessEvidenceItems.Count
         required_readiness_evidence_item_command_count = $readinessEvidenceItemCommandCount
         required_provisioning_evidence_file_count = $requiredProvisioningEvidenceFiles.Count
@@ -824,6 +906,7 @@ $report = [pscustomobject][ordered]@{
     failed_release_evidence_checks = $failedReleaseEvidenceChecks
     operator_input_matrix = [pscustomobject][ordered]@{
         environment_variables = $requiredEnvironmentVariables
+        report_reference_refreshes = $reportReferenceRefreshes
         readiness_evidence_items = $readinessEvidenceItems
         provisioning_evidence_files = $requiredProvisioningEvidenceFiles
         release_evidence_items = $releaseEvidenceItems
@@ -884,6 +967,20 @@ if (-not [string]::IsNullOrWhiteSpace($MarkdownOutputPath)) {
     }
     if ($requiredEnvironmentVariables.Count -gt 25) {
         $lines.Add("  - ...$($requiredEnvironmentVariables.Count - 25) more in the JSON report")
+    }
+
+    $lines.Add("- Report references to refresh: $($reportReferenceRefreshes.Count)")
+    foreach ($item in @($reportReferenceRefreshes | Select-Object -First 5)) {
+        $lines.Add("  - ``$($item.readiness_gate_id)``: $($item.variable)")
+        $lines.Add("    - Action: $($item.action)")
+        foreach ($command in @($item.operator_action_commands | Select-Object -First 2)) {
+            if (-not [string]::IsNullOrWhiteSpace($command)) {
+                $lines.Add("    - Next command: ``$command``")
+            }
+        }
+    }
+    if ($reportReferenceRefreshes.Count -gt 5) {
+        $lines.Add("  - ...$($reportReferenceRefreshes.Count - 5) more in the JSON report")
     }
 
     $lines.Add("- Readiness evidence items to complete: $($readinessEvidenceItems.Count)")
@@ -1016,6 +1113,7 @@ $result = [pscustomobject][ordered]@{
     failed_provisioning_child_check_count = [int]$failedProvisioningChildCheckCount
     failed_release_evidence_check_count = $failedReleaseEvidenceChecks.Count
     required_environment_variable_count = $requiredEnvironmentVariables.Count
+    report_reference_refresh_count = $reportReferenceRefreshes.Count
     required_readiness_evidence_item_count = $readinessEvidenceItems.Count
     required_readiness_evidence_item_command_count = $readinessEvidenceItemCommandCount
     required_provisioning_evidence_file_count = $requiredProvisioningEvidenceFiles.Count

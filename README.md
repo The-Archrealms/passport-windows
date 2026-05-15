@@ -794,6 +794,16 @@ To produce a concise redacted list of remaining production work from the latest 
 
 The report writes JSON and Markdown under `artifacts\release\`, groups failed readiness gates, provisioning packet checks, provisioning child-check failures, release-evidence checks, and a redacted operator input matrix of required environment variables and evidence files. It includes gate-specific readiness, provisioning, release-evidence, readiness-evidence, and release-evidence-item next commands plus the next closeout command, and it does not serialize secret values.
 
+If a readiness report path is correct but its recorded SHA-256 is stale, refresh only the report path/hash references in the production MVP env file. This preserves unrelated endpoint, signing, and secret values:
+
+```powershell
+.\tools\release\Update-PassportProductionMvpReportReferences.ps1 `
+  -EnvironmentFile .\artifacts\release\production-mvp.env `
+  -IncludeCurrentPreMvpReport `
+  -IncludeCurrentStagingReadinessReport `
+  -IncludeCurrentCanaryMvpReadinessReport
+```
+
 To produce a prompt-to-artifact completion audit for the Token-Ready MVP PRD/ARD, generate the completion audit report:
 
 ```powershell
