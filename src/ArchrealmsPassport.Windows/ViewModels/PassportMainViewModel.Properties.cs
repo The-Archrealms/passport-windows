@@ -332,6 +332,17 @@ namespace ArchrealmsPassport.Windows.ViewModels
         public string StorageRedemptionProofRecordPath { get { return _storageRedemptionProofRecordPath; } set { SetField(ref _storageRedemptionProofRecordPath, value); } }
         public long StorageRedemptionRefundCc { get { return _storageRedemptionRefundCc; } set { SetField(ref _storageRedemptionRefundCc, value); } }
         public string StorageRedemptionStatusText { get { return _storageRedemptionStatusText; } private set { SetField(ref _storageRedemptionStatusText, value); } }
+        public string RecoveryReasonCode { get { return _recoveryReasonCode; } set { SetField(ref _recoveryReasonCode, value); } }
+        public string RecoveryTargetDeviceId { get { return _recoveryTargetDeviceId; } set { SetField(ref _recoveryTargetDeviceId, value); } }
+        public bool RecoveryFreezeWalletOperations { get { return _recoveryFreezeWalletOperations; } set { SetField(ref _recoveryFreezeWalletOperations, value); } }
+        public bool RecoveryFreezePendingEscrow { get { return _recoveryFreezePendingEscrow; } set { SetField(ref _recoveryFreezePendingEscrow, value); } }
+        public bool RecoveryRevokeAiSessions { get { return _recoveryRevokeAiSessions; } set { SetField(ref _recoveryRevokeAiSessions, value); } }
+        public bool RecoveryPauseStorageNodeOperations { get { return _recoveryPauseStorageNodeOperations; } set { SetField(ref _recoveryPauseStorageNodeOperations, value); } }
+        public string RecoveryStatusText { get { return _recoveryStatusText; } private set { SetField(ref _recoveryStatusText, value); } }
+        public string LatestRecoveryGuidanceText { get { return _latestRecoveryGuidanceText; } private set { SetField(ref _latestRecoveryGuidanceText, value); } }
+        public string LatestSecurityFreezeText { get { return _latestSecurityFreezeText; } private set { SetField(ref _latestSecurityFreezeText, value); } }
+        public string LatestDeviceDeauthorizationText { get { return _latestDeviceDeauthorizationText; } private set { SetField(ref _latestDeviceDeauthorizationText, value); } }
+        public string LatestWalletRevocationText { get { return _latestWalletRevocationText; } private set { SetField(ref _latestWalletRevocationText, value); } }
         public string ActivityLog { get { return _activityLog; } private set { SetField(ref _activityLog, value); } }
 
         public string ReleaseLaneSummaryText

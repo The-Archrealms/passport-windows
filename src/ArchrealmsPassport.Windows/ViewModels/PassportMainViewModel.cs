@@ -47,6 +47,11 @@ namespace ArchrealmsPassport.Windows.ViewModels
         private readonly AsyncRelayCommand _acceptStorageRedemptionQuoteCommand;
         private readonly AsyncRelayCommand _burnStorageRedemptionEpochCommand;
         private readonly AsyncRelayCommand _refundStorageRedemptionCommand;
+        private readonly AsyncRelayCommand _exportRecoveryGuidanceCommand;
+        private readonly AsyncRelayCommand _freezeAccountCommand;
+        private readonly AsyncRelayCommand _deauthorizeDeviceCommand;
+        private readonly AsyncRelayCommand _revokeWalletKeyCommand;
+        private readonly AsyncRelayCommand _rotateWalletKeyCommand;
         private readonly AsyncRelayCommand _primaryActionCommand;
 
         private string _citizenName = string.Empty;
@@ -131,6 +136,17 @@ namespace ArchrealmsPassport.Windows.ViewModels
         private string _storageRedemptionProofRecordPath = string.Empty;
         private long _storageRedemptionRefundCc = 1;
         private string _storageRedemptionStatusText = "No storage redemption yet.";
+        private string _recoveryReasonCode = "user_request";
+        private string _recoveryTargetDeviceId = string.Empty;
+        private bool _recoveryFreezeWalletOperations = true;
+        private bool _recoveryFreezePendingEscrow = true;
+        private bool _recoveryRevokeAiSessions = true;
+        private bool _recoveryPauseStorageNodeOperations = true;
+        private string _recoveryStatusText = "No recovery action recorded.";
+        private string _latestRecoveryGuidanceText = "No recovery guidance export yet.";
+        private string _latestSecurityFreezeText = "No security freeze yet.";
+        private string _latestDeviceDeauthorizationText = "No device deauthorization yet.";
+        private string _latestWalletRevocationText = "No wallet revocation yet.";
         private string _activityLog = string.Empty;
         private bool _storageNetworkStopInProgress;
 
@@ -183,6 +199,11 @@ namespace ArchrealmsPassport.Windows.ViewModels
             _acceptStorageRedemptionQuoteCommand = new AsyncRelayCommand(AcceptStorageRedemptionQuoteAsync, CanAcceptStorageRedemptionQuote);
             _burnStorageRedemptionEpochCommand = new AsyncRelayCommand(BurnStorageRedemptionEpochAsync, CanBurnStorageRedemptionEpoch);
             _refundStorageRedemptionCommand = new AsyncRelayCommand(RefundStorageRedemptionAsync, CanRefundStorageRedemption);
+            _exportRecoveryGuidanceCommand = new AsyncRelayCommand(ExportRecoveryGuidanceAsync, CanUseActiveDeviceCredential);
+            _freezeAccountCommand = new AsyncRelayCommand(FreezeAccountAsync, CanUseActiveDeviceCredential);
+            _deauthorizeDeviceCommand = new AsyncRelayCommand(DeauthorizeDeviceAsync, CanUseActiveDeviceCredential);
+            _revokeWalletKeyCommand = new AsyncRelayCommand(RevokeWalletKeyAsync, CanRevokeWalletKey);
+            _rotateWalletKeyCommand = new AsyncRelayCommand(RotateWalletKeyAsync, CanRevokeWalletKey);
             _primaryActionCommand = new AsyncRelayCommand(ExecutePrimaryActionAsync, CanExecutePrimaryAction);
 
             SaveSettingsCommand = _saveSettingsCommand;
@@ -217,6 +238,11 @@ namespace ArchrealmsPassport.Windows.ViewModels
             AcceptStorageRedemptionQuoteCommand = _acceptStorageRedemptionQuoteCommand;
             BurnStorageRedemptionEpochCommand = _burnStorageRedemptionEpochCommand;
             RefundStorageRedemptionCommand = _refundStorageRedemptionCommand;
+            ExportRecoveryGuidanceCommand = _exportRecoveryGuidanceCommand;
+            FreezeAccountCommand = _freezeAccountCommand;
+            DeauthorizeDeviceCommand = _deauthorizeDeviceCommand;
+            RevokeWalletKeyCommand = _revokeWalletKeyCommand;
+            RotateWalletKeyCommand = _rotateWalletKeyCommand;
             PrimaryActionCommand = _primaryActionCommand;
 
             LoadSettings();
@@ -258,6 +284,11 @@ namespace ArchrealmsPassport.Windows.ViewModels
         public ICommand AcceptStorageRedemptionQuoteCommand { get; private set; }
         public ICommand BurnStorageRedemptionEpochCommand { get; private set; }
         public ICommand RefundStorageRedemptionCommand { get; private set; }
+        public ICommand ExportRecoveryGuidanceCommand { get; private set; }
+        public ICommand FreezeAccountCommand { get; private set; }
+        public ICommand DeauthorizeDeviceCommand { get; private set; }
+        public ICommand RevokeWalletKeyCommand { get; private set; }
+        public ICommand RotateWalletKeyCommand { get; private set; }
         public ICommand PrimaryActionCommand { get; private set; }
     }
 }

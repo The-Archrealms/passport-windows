@@ -312,6 +312,62 @@
                 </ScrollViewer>
             </TabItem>
 
+            <TabItem Header="Recovery">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <Grid Margin="0,18,0,0">
+                        <Border MaxWidth="720"
+                                HorizontalAlignment="Left"
+                                Style="{StaticResource CardStyle}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Recovery" />
+
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Reason Code" />
+                                <TextBox AutomationProperties.AutomationId="RecoveryReasonCodeTextBox"
+                                         Style="{StaticResource CodeTextBoxStyle}"
+                                         Text="{Binding RecoveryReasonCode, UpdateSourceTrigger=PropertyChanged}" />
+
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Target Device ID" />
+                                <TextBox AutomationProperties.AutomationId="RecoveryTargetDeviceTextBox"
+                                         Style="{StaticResource CodeTextBoxStyle}"
+                                         Text="{Binding RecoveryTargetDeviceId, UpdateSourceTrigger=PropertyChanged}" />
+
+                                <WrapPanel Margin="0,16,0,0">
+                                    <CheckBox Margin="0,0,18,8" FontSize="13" Foreground="#34413C" IsChecked="{Binding RecoveryFreezeWalletOperations}" Content="Freeze wallet" />
+                                    <CheckBox Margin="0,0,18,8" FontSize="13" Foreground="#34413C" IsChecked="{Binding RecoveryFreezePendingEscrow}" Content="Freeze escrow" />
+                                    <CheckBox Margin="0,0,18,8" FontSize="13" Foreground="#34413C" IsChecked="{Binding RecoveryRevokeAiSessions}" Content="Revoke AI" />
+                                    <CheckBox Margin="0,0,18,8" FontSize="13" Foreground="#34413C" IsChecked="{Binding RecoveryPauseStorageNodeOperations}" Content="Pause storage" />
+                                </WrapPanel>
+
+                                <WrapPanel Margin="0,16,0,0">
+                                    <Button AutomationProperties.AutomationId="ExportRecoveryGuidanceButton" Style="{StaticResource SecondaryButtonStyle}" Command="{Binding ExportRecoveryGuidanceCommand}" Content="Export Guidance" />
+                                    <Button AutomationProperties.AutomationId="FreezeAccountButton" Style="{StaticResource SecondaryButtonStyle}" Command="{Binding FreezeAccountCommand}" Content="Freeze Account" />
+                                    <Button AutomationProperties.AutomationId="DeauthorizeDeviceButton" Style="{StaticResource SecondaryButtonStyle}" Command="{Binding DeauthorizeDeviceCommand}" Content="Deauthorize Device" />
+                                    <Button AutomationProperties.AutomationId="RevokeWalletKeyButton" Style="{StaticResource SecondaryButtonStyle}" Command="{Binding RevokeWalletKeyCommand}" Content="Revoke Wallet" />
+                                    <Button AutomationProperties.AutomationId="RotateWalletKeyButton" Style="{StaticResource SecondaryButtonStyle}" Command="{Binding RotateWalletKeyCommand}" Content="Rotate Wallet" />
+                                </WrapPanel>
+
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Status" />
+                                <TextBlock AutomationProperties.AutomationId="RecoveryStatusText"
+                                           Style="{StaticResource StatusValueStyle}"
+                                           Text="{Binding RecoveryStatusText}" />
+
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Guidance Export" />
+                                <TextBox Style="{StaticResource CodeTextBoxStyle}" IsReadOnly="True" Text="{Binding LatestRecoveryGuidanceText, Mode=OneWay}" />
+
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Security Freeze" />
+                                <TextBox Style="{StaticResource CodeTextBoxStyle}" IsReadOnly="True" Text="{Binding LatestSecurityFreezeText, Mode=OneWay}" />
+
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Device Deauthorization" />
+                                <TextBox Style="{StaticResource CodeTextBoxStyle}" IsReadOnly="True" Text="{Binding LatestDeviceDeauthorizationText, Mode=OneWay}" />
+
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Wallet Revocation" />
+                                <TextBox Style="{StaticResource CodeTextBoxStyle}" IsReadOnly="True" Text="{Binding LatestWalletRevocationText, Mode=OneWay}" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </ScrollViewer>
+            </TabItem>
+
             <TabItem Header="Storage">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <Grid Margin="0,18,0,0">
