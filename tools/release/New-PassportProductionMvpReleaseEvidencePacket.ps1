@@ -7,6 +7,8 @@ param(
 
     [string]$StagingReadinessReportPath = "artifacts\release\staging-readiness-report.json",
 
+    [string]$CanaryMvpReadinessReportPath = "artifacts\release\canary-mvp-readiness-report.json",
+
     [string]$ProvisioningPacketReportPath = "artifacts\release\production-provisioning-packet-validation-report.json",
 
     [string]$ProvisioningPacketManifestPath = "artifacts\release\production-provisioning-packet-working\production-provisioning-packet.manifest.json",
@@ -225,7 +227,15 @@ if (-not $PSBoundParameters.ContainsKey("StagingReadinessReportPath")) {
     }
 }
 
+if (-not $PSBoundParameters.ContainsKey("CanaryMvpReadinessReportPath")) {
+    $canaryReportFromEnvironment = Get-EnvironmentFileValue -Path $resolvedEnvironmentFile -Name "ARCHREALMS_PASSPORT_CANARY_MVP_READINESS_REPORT_PATH"
+    if (-not [string]::IsNullOrWhiteSpace($canaryReportFromEnvironment)) {
+        $CanaryMvpReadinessReportPath = $canaryReportFromEnvironment
+    }
+}
+
 $resolvedStagingReadinessReport = Resolve-RepoPath -Path $StagingReadinessReportPath
+$resolvedCanaryMvpReadinessReport = Resolve-RepoPath -Path $CanaryMvpReadinessReportPath
 $resolvedProvisioningPacketReport = Resolve-RepoPath -Path $ProvisioningPacketReportPath
 $resolvedProvisioningPacketManifest = Resolve-RepoPath -Path $ProvisioningPacketManifestPath
 
@@ -238,10 +248,14 @@ $evidenceFiles = @(
 if (-not [string]::IsNullOrWhiteSpace($resolvedStagingReadinessReport) -and (Test-Path -LiteralPath $resolvedStagingReadinessReport -PathType Leaf)) {
     $evidenceFiles += New-EvidenceFile -Id "staging_readiness_report" -Path $resolvedStagingReadinessReport -CopyRoot $reportsRoot
 }
+if (-not [string]::IsNullOrWhiteSpace($resolvedCanaryMvpReadinessReport) -and (Test-Path -LiteralPath $resolvedCanaryMvpReadinessReport -PathType Leaf)) {
+    $evidenceFiles += New-EvidenceFile -Id "canary_mvp_readiness_report" -Path $resolvedCanaryMvpReadinessReport -CopyRoot $reportsRoot
+}
 
 $preMvp = Read-JsonFile -Path $resolvedPreMvpReport
 $readiness = Read-JsonFile -Path $resolvedReadinessReport
 $stagingReadiness = Read-JsonFile -Path $resolvedStagingReadinessReport
+$canaryMvpReadiness = Read-JsonFile -Path $resolvedCanaryMvpReadinessReport
 $provisioning = Read-JsonFile -Path $resolvedProvisioningPacketReport
 $packetManifest = Read-JsonFile -Path $resolvedProvisioningPacketManifest
 $environment = Import-RedactedEnvironmentFile -Path $resolvedEnvironmentFile
@@ -309,6 +323,13 @@ $manifest = [pscustomobject][ordered]@{
         canary_or_production_release_approved = ($null -ne $stagingReadiness -and [bool]$stagingReadiness.canary_or_production_release_approved)
         failed_gate_count = $(if ($null -ne $stagingReadiness) { [int]$stagingReadiness.failed_gate_count } else { $null })
     }
+    canary_mvp_readiness = [pscustomobject][ordered]@{
+        included = ($null -ne $canaryMvpReadiness)
+        ready = ($null -ne $canaryMvpReadiness -and [bool]$canaryMvpReadiness.ready)
+        synthetic_fixtures_used = ($null -ne $canaryMvpReadiness -and [bool]$canaryMvpReadiness.synthetic_fixtures_used)
+        production_release_approved = ($null -ne $canaryMvpReadiness -and [bool]$canaryMvpReadiness.production_release_approved)
+        failed_gate_count = $(if ($null -ne $canaryMvpReadiness) { [int]$canaryMvpReadiness.failed_gate_count } else { $null })
+    }
     production_provisioning_packet = [pscustomobject][ordered]@{
         passed = ($null -ne $provisioning -and [bool]$provisioning.passed)
         failed_check_count = $provisioningFailedCheckCount
@@ -356,6 +377,8 @@ $summaryLines = @(
     "- Pre-MVP verification passed: $($manifest.pre_mvp_internal_verification.passed)",
     "- Staging readiness included: $($manifest.staging_readiness.included)",
     "- Staging readiness ready: $($manifest.staging_readiness.ready)",
+    "- Canary MVP readiness included: $($manifest.canary_mvp_readiness.included)",
+    "- Canary MVP readiness ready: $($manifest.canary_mvp_readiness.ready)",
     "- Production provisioning packet passed: $($manifest.production_provisioning_packet.passed)",
     "- Production readiness ready: $($manifest.production_mvp_readiness.ready)",
     "- Production readiness failed gates: $($manifest.production_mvp_readiness.failed_gate_count)",

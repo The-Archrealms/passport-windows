@@ -1,0 +1,18 @@
+{
+  "schema": "archrealms.passport.canary_incident_review.v1",
+  "created_utc": "<ISO-8601 UTC>",
+  "lane": "canary-mvp",
+  "incident_review_id": "<canary-incident-review-id>",
+  "completed": true,
+  "incident_review_completed": true,
+  "no_unresolved_critical_incidents": true,
+  "no_unresolved_high_incidents": true,
+  "incident_response_owner": "<incident-owner-or-rotation>",
+  "incident_count": 0,
+  "unresolved_critical_incident_count": 0,
+  "unresolved_high_incident_count": 0,
+  "evidence_refs": [
+    "<incident-review-record-id>"
+  ]
+}
+

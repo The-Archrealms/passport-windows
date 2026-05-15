@@ -12,6 +12,10 @@ param(
 
     [string]$StagingReadinessReportPath = "artifacts\release\staging-readiness-report.json",
 
+    [switch]$IncludeCurrentCanaryMvpReadinessReport,
+
+    [string]$CanaryMvpReadinessReportPath = "artifacts\release\canary-mvp-readiness-report.json",
+
     [switch]$GenerateOperatorKey,
 
     [switch]$BlankUnconfiguredValues
@@ -108,6 +112,9 @@ $variables = @(
     New-Variable -Gate "staging_readiness" -Name "ARCHREALMS_PASSPORT_STAGING_READINESS_REPORT_PATH" -Description "Path to the passing staging readiness report produced by tools/release/Test-PassportStagingReadiness.ps1."
     New-Variable -Gate "staging_readiness" -Name "ARCHREALMS_PASSPORT_STAGING_READINESS_REPORT_SHA256" -Description "SHA-256 hex digest of the staging readiness report."
 
+    New-Variable -Gate "canary_mvp_readiness" -Name "ARCHREALMS_PASSPORT_CANARY_MVP_READINESS_REPORT_PATH" -Description "Path to the passing canary MVP readiness report produced by tools/release/Test-PassportCanaryMvpReadiness.ps1."
+    New-Variable -Gate "canary_mvp_readiness" -Name "ARCHREALMS_PASSPORT_CANARY_MVP_READINESS_REPORT_SHA256" -Description "SHA-256 hex digest of the canary MVP readiness report."
+
     New-Variable -Gate "package_signing" -Name "PASSPORT_WINDOWS_MSIX_PFX_BASE64" -Required $false -Secret $true -Description "Base64-encoded stable production MVP MSIX signing PFX. Required unless PASSPORT_WINDOWS_MSIX_PFX_PATH is set."
     New-Variable -Gate "package_signing" -Name "PASSPORT_WINDOWS_MSIX_PFX_PATH" -Required $false -Secret $true -Description "Local path to the stable production MVP MSIX signing PFX. Required unless PASSPORT_WINDOWS_MSIX_PFX_BASE64 is set."
     New-Variable -Gate "package_signing" -Name "PASSPORT_WINDOWS_MSIX_PFX_PASSWORD" -Secret $true -Description "Password for the stable production MVP MSIX signing PFX."
@@ -184,6 +191,17 @@ if ($IncludeCurrentStagingReadinessReport) {
     Set-VariableExample -Variables $variables -Name "ARCHREALMS_PASSPORT_STAGING_READINESS_REPORT_SHA256" -Example $stagingReportSha256
 }
 
+if ($IncludeCurrentCanaryMvpReadinessReport) {
+    $resolvedCanaryReportPath = [System.IO.Path]::GetFullPath($CanaryMvpReadinessReportPath)
+    if (-not (Test-Path -LiteralPath $resolvedCanaryReportPath -PathType Leaf)) {
+        throw "Canary MVP readiness report was not found: $resolvedCanaryReportPath"
+    }
+
+    $canaryReportSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $resolvedCanaryReportPath).Hash.ToLowerInvariant()
+    Set-VariableExample -Variables $variables -Name "ARCHREALMS_PASSPORT_CANARY_MVP_READINESS_REPORT_PATH" -Example $resolvedCanaryReportPath
+    Set-VariableExample -Variables $variables -Name "ARCHREALMS_PASSPORT_CANARY_MVP_READINESS_REPORT_SHA256" -Example $canaryReportSha256
+}
+
 if ($GenerateOperatorKey) {
     $generatedOperatorKey = New-OperatorKey
     $generatedOperatorKeySha256 = Get-Sha256Hex -Bytes ([System.Text.Encoding]::UTF8.GetBytes($generatedOperatorKey.Trim()))
@@ -198,6 +216,7 @@ $template = [pscustomobject][ordered]@{
     note = "Fill the values in a secure deployment environment. Do not commit populated env files."
     current_pre_mvp_report_included = [bool]$IncludeCurrentPreMvpReport
     current_staging_readiness_report_included = [bool]$IncludeCurrentStagingReadinessReport
+    current_canary_mvp_readiness_report_included = [bool]$IncludeCurrentCanaryMvpReadinessReport
     generated_operator_key_included = [bool]$GenerateOperatorKey
     generated_operator_key_sha256 = $generatedOperatorKeySha256
     variables = $variables

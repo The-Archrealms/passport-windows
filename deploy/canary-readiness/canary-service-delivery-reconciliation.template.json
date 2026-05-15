@@ -1,0 +1,17 @@
+{
+  "schema": "archrealms.passport.canary_service_delivery_reconciliation.v1",
+  "created_utc": "<ISO-8601 UTC>",
+  "lane": "canary-mvp",
+  "service_delivery_reconciliation_id": "<canary-service-delivery-reconciliation-id>",
+  "completed": true,
+  "service_delivery_reconciled": true,
+  "storage_redemptions_reconciled": true,
+  "storage_proofs_reconciled": true,
+  "burns_match_verified_epochs": true,
+  "refunds_recredits_extensions_reconciled": true,
+  "unresolved_failed_epoch_count": 0,
+  "evidence_refs": [
+    "<service-delivery-reconciliation-report-id>"
+  ]
+}
+

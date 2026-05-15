@@ -1,0 +1,31 @@
+{
+  "schema": "archrealms.passport.canary_policy.v1",
+  "created_utc": "<ISO-8601 UTC>",
+  "lane": "canary-mvp",
+  "policy_id": "<canary-policy-id>",
+  "production_intended": true,
+  "production_ledger": true,
+  "allowlisted_citizens_only": true,
+  "production_ledger_namespace": "<production-ledger-namespace>",
+  "max_citizens": 25,
+  "max_arch_per_citizen_base_units": 100000000,
+  "max_cc_outstanding_base_units": 250000000,
+  "max_conversion_quote_base_units": 10000000,
+  "allowed_service_classes": [
+    "storage_standard"
+  ],
+  "external_wallet_transfers_enabled": false,
+  "fiat_rails_enabled": false,
+  "unrestricted_cc_payments_enabled": false,
+  "guaranteed_conversion_claims_enabled": false,
+  "stable_value_claims_enabled": false,
+  "yield_or_staking_enabled": false,
+  "token_governance_enabled": false,
+  "support_owner": "<support-owner-or-rotation>",
+  "incident_response_owner": "<incident-owner-or-rotation>",
+  "rollback_policy_id": "<rollback-policy-id>",
+  "evidence_refs": [
+    "<controlled-policy-document-id>"
+  ]
+}
+

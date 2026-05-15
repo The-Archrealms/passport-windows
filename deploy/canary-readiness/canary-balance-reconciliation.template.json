@@ -1,0 +1,20 @@
+{
+  "schema": "archrealms.passport.canary_balance_reconciliation.v1",
+  "created_utc": "<ISO-8601 UTC>",
+  "lane": "canary-mvp",
+  "balance_reconciliation_id": "<canary-balance-reconciliation-id>",
+  "completed": true,
+  "production_ledger_namespace": "<production-ledger-namespace>",
+  "arch_balances_reconciled": true,
+  "cc_balances_reconciled": true,
+  "escrow_reconciled": true,
+  "burn_refund_recredit_reconciled": true,
+  "crown_reserve_reconciled": true,
+  "no_negative_balances": true,
+  "no_unapproved_issuance": true,
+  "no_staging_records_detected": true,
+  "evidence_refs": [
+    "<ledger-export-root-or-reconciliation-report-id>"
+  ]
+}
+

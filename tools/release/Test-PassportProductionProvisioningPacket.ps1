@@ -11,6 +11,8 @@ param(
 
     [string]$ManagedSigningCustodyPath = "deploy\managed-signing-custody",
 
+    [string]$CanaryReadinessPath = "deploy\canary-readiness",
+
     [string]$ProductionOpsPath = "deploy\production-ops",
 
     [string]$ProductionMonetaryPath = "deploy\production-monetary",
@@ -207,6 +209,7 @@ if (-not [string]::IsNullOrWhiteSpace($PacketRoot)) {
     $EndpointProvisioningPath = Join-Path $resolvedPacketRoot "release-lane-endpoints"
     $ManagedStoragePath = Join-Path $resolvedPacketRoot "managed-storage"
     $ManagedSigningCustodyPath = Join-Path $resolvedPacketRoot "managed-signing-custody"
+    $CanaryReadinessPath = Join-Path $resolvedPacketRoot "canary-readiness"
     $ProductionOpsPath = Join-Path $resolvedPacketRoot "production-ops"
     $ProductionMonetaryPath = Join-Path $resolvedPacketRoot "production-monetary"
     $HostedServicesDockerfilePath = Join-Path $resolvedPacketRoot "hosted-services\Dockerfile"
@@ -261,6 +264,13 @@ $checks += Invoke-ValidationScript `
     -ScriptRelativePath "tools\release\Test-PassportManagedSigningCustodyProvisioning.ps1" `
     -Arguments (@("-ManagedSigningCustodyPath", $ManagedSigningCustodyPath) + $placeholderArgs) `
     -ReportRelativePath (Join-Path $childReportRoot "managed-signing-custody-provisioning-validation-report.json")
+
+$checks += Invoke-ValidationScript `
+    -Id "canary_readiness_provisioning" `
+    -Description "Canary MVP policy, incident review, reconciliation, support readiness, and production-promotion evidence templates are reviewable." `
+    -ScriptRelativePath "tools\release\Test-PassportCanaryReadinessProvisioning.ps1" `
+    -Arguments (@("-CanaryReadinessPath", $CanaryReadinessPath) + $placeholderArgs) `
+    -ReportRelativePath (Join-Path $childReportRoot "canary-readiness-provisioning-validation-report.json")
 
 $hostedServicesArgs = @(
     "-DockerfilePath", $HostedServicesDockerfilePath,

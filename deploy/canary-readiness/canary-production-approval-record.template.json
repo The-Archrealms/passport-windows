@@ -1,0 +1,20 @@
+{
+  "schema": "archrealms.passport.canary_production_approval.v1",
+  "created_utc": "<ISO-8601 UTC>",
+  "lane": "canary-mvp",
+  "production_approval_id": "<canary-production-approval-id>",
+  "approve_production_mvp_release": true,
+  "product_approval_id": "<product-approval-id>",
+  "engineering_signoff_id": "<engineering-signoff-id>",
+  "security_privacy_signoff_id": "<security-privacy-signoff-id>",
+  "crown_monetary_authority_signoff_id": "<crown-monetary-authority-signoff-id>",
+  "staging_readiness_report_sha256": "<sha256>",
+  "canary_artifact_validation_report_sha256": "<sha256>",
+  "canary_policy_report_sha256": "<sha256>",
+  "canary_incident_review_report_sha256": "<sha256>",
+  "canary_balance_reconciliation_report_sha256": "<sha256>",
+  "canary_service_delivery_reconciliation_report_sha256": "<sha256>",
+  "canary_support_readiness_report_sha256": "<sha256>",
+  "approval_notes": "<controlled-approval-notes>"
+}
+

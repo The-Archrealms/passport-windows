@@ -12,6 +12,8 @@ $readinessEnvironmentVariables = @(
     "ARCHREALMS_PASSPORT_PRE_MVP_VERIFICATION_REPORT_SHA256",
     "ARCHREALMS_PASSPORT_STAGING_READINESS_REPORT_PATH",
     "ARCHREALMS_PASSPORT_STAGING_READINESS_REPORT_SHA256",
+    "ARCHREALMS_PASSPORT_CANARY_MVP_READINESS_REPORT_PATH",
+    "ARCHREALMS_PASSPORT_CANARY_MVP_READINESS_REPORT_SHA256",
     "PASSPORT_WINDOWS_MSIX_PFX_BASE64",
     "PASSPORT_WINDOWS_MSIX_PFX_PATH",
     "PASSPORT_WINDOWS_MSIX_PFX_PASSWORD",
@@ -72,6 +74,7 @@ $readinessEnvironmentVariables = @(
 $expectedFailedGateIds = @(
     "pre_mvp_internal_verification",
     "staging_readiness",
+    "canary_mvp_readiness",
     "package_signing",
     "release_lane_endpoints",
     "hosted_runtime_status",

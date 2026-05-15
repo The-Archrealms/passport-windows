@@ -957,6 +957,95 @@ function Test-StagingReadinessReport {
     return $failures
 }
 
+function Test-CanaryMvpReadinessReport {
+    $reportPath = [System.Environment]::GetEnvironmentVariable("ARCHREALMS_PASSPORT_CANARY_MVP_READINESS_REPORT_PATH")
+    $expectedHash = [System.Environment]::GetEnvironmentVariable("ARCHREALMS_PASSPORT_CANARY_MVP_READINESS_REPORT_SHA256")
+    if ([string]::IsNullOrWhiteSpace($reportPath)) {
+        return ""
+    }
+
+    $failures = @()
+    if (-not (Test-Path -LiteralPath $reportPath -PathType Leaf)) {
+        return "ARCHREALMS_PASSPORT_CANARY_MVP_READINESS_REPORT_PATH does not exist"
+    }
+
+    if ([string]::IsNullOrWhiteSpace($expectedHash)) {
+        return $failures
+    }
+    elseif ($expectedHash.Trim() -notmatch '^[0-9a-fA-F]{64}$') {
+        $failures += "ARCHREALMS_PASSPORT_CANARY_MVP_READINESS_REPORT_SHA256 must be a SHA-256 hex string"
+    }
+    else {
+        $actualHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $reportPath).Hash.ToLowerInvariant()
+        if (-not [string]::Equals($actualHash, $expectedHash.Trim(), [System.StringComparison]::OrdinalIgnoreCase)) {
+            $failures += "ARCHREALMS_PASSPORT_CANARY_MVP_READINESS_REPORT_SHA256 does not match the report file"
+        }
+    }
+
+    try {
+        $report = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json
+    }
+    catch {
+        $failures += "canary MVP readiness report is not valid JSON: $($_.Exception.Message)"
+        return $failures
+    }
+
+    if ($report.schema -ne "archrealms.passport.canary_mvp_readiness.v1") {
+        $failures += "canary MVP readiness report has unexpected schema"
+    }
+
+    if ($report.ready -ne $true) {
+        $failures += "canary MVP readiness report did not pass"
+    }
+
+    if ($report.lane -ne "canary-mvp") {
+        $failures += "canary MVP readiness report must be for lane canary-mvp"
+    }
+
+    if ($report.canary_is_mvp -ne $true) {
+        $failures += "canary MVP readiness report must state canary is the MVP citizen-facing real-token lane"
+    }
+
+    if ($report.synthetic_fixtures_used -eq $true) {
+        $failures += "production readiness cannot accept a canary MVP readiness report created with synthetic fixtures"
+    }
+
+    if ($report.production_release_approved -ne $true) {
+        $failures += "canary MVP readiness report must approve ProductionMvp release promotion"
+    }
+
+    $requiredGateIds = @(
+        "staging_readiness",
+        "canary_package_artifact",
+        "canary_policy_limits",
+        "canary_incident_review",
+        "canary_balance_reconciliation",
+        "canary_service_delivery_reconciliation",
+        "canary_support_readiness",
+        "canary_production_approvals"
+    )
+
+    $gatesById = @{}
+    foreach ($gate in @($report.gates)) {
+        if ($gate.id) {
+            $gatesById[[string]$gate.id] = $gate
+        }
+    }
+
+    foreach ($gateId in $requiredGateIds) {
+        if (-not $gatesById.ContainsKey($gateId)) {
+            $failures += "canary MVP readiness report is missing gate $gateId"
+            continue
+        }
+
+        if ($gatesById[$gateId].passed -ne $true) {
+            $failures += "canary MVP readiness gate did not pass: $gateId"
+        }
+    }
+
+    return $failures
+}
+
 function Test-Truthy {
     param(
         [string]$Value
@@ -983,6 +1072,15 @@ $gates = @(
             "ARCHREALMS_PASSPORT_STAGING_READINESS_REPORT_SHA256"
         ) `
         -ExtraCheck ${function:Test-StagingReadinessReport}
+
+    New-Gate `
+        -Id "canary_mvp_readiness" `
+        -Description "Canary MVP has passed real-token policy, incident, balance, service-delivery, support, and production-promotion checks." `
+        -RequiredEnvironment @(
+            "ARCHREALMS_PASSPORT_CANARY_MVP_READINESS_REPORT_PATH",
+            "ARCHREALMS_PASSPORT_CANARY_MVP_READINESS_REPORT_SHA256"
+        ) `
+        -ExtraCheck ${function:Test-CanaryMvpReadinessReport}
 
     New-Gate `
         -Id "package_signing" `

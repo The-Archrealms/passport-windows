@@ -9,6 +9,8 @@ param(
 
     [string]$StagingReadinessReportPath = "artifacts\release\staging-readiness-report.json",
 
+    [string]$CanaryMvpReadinessReportPath = "artifacts\release\canary-mvp-readiness-report.json",
+
     [string]$ProvisioningPacketReportPath = "artifacts\release\production-provisioning-packet-validation-report.json",
 
     [string]$ProvisioningPacketManifestPath = "artifacts\release\production-provisioning-packet-working\production-provisioning-packet.manifest.json",
@@ -88,6 +90,7 @@ function Invoke-Generator {
         [string]$PreMvpPath,
         [string]$ReadinessPath,
         [string]$StagingReadinessPath,
+        [string]$CanaryMvpReadinessPath,
         [string]$ProvisioningPath,
         [string]$ProvisioningManifestPath,
         [string]$EnvPath
@@ -110,6 +113,8 @@ function Invoke-Generator {
         $ReadinessPath,
         "-StagingReadinessReportPath",
         $StagingReadinessPath,
+        "-CanaryMvpReadinessReportPath",
+        $CanaryMvpReadinessPath,
         "-ProvisioningPacketReportPath",
         $ProvisioningPath,
         "-ProvisioningPacketManifestPath",
@@ -188,6 +193,7 @@ if ($UseSyntheticFixtures) {
     $PreMvpReportPath = Join-Path $fixtureRoot "pre-mvp-internal-verification-report.json"
     $ReadinessReportPath = Join-Path $fixtureRoot "production-mvp-readiness-report.json"
     $StagingReadinessReportPath = Join-Path $fixtureRoot "staging-readiness-report.json"
+    $CanaryMvpReadinessReportPath = Join-Path $fixtureRoot "canary-mvp-readiness-report.json"
     $ProvisioningPacketReportPath = Join-Path $fixtureRoot "production-provisioning-packet-validation-report.json"
     $ProvisioningPacketManifestPath = Join-Path $fixtureRoot "production-provisioning-packet.manifest.json"
     $EnvironmentFile = Join-Path $fixtureRoot "production-mvp.env"
@@ -221,6 +227,11 @@ if ($UseSyntheticFixtures) {
                 missing = @()
             },
             [pscustomobject][ordered]@{
+                id = "canary_mvp_readiness"
+                passed = $true
+                missing = @()
+            },
+            [pscustomobject][ordered]@{
                 id = "package_signing"
                 passed = $false
                 missing = @("production package signing certificate is not configured")
@@ -248,6 +259,27 @@ if ($UseSyntheticFixtures) {
         )
     })
 
+    Write-JsonFile -Path $CanaryMvpReadinessReportPath -Value ([pscustomobject][ordered]@{
+        schema = "archrealms.passport.canary_mvp_readiness.v1"
+        created_utc = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
+        lane = "canary-mvp"
+        canary_is_mvp = $true
+        ready = $true
+        failed_gate_count = 0
+        synthetic_fixtures_used = $false
+        production_release_approved = $true
+        gates = @(
+            [pscustomobject][ordered]@{ id = "staging_readiness"; passed = $true; missing = @() },
+            [pscustomobject][ordered]@{ id = "canary_package_artifact"; passed = $true; missing = @() },
+            [pscustomobject][ordered]@{ id = "canary_policy_limits"; passed = $true; missing = @() },
+            [pscustomobject][ordered]@{ id = "canary_incident_review"; passed = $true; missing = @() },
+            [pscustomobject][ordered]@{ id = "canary_balance_reconciliation"; passed = $true; missing = @() },
+            [pscustomobject][ordered]@{ id = "canary_service_delivery_reconciliation"; passed = $true; missing = @() },
+            [pscustomobject][ordered]@{ id = "canary_support_readiness"; passed = $true; missing = @() },
+            [pscustomobject][ordered]@{ id = "canary_production_approvals"; passed = $true; missing = @() }
+        )
+    })
+
     Write-JsonFile -Path $ProvisioningPacketReportPath -Value ([pscustomobject][ordered]@{
         schema = "archrealms.passport.production_provisioning_packet_validation.v1"
         created_utc = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
@@ -267,6 +299,8 @@ if ($UseSyntheticFixtures) {
     Set-Content -LiteralPath $EnvironmentFile -Encoding UTF8 -Value @(
         "ARCHREALMS_PASSPORT_STAGING_READINESS_REPORT_PATH=$StagingReadinessReportPath",
         "ARCHREALMS_PASSPORT_STAGING_READINESS_REPORT_SHA256=$(Get-Sha256Hex -Path $StagingReadinessReportPath)",
+        "ARCHREALMS_PASSPORT_CANARY_MVP_READINESS_REPORT_PATH=$CanaryMvpReadinessReportPath",
+        "ARCHREALMS_PASSPORT_CANARY_MVP_READINESS_REPORT_SHA256=$(Get-Sha256Hex -Path $CanaryMvpReadinessReportPath)",
         "ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY=$syntheticSecret",
         "ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY_SHA256=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
         "PASSPORT_WINDOWS_PRODUCTION_MVP_API_BASE_URL=https://passport.example.invalid"
@@ -277,6 +311,7 @@ $resolvedPacketRoot = Resolve-RepoPath -Path $EvidencePacketRoot
 $resolvedPreMvpReport = Resolve-RepoPath -Path $PreMvpReportPath
 $resolvedReadinessReport = Resolve-RepoPath -Path $ReadinessReportPath
 $resolvedStagingReadinessReport = Resolve-RepoPath -Path $StagingReadinessReportPath
+$resolvedCanaryMvpReadinessReport = Resolve-RepoPath -Path $CanaryMvpReadinessReportPath
 $resolvedProvisioningPacketReport = Resolve-RepoPath -Path $ProvisioningPacketReportPath
 $resolvedProvisioningPacketManifest = Resolve-RepoPath -Path $ProvisioningPacketManifestPath
 $resolvedEnvironmentFile = Resolve-RepoPath -Path $EnvironmentFile
@@ -288,6 +323,7 @@ if ($Generate) {
         -PreMvpPath $resolvedPreMvpReport `
         -ReadinessPath $resolvedReadinessReport `
         -StagingReadinessPath $resolvedStagingReadinessReport `
+        -CanaryMvpReadinessPath $resolvedCanaryMvpReadinessReport `
         -ProvisioningPath $resolvedProvisioningPacketReport `
         -ProvisioningManifestPath $resolvedProvisioningPacketManifest `
         -EnvPath $resolvedEnvironmentFile
@@ -327,6 +363,7 @@ if ($null -ne $manifest) {
     $checks += Add-Check -Id "pre_mvp_passed" -Condition ($manifest.pre_mvp_internal_verification.passed -eq $true -and $manifest.pre_mvp_internal_verification.failed_check_count -eq 0 -and $manifest.pre_mvp_internal_verification.failed_requirement_count -eq 0) -Failure "pre-MVP evidence did not pass"
     $checks += Add-Check -Id "fake_balance_blocked" -Condition ($manifest.pre_mvp_internal_verification.fake_balance_migration_blocked -eq $true) -Failure "fake-balance migration flag is not true"
     $checks += Add-Check -Id "staging_readiness_summary" -Condition ($null -ne $manifest.staging_readiness) -Failure "staging readiness summary is missing"
+    $checks += Add-Check -Id "canary_mvp_readiness_summary" -Condition ($null -ne $manifest.canary_mvp_readiness) -Failure "canary MVP readiness summary is missing"
     $checks += Add-Check -Id "provisioning_packet_passed" -Condition ($manifest.production_provisioning_packet.passed -eq $true -and $manifest.production_provisioning_packet.failed_check_count -eq 0) -Failure "production provisioning packet evidence did not pass"
     $checks += Add-Check -Id "reviewable_for_signoff" -Condition ($manifest.approval_packet_status.reviewable_for_signoff -eq $true) -Failure "release evidence packet is not reviewable for signoff"
     $checks += Add-Check -Id "completion_matches_readiness" -Condition ($manifest.approval_packet_status.complete_for_production_testing -eq $manifest.production_mvp_readiness.ready) -Failure "complete_for_production_testing must match readiness"
@@ -355,6 +392,16 @@ if ($null -ne $manifest) {
         $checks += Add-Check -Id "staging_readiness_report_ready" -Condition ($manifest.staging_readiness.ready -eq $true -and $manifest.staging_readiness.failed_gate_count -eq 0) -Failure "included staging readiness report is not ready"
         $checks += Add-Check -Id "staging_readiness_report_non_synthetic" -Condition ($manifest.staging_readiness.synthetic_fixtures_used -eq $false) -Failure "release evidence cannot rely on a synthetic staging readiness report"
         $checks += Add-Check -Id "staging_readiness_report_promotion_approved" -Condition ($manifest.staging_readiness.canary_or_production_release_approved -eq $true) -Failure "included staging readiness report does not approve canary or production release promotion"
+    }
+
+    $canaryGate = @($manifest.production_mvp_readiness.gates) | Where-Object { $_.id -eq "canary_mvp_readiness" } | Select-Object -First 1
+    $canaryGatePassed = ($null -ne $canaryGate -and $canaryGate.passed -eq $true)
+    $canaryEvidenceFile = $evidenceFiles | Where-Object { $_.id -eq "canary_mvp_readiness_report" } | Select-Object -First 1
+    if ($canaryGatePassed -or $RequireReady) {
+        $checks += Add-Check -Id "canary_mvp_readiness_report_included_when_gate_passes" -Condition ($null -ne $canaryEvidenceFile -and $manifest.canary_mvp_readiness.included -eq $true) -Failure "canary MVP readiness report must be included when canary_mvp_readiness passed or readiness is required"
+        $checks += Add-Check -Id "canary_mvp_readiness_report_ready" -Condition ($manifest.canary_mvp_readiness.ready -eq $true -and $manifest.canary_mvp_readiness.failed_gate_count -eq 0) -Failure "included canary MVP readiness report is not ready"
+        $checks += Add-Check -Id "canary_mvp_readiness_report_non_synthetic" -Condition ($manifest.canary_mvp_readiness.synthetic_fixtures_used -eq $false) -Failure "release evidence cannot rely on a synthetic canary MVP readiness report"
+        $checks += Add-Check -Id "canary_mvp_readiness_report_production_approved" -Condition ($manifest.canary_mvp_readiness.production_release_approved -eq $true) -Failure "included canary MVP readiness report does not approve ProductionMvp promotion"
     }
 
     foreach ($file in $evidenceFiles) {

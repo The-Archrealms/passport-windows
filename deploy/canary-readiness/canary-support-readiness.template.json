@@ -1,0 +1,18 @@
+{
+  "schema": "archrealms.passport.canary_support_readiness.v1",
+  "created_utc": "<ISO-8601 UTC>",
+  "lane": "canary-mvp",
+  "support_readiness_id": "<canary-support-readiness-id>",
+  "completed": true,
+  "support_ready": true,
+  "support_queue_reviewed": true,
+  "recovery_support_ready": true,
+  "escalation_path_ready": true,
+  "support_access_controls_validated": true,
+  "support_owner": "<support-owner-or-rotation>",
+  "incident_response_owner": "<incident-owner-or-rotation>",
+  "evidence_refs": [
+    "<support-readiness-record-id>"
+  ]
+}
+

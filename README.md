@@ -558,7 +558,24 @@ Then run:
   -OutputPath .\artifacts\release\staging-readiness-report.json
 ```
 
-Production MVP packages are gated by `tools\release\Test-PassportProductionMvpReadiness.ps1`. `Publish-PassportWindowsMsix.ps1 -Lane ProductionMvp` runs this gate automatically unless `-SkipProductionMvpReadinessGate` is supplied. The gate emits `production-mvp-readiness-report.json` and fails until pre-MVP internal verification, staging readiness, package signing, production endpoints, hosted operator controls, managed storage/backups, managed key custody, issuer/capacity/genesis authority IDs, open-weight AI runtime/vector store, telemetry/incident response, and release approvals are configured. Production endpoint URLs must use HTTPS unless they are loopback URLs for local validation. The live probe gates require the corresponding endpoint, operator-key, and managed-custody inputs before they can pass; then the gate calls `/ops/runtime/status`, `/ops/operator/status`, `/ops/storage/status`, `/ai/runtime/status`, `/ai/runtime/probe`, and the managed signing endpoint, and those readiness endpoints must return ready/authorized results.
+Canary MVP readiness is the first citizen-facing real-token lane. Generate a canary environment template after the staging report and a `CanaryMvp` artifact validation report exist, then complete the policy, incident-review, balance-reconciliation, service-delivery, support-readiness, and production-promotion evidence templates under `deploy/canary-readiness/`:
+
+```powershell
+.\tools\release\New-PassportCanaryMvpEnvironmentTemplate.ps1 `
+  -Format Env `
+  -IncludeCurrentStagingReadinessReport `
+  -IncludeCurrentArtifactValidationReport `
+  -BlankUnconfiguredValues `
+  -OutputPath .\artifacts\release\canary-mvp.env
+
+.\tools\release\Test-PassportCanaryMvpReadiness.ps1 `
+  -EnvironmentFile .\artifacts\release\canary-mvp.env `
+  -OutputPath .\artifacts\release\canary-mvp-readiness-report.json
+```
+
+Production readiness rejects synthetic canary reports. A passing canary report must be non-synthetic, must prove the canary policy limits were enforced, must reconcile ARCH, CC, escrow, burn, refund, re-credit, Crown reserve, and service-delivery records, and must include signed product, engineering, security/privacy, and Crown monetary authority approval for Production MVP promotion.
+
+Production MVP packages are gated by `tools\release\Test-PassportProductionMvpReadiness.ps1`. `Publish-PassportWindowsMsix.ps1 -Lane ProductionMvp` runs this gate automatically unless `-SkipProductionMvpReadinessGate` is supplied. The gate emits `production-mvp-readiness-report.json` and fails until pre-MVP internal verification, staging readiness, canary MVP readiness, package signing, production endpoints, hosted operator controls, managed storage/backups, managed key custody, issuer/capacity/genesis authority IDs, open-weight AI runtime/vector store, telemetry/incident response, and release approvals are configured. Production endpoint URLs must use HTTPS unless they are loopback URLs for local validation. The live probe gates require the corresponding endpoint, operator-key, and managed-custody inputs before they can pass; then the gate calls `/ops/runtime/status`, `/ops/operator/status`, `/ops/storage/status`, `/ai/runtime/status`, `/ai/runtime/probe`, and the managed signing endpoint, and those readiness endpoints must return ready/authorized results.
 
 Run the gate directly:
 
@@ -591,12 +608,13 @@ For a secure, gitignored working env file, the template generator can also fill 
   -Format Env `
   -IncludeCurrentPreMvpReport `
   -IncludeCurrentStagingReadinessReport `
+  -IncludeCurrentCanaryMvpReadinessReport `
   -GenerateOperatorKey `
   -BlankUnconfiguredValues `
   -OutputPath .\artifacts\release\production-mvp.env
 ```
 
-The template lists each readiness-gate variable, whether it is secret, and the gate it satisfies. `-BlankUnconfiguredValues` keeps missing production values empty so the readiness gate reports them as missing instead of trying to validate placeholder URLs or certificates. Populate values only in a secure shell, CI secret store, or deployment environment; populated `.env` files and the `artifacts/` tree are ignored by git. The generated operator key must be stored only in the secure production secret store, while its SHA-256 hash is configured on the hosted service. Populated env files can be passed to the readiness gate or production package publisher with `-EnvironmentFile`. The readiness gate verifies the SHA-256 hash of the pre-MVP internal verification report and staging readiness report, validates the production package-signing PFX when available, verifies that `ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY` hashes to `ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY_SHA256`, and authenticates against `/ops/operator/status`. Production hosted signing requires `ARCHREALMS_PASSPORT_HOSTED_SIGNING_ENDPOINT`; local hosted signing-key paths are development-only and fail the ProductionMvp gate. The readiness gate posts a non-mutating `production_mvp_readiness_probe` payload to the managed signing endpoint and verifies the returned RSA signature and public-key hash.
+The template lists each readiness-gate variable, whether it is secret, and the gate it satisfies. `-BlankUnconfiguredValues` keeps missing production values empty so the readiness gate reports them as missing instead of trying to validate placeholder URLs or certificates. Populate values only in a secure shell, CI secret store, or deployment environment; populated `.env` files and the `artifacts/` tree are ignored by git. The generated operator key must be stored only in the secure production secret store, while its SHA-256 hash is configured on the hosted service. Populated env files can be passed to the readiness gate or production package publisher with `-EnvironmentFile`. The readiness gate verifies the SHA-256 hash of the pre-MVP internal verification report, staging readiness report, and canary MVP readiness report, validates the production package-signing PFX when available, verifies that `ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY` hashes to `ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY_SHA256`, and authenticates against `/ops/operator/status`. Production hosted signing requires `ARCHREALMS_PASSPORT_HOSTED_SIGNING_ENDPOINT`; local hosted signing-key paths are development-only and fail the ProductionMvp gate. The readiness gate posts a non-mutating `production_mvp_readiness_probe` payload to the managed signing endpoint and verifies the returned RSA signature and public-key hash.
 
 Validate the full production provisioning packet before loading approved values into the production environment:
 
@@ -620,9 +638,9 @@ Use `-RequireNoPlaceholders` against filled, controlled copies of the provisioni
   -RequireNoPlaceholders
 ```
 
-The packet validator runs the package-signing, release-endpoint, managed-storage, managed-signing-custody, hosted-services, managed-signing, open-weight AI runtime, production-ops, and production-monetary validators and writes child reports under `artifacts\release\production-provisioning-packet\`.
+The packet validator runs the package-signing, release-endpoint, managed-storage, managed-signing-custody, canary-readiness, hosted-services, managed-signing, open-weight AI runtime, production-ops, and production-monetary validators and writes child reports under `artifacts\release\production-provisioning-packet\`.
 
-Generate a redacted release-evidence packet for product, engineering, security/privacy, and Crown monetary authority review after the pre-MVP report, staging readiness report, production readiness report, and provisioning packet report have been refreshed:
+Generate a redacted release-evidence packet for product, engineering, security/privacy, and Crown monetary authority review after the pre-MVP report, staging readiness report, canary MVP readiness report, production readiness report, and provisioning packet report have been refreshed:
 
 ```powershell
 .\tools\release\New-PassportProductionMvpReleaseEvidencePacket.ps1 `
@@ -631,7 +649,7 @@ Generate a redacted release-evidence packet for product, engineering, security/p
   -Force
 ```
 
-The evidence packet copies the current reports, records SHA-256 hashes, redacts environment values, lists remaining readiness gates, and writes `release-evidence.manifest.json` plus `release-evidence-summary.md`. If the production readiness report shows `staging_readiness` passed, the packet must also include the standalone non-synthetic staging readiness report and prove that promotion was approved. It is review evidence only; citizen-facing production testing still requires `Test-PassportProductionMvpReadiness.ps1` to return `ready=true`.
+The evidence packet copies the current reports, records SHA-256 hashes, redacts environment values, lists remaining readiness gates, and writes `release-evidence.manifest.json` plus `release-evidence-summary.md`. If the production readiness report shows `staging_readiness` passed, the packet must also include the standalone non-synthetic staging readiness report and prove that promotion was approved. If it shows `canary_mvp_readiness` passed, the packet must include the standalone non-synthetic canary readiness report and prove Production MVP promotion was approved. It is review evidence only; citizen-facing production testing still requires `Test-PassportProductionMvpReadiness.ps1` to return `ready=true`.
 
 Validate the evidence-packet generator and redaction behavior with synthetic fixtures:
 

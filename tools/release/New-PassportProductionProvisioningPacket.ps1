@@ -105,6 +105,7 @@ $folders = @(
     "release-lane-endpoints",
     "managed-storage",
     "managed-signing-custody",
+    "canary-readiness",
     "hosted-services",
     "managed-signing",
     "open-weight-ai-runtime",
@@ -186,6 +187,7 @@ $manifest = [pscustomobject][ordered]@{
     next_steps = @(
         "Copy this folder into the controlled production document system if the generated folder is only a local working copy.",
         "Fill every bracketed placeholder in the copied provisioning documents.",
+        "Complete canary-readiness evidence after the allowlisted CanaryMvp lane has run, then validate it with Test-PassportCanaryMvpReadiness.ps1.",
         "Run Test-PassportProductionProvisioningPacket.ps1 -PacketRoot <packet-root> -RequireNoPlaceholders before loading values into the ProductionMvp readiness environment.",
         "Run live probes only after approved production endpoints and authority records exist."
     )
