@@ -1,0 +1,333 @@
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using ArchrealmsPassport.HostedServices;
+using ArchrealmsPassport.HostedServices.Contracts;
+using Xunit;
+
+namespace ArchrealmsPassport.HostedServices.Tests;
+
+public sealed class PassportHostedPolicyTests
+{
+    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
+
+    [Fact]
+    public void AuthorizeAiSessionVerifiesDeviceSignatureAndDoesNotStoreBearerToken()
+    {
+        using var rsa = RSA.Create(2048);
+        var request = CreateAiSessionRequest(rsa);
+
+        var result = PassportHostedPolicy.AuthorizeAiSession(request);
+
+        Assert.True(result.Succeeded, result.Message);
+        Assert.False(string.IsNullOrWhiteSpace(result.SessionToken));
+        Assert.False(JsonSerializer.Serialize(result.Session, JsonOptions).Contains(result.SessionToken, StringComparison.Ordinal));
+        Assert.Equal(25, result.MessageQuota);
+        Assert.NotNull(result.Session);
+        Assert.False((bool)ReadNested(result.Session!, "authority_boundaries", "can_execute_wallet_operations"));
+    }
+
+    [Fact]
+    public void AuthorizeAiSessionRejectsTamperedSignature()
+    {
+        using var rsa = RSA.Create(2048);
+        var request = CreateAiSessionRequest(rsa) with
+        {
+            SignedPayloadBase64 = Convert.ToBase64String(Encoding.UTF8.GetBytes("{\"tampered\":true}"))
+        };
+
+        var result = PassportHostedPolicy.AuthorizeAiSession(request);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("signature", result.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void AuthorizeAiSessionRejectsRequestRecordThatDoesNotMatchSignedPayload()
+    {
+        using var rsa = RSA.Create(2048);
+        var request = CreateAiSessionRequest(rsa);
+        var tampered = JsonSerializer.Deserialize<Dictionary<string, object?>>(request.RequestRecord.GetRawText(), JsonOptions)!;
+        tampered["gateway_url"] = "https://attacker.example";
+        var tamperedRecord = JsonDocument.Parse(JsonSerializer.Serialize(tampered, JsonOptions)).RootElement.Clone();
+
+        var result = PassportHostedPolicy.AuthorizeAiSession(request with
+        {
+            RequestRecord = tamperedRecord,
+            RequestRecordSha256 = ComputeJsonSha256(tamperedRecord)
+        });
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("signature", result.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ChatRequiresMatchingSessionTokenAndRejectsSecrets()
+    {
+        using var rsa = RSA.Create(2048);
+        var session = PassportHostedPolicy.AuthorizeAiSession(CreateAiSessionRequest(rsa));
+        Assert.True(session.Succeeded, session.Message);
+
+        var store = new PassportHostedInMemoryStore();
+        store.SaveAiSession(session.Session!);
+
+        var badToken = PassportHostedPolicy.CreateAiChatResponse(
+            new PassportAiChatRequest { SessionId = session.SessionId, Message = "hello" },
+            "wrong-token",
+            store);
+        Assert.False(badToken.Succeeded);
+
+        var secret = PassportHostedPolicy.CreateAiChatResponse(
+            new PassportAiChatRequest { SessionId = session.SessionId, Message = "wallet private key: abc123" },
+            session.SessionToken,
+            store);
+        Assert.False(secret.Succeeded);
+        Assert.Contains("private key", secret.Message, StringComparison.OrdinalIgnoreCase);
+
+        var answer = PassportHostedPolicy.CreateAiChatResponse(
+            new PassportAiChatRequest
+            {
+                SessionId = session.SessionId,
+                Message = "What can the AI do?",
+                ClientApprovedContextRefs =
+                [
+                    new PassportAiSourceRef
+                    {
+                        SourceId = "mvp-guide",
+                        Title = "MVP Guide",
+                        SourcePath = "knowledge-packs/passport-mvp-guide.md",
+                        SourceSha256 = new string('a', 64),
+                        ChunkSha256 = new string('b', 64)
+                    }
+                ]
+            },
+            session.SessionToken,
+            store);
+        Assert.True(answer.Succeeded, answer.Message);
+        Assert.Contains("cannot approve recovery", answer.AnswerText, StringComparison.OrdinalIgnoreCase);
+        Assert.Single(answer.Sources);
+    }
+
+    [Fact]
+    public void CapacityReportRequiresConservativeIssuanceGates()
+    {
+        var accepted = PassportHostedPolicy.CreateCcCapacityReport(new PassportCcCapacityReportRequest
+        {
+            ReleaseLane = "production-mvp",
+            LedgerNamespace = "archrealms-passport-production-mvp",
+            PolicyVersion = "passport-release-lanes-v1",
+            ServiceClass = "storage_standard",
+            ConservativeServiceLiabilityCapacityBaseUnits = 1000,
+            OutstandingCcBeforeBaseUnits = 100,
+            MaxIssuanceBaseUnits = 250,
+            CapacityHaircutBasisPoints = 6500,
+            IndependentVolumeQualified = true,
+            ThinMarketIssuanceZero = false,
+            ContinuityReserveExcluded = true,
+            OperationalReserveExcluded = true,
+            CapacityReportAuthorityRecordSha256 = new string('c', 64)
+        });
+        Assert.True(accepted.Succeeded, accepted.Message);
+        Assert.Equal("passport_cc_capacity_report", accepted.Record!["record_type"]);
+
+        var rejected = PassportHostedPolicy.CreateCcCapacityReport(new PassportCcCapacityReportRequest
+        {
+            ReleaseLane = "production-mvp",
+            LedgerNamespace = "archrealms-passport-production-mvp",
+            PolicyVersion = "passport-release-lanes-v1",
+            ServiceClass = "storage_standard",
+            ConservativeServiceLiabilityCapacityBaseUnits = 1000,
+            MaxIssuanceBaseUnits = 250,
+            CapacityHaircutBasisPoints = 6500,
+            IndependentVolumeQualified = true,
+            ThinMarketIssuanceZero = true,
+            ContinuityReserveExcluded = true,
+            OperationalReserveExcluded = true,
+            CapacityReportAuthorityRecordSha256 = new string('c', 64)
+        });
+        Assert.False(rejected.Succeeded);
+        Assert.Contains("Thin-market", rejected.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ArchGenesisManifestRejectsPostGenesisSupplyGaps()
+    {
+        var result = PassportHostedPolicy.CreateArchGenesisManifest(new PassportArchGenesisManifestRequest
+        {
+            ReleaseLane = "production-mvp",
+            LedgerNamespace = "archrealms-passport-production-mvp",
+            PolicyVersion = "passport-release-lanes-v1",
+            TotalSupplyBaseUnits = 1000,
+            BaseUnitPrecision = 18,
+            GenesisAuthorityRecordSha256 = new string('d', 64),
+            Allocations =
+            [
+                new PassportArchGenesisAllocationRequest
+                {
+                    AllocationId = "allocation-1",
+                    AccountId = "account-1",
+                    IdentityId = "identity-1",
+                    WalletKeyId = "wallet-1",
+                    AmountBaseUnits = 1000
+                }
+            ]
+        });
+        Assert.True(result.Succeeded, result.Message);
+        Assert.Equal(false, result.Record!["post_genesis_minting_allowed"]);
+
+        var rejected = PassportHostedPolicy.CreateArchGenesisManifest(new PassportArchGenesisManifestRequest
+        {
+            ReleaseLane = "production-mvp",
+            LedgerNamespace = "archrealms-passport-production-mvp",
+            PolicyVersion = "passport-release-lanes-v1",
+            TotalSupplyBaseUnits = 1000,
+            BaseUnitPrecision = 18,
+            GenesisAuthorityRecordSha256 = new string('d', 64),
+            Allocations =
+            [
+                new PassportArchGenesisAllocationRequest
+                {
+                    AllocationId = "allocation-1",
+                    AccountId = "account-1",
+                    IdentityId = "identity-1",
+                    WalletKeyId = "wallet-1",
+                    AmountBaseUnits = 999
+                }
+            ]
+        });
+        Assert.False(rejected.Succeeded);
+        Assert.Contains("allocation total", rejected.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void AdminAuthorityAndStorageDeliveryHaveStructuralGates()
+    {
+        var targetHash = new string('e', 64);
+        var payloadHash = new string('f', 64);
+        var authority = JsonDocument.Parse(JsonSerializer.Serialize(new Dictionary<string, object?>
+        {
+            ["record_type"] = "passport_admin_dual_control_action",
+            ["record_id"] = "authority-1",
+            ["action_type"] = "cc_issuance",
+            ["authority_scope"] = "production-mvp",
+            ["target_record_sha256"] = targetHash,
+            ["requested_payload_sha256"] = payloadHash,
+            ["requester_device_id"] = "device-1",
+            ["approver_device_id"] = "device-2",
+            ["ai_approved"] = false
+        })).RootElement.Clone();
+        var requester = JsonDocument.Parse("{\"record_type\":\"passport_admin_dual_control_requester_signature\"}").RootElement.Clone();
+        var approver = JsonDocument.Parse("{\"record_type\":\"passport_admin_dual_control_approver_signature\"}").RootElement.Clone();
+
+        var authorityResult = PassportHostedPolicy.ValidateAdminAuthority(new PassportAdminAuthorityValidationRequest
+        {
+            ActionType = "cc_issuance",
+            AuthorityScope = "production-mvp",
+            TargetRecordSha256 = targetHash,
+            RequestedPayloadSha256 = payloadHash,
+            AdminAuthorityRecord = authority,
+            RequesterSignatureRecord = requester,
+            ApproverSignatureRecord = approver
+        });
+        Assert.True(authorityResult.Succeeded, authorityResult.Message);
+
+        var deliveryRecord = JsonDocument.Parse(JsonSerializer.Serialize(new Dictionary<string, object?>
+        {
+            ["record_type"] = "passport_storage_service_delivery_request",
+            ["record_id"] = "delivery-1",
+            ["release_lane"] = "production-mvp",
+            ["ledger_namespace"] = "archrealms-passport-production-mvp",
+            ["redemption_id"] = "redemption-1",
+            ["storage_gb"] = 1,
+            ["service_epoch_count"] = 1
+        }, JsonOptions)).RootElement.Clone();
+        var deliveryHash = ComputeJsonSha256(deliveryRecord);
+        var deliveryResult = PassportHostedPolicy.AcceptStorageDeliveryRequest(new PassportStorageDeliveryRequest
+        {
+            ServiceDeliveryRequestRecord = deliveryRecord,
+            ServiceDeliveryRequestSha256 = deliveryHash
+        });
+        Assert.True(deliveryResult.Succeeded, deliveryResult.Message);
+        Assert.Equal("passport_storage_delivery_acceptance", deliveryResult.Record!["record_type"]);
+    }
+
+    private static PassportAiSessionAuthorizationRequest CreateAiSessionRequest(RSA rsa)
+    {
+        var record = new Dictionary<string, object?>
+        {
+            ["schema_version"] = 1,
+            ["record_type"] = "passport_ai_session_request",
+            ["record_id"] = "ai-request-1",
+            ["created_utc"] = DateTimeOffset.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+            ["expires_utc"] = DateTimeOffset.UtcNow.AddMinutes(5).ToString("yyyy-MM-ddTHH:mm:ssZ"),
+            ["release_lane"] = "production-mvp",
+            ["ledger_namespace"] = "archrealms-passport-production-mvp",
+            ["policy_version"] = "passport-release-lanes-v1",
+            ["archrealms_identity_id"] = "identity-1",
+            ["device_id"] = "device-1",
+            ["gateway_url"] = "https://ai.archrealms.example",
+            ["approved_knowledge_pack_id"] = "archrealms-mvp-approved-knowledge",
+            ["privacy"] = new Dictionary<string, object?>
+            {
+                ["diagnostics_upload_opt_in"] = false,
+                ["model_training_allowed"] = false,
+                ["raw_prompt_retention_days"] = 30
+            },
+            ["authority_boundaries"] = new Dictionary<string, object?>
+            {
+                ["can_approve_recovery"] = false,
+                ["can_issue_credits"] = false,
+                ["can_release_escrow"] = false,
+                ["can_mark_service_delivered"] = false,
+                ["can_burn_credits"] = false,
+                ["can_change_registry_authority"] = false,
+                ["can_execute_wallet_operations"] = false,
+                ["can_override_identity_status"] = false,
+                ["can_approve_admin_authority"] = false
+            },
+            ["session_token_policy"] = new Dictionary<string, object?>
+            {
+                ["token_separate_from_wallet_keys"] = true,
+                ["wallet_key_material_included"] = false,
+                ["recovery_secret_material_included"] = false
+            }
+        };
+        var payload = JsonSerializer.SerializeToUtf8Bytes(record, JsonOptions);
+        var signature = rsa.SignData(payload, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        record["signature"] = new Dictionary<string, object?>
+        {
+            ["signature_algorithm"] = "RSA_PKCS1_SHA256",
+            ["signing_device_record_id"] = "device-1",
+            ["signed_payload_sha256"] = ComputeSha256(payload)
+        };
+        var recordElement = JsonDocument.Parse(JsonSerializer.Serialize(record, JsonOptions)).RootElement.Clone();
+
+        return new PassportAiSessionAuthorizationRequest
+        {
+            RequestRecord = recordElement,
+            RequestRecordSha256 = ComputeJsonSha256(recordElement),
+            SignedPayloadBase64 = Convert.ToBase64String(payload),
+            SignatureBase64 = Convert.ToBase64String(signature),
+            DevicePublicKeySpkiDerBase64 = Convert.ToBase64String(rsa.ExportSubjectPublicKeyInfo()),
+            MessageQuota = 25,
+            TokenQuota = 10000,
+            TtlMinutes = 30
+        };
+    }
+
+    private static object ReadNested(Dictionary<string, object?> record, string objectName, string propertyName)
+    {
+        var child = Assert.IsType<Dictionary<string, object?>>(record[objectName]);
+        return child[propertyName]!;
+    }
+
+    private static string ComputeJsonSha256(JsonElement value)
+    {
+        return ComputeSha256(JsonSerializer.SerializeToUtf8Bytes(value, JsonOptions));
+    }
+
+    private static string ComputeSha256(byte[] value)
+    {
+        return Convert.ToHexString(SHA256.HashData(value)).ToLowerInvariant();
+    }
+}

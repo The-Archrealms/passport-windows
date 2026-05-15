@@ -1,7 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Net;
+using System.Net.Http;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using ArchrealmsPassport.Windows.Services;
 using ArchrealmsPassport.Windows.Tests.Infrastructure;
@@ -53,6 +58,104 @@ public sealed class PassportAiGatewayServiceTests
         Assert.Equal("passport_ai_session_record", PassportTestWorkspace.GetString(sessionRecord, "record_type"));
         Assert.Equal(25, PassportTestWorkspace.GetInt64(sessionRecord.GetProperty("quota"), "message_limit"));
         Assert.False(sessionRecord.GetProperty("authority_boundaries").GetProperty("can_approve_recovery").GetBoolean());
+    }
+
+    [Fact]
+    public async Task AiGatewayCreatesHostedSessionWhenGatewayIsRemote()
+    {
+        using var workspace = PassportTestWorkspace.Create();
+        var releaseLane = PassportReleaseLane.CreateDefault("production-mvp");
+        var token = "hosted-token";
+        var tokenSha256 = ComputeSha256(Encoding.UTF8.GetBytes(token));
+        var handler = new DelegateHttpMessageHandler(async request =>
+        {
+            Assert.Equal(HttpMethod.Post, request.Method);
+            Assert.EndsWith("/ai/session", request.RequestUri!.AbsolutePath, StringComparison.Ordinal);
+            using var body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync());
+            var root = body.RootElement;
+            Assert.Equal("passport_ai_session_request", PassportTestWorkspace.GetString(root.GetProperty("request_record"), "record_type"));
+            Assert.False(string.IsNullOrWhiteSpace(PassportTestWorkspace.GetString(root, "signed_payload_base64")));
+            Assert.False(string.IsNullOrWhiteSpace(PassportTestWorkspace.GetString(root, "signature_base64")));
+            Assert.False(string.IsNullOrWhiteSpace(PassportTestWorkspace.GetString(root, "device_public_key_spki_der_base64")));
+
+            var sessionRecord = new Dictionary<string, object?>
+            {
+                ["schema_version"] = 1,
+                ["record_type"] = "passport_ai_session_record",
+                ["record_id"] = "hosted-session-1",
+                ["session_id"] = "hosted-session-1",
+                ["created_utc"] = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+                ["expires_utc"] = DateTime.UtcNow.AddMinutes(30).ToString("yyyy-MM-ddTHH:mm:ssZ"),
+                ["status"] = "active",
+                ["release_lane"] = releaseLane.Lane,
+                ["ledger_namespace"] = releaseLane.LedgerNamespace,
+                ["policy_version"] = releaseLane.PolicyVersion,
+                ["session_token_sha256"] = tokenSha256,
+                ["quota"] = new Dictionary<string, object?>
+                {
+                    ["message_limit"] = 25,
+                    ["token_limit"] = 10000,
+                    ["messages_used"] = 0,
+                    ["tokens_used"] = 0
+                },
+                ["authority_boundaries"] = new Dictionary<string, object?>
+                {
+                    ["can_approve_recovery"] = false,
+                    ["can_issue_credits"] = false,
+                    ["can_release_escrow"] = false,
+                    ["can_mark_service_delivered"] = false,
+                    ["can_burn_credits"] = false,
+                    ["can_change_registry_authority"] = false,
+                    ["can_execute_wallet_operations"] = false,
+                    ["can_override_identity_status"] = false,
+                    ["can_approve_admin_authority"] = false
+                }
+            };
+            var response = new Dictionary<string, object?>
+            {
+                ["succeeded"] = true,
+                ["message"] = "AI session authorized.",
+                ["session_id"] = "hosted-session-1",
+                ["session_token"] = token,
+                ["session_token_sha256"] = tokenSha256,
+                ["expires_utc"] = DateTime.UtcNow.AddMinutes(30).ToString("yyyy-MM-ddTHH:mm:ssZ"),
+                ["message_quota"] = 25,
+                ["token_quota"] = 10000,
+                ["session_record"] = sessionRecord
+            };
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(JsonSerializer.Serialize(response), Encoding.UTF8, "application/json")
+            };
+        });
+        var service = new PassportAiGatewayService(releaseLane, new HttpClient(handler));
+        var requestRecord = service.CreateSessionRequest(
+            workspace.Root,
+            workspace.IdentityId,
+            workspace.DeviceId,
+            workspace.KeyReferencePath,
+            "https://ai.archrealms.example",
+            "archrealms-mvp-approved-knowledge",
+            diagnosticsUploadOptIn: false);
+        Assert.True(requestRecord.Succeeded, requestRecord.Message);
+
+        var session = await service.CreateGatewaySessionAsync(
+            workspace.Root,
+            requestRecord.RequestPath,
+            requestRecord.RequestSha256,
+            messageQuota: 25,
+            tokenQuota: 10000,
+            ttl: TimeSpan.FromMinutes(30));
+
+        Assert.True(session.Succeeded, session.Message);
+        Assert.Equal("hosted-session-1", session.SessionId);
+        Assert.Equal(token, session.SessionToken);
+        Assert.True(File.Exists(session.SessionPath));
+        var sessionJson = File.ReadAllText(session.SessionPath);
+        Assert.DoesNotContain(token, sessionJson);
+        Assert.Contains(tokenSha256, sessionJson);
+        Assert.Contains("request_record_path", sessionJson);
     }
 
     [Fact]
@@ -188,5 +291,25 @@ public sealed class PassportAiGatewayServiceTests
         Assert.False(guide.Succeeded);
         Assert.Contains("blocked", guide.Message, StringComparison.OrdinalIgnoreCase);
         Assert.False(Directory.Exists(Path.Combine(workspace.Root, "records", "passport", "ai", "chats")));
+    }
+
+    private static string ComputeSha256(byte[] value)
+    {
+        return Convert.ToHexString(SHA256.HashData(value)).ToLowerInvariant();
+    }
+
+    private sealed class DelegateHttpMessageHandler : HttpMessageHandler
+    {
+        private readonly Func<HttpRequestMessage, Task<HttpResponseMessage>> handler;
+
+        public DelegateHttpMessageHandler(Func<HttpRequestMessage, Task<HttpResponseMessage>> handler)
+        {
+            this.handler = handler;
+        }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            return handler(request);
+        }
     }
 }

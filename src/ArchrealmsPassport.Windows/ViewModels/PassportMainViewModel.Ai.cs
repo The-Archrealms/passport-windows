@@ -6,7 +6,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
 {
     public sealed partial class PassportMainViewModel
     {
-        private Task CreateAiSessionAsync()
+        private async Task CreateAiSessionAsync()
         {
             _settingsStore.Save(CreateSettingsSnapshot());
 
@@ -23,11 +23,11 @@ namespace ArchrealmsPassport.Windows.ViewModels
             {
                 AiSessionStatusText = request.Message;
                 AppendLog(request.Message);
-                return Task.CompletedTask;
+                return;
             }
 
             LatestAiSessionRequestText = request.RequestPath;
-            var session = service.CreateLocalGatewaySession(
+            var session = await service.CreateGatewaySessionAsync(
                 WorkspaceRoot,
                 request.RequestPath,
                 request.RequestSha256,
@@ -38,7 +38,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
             {
                 AiSessionStatusText = session.Message;
                 AppendLog(session.Message);
-                return Task.CompletedTask;
+                return;
             }
 
             LatestAiSessionRecordText = session.SessionPath;
@@ -51,7 +51,6 @@ namespace ArchrealmsPassport.Windows.ViewModels
             AppendLog(session.Message);
             AppendLog("AI session: " + session.SessionPath);
             RaiseCommandAvailability();
-            return Task.CompletedTask;
         }
 
         private async Task AskAiQuestionAsync()

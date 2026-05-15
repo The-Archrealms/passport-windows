@@ -2,9 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
 using ArchrealmsPassport.Windows.Models;
 
 namespace ArchrealmsPassport.Windows.Services
@@ -17,10 +20,12 @@ namespace ArchrealmsPassport.Windows.Services
         };
 
         private readonly PassportReleaseLane releaseLane;
+        private readonly HttpClient httpClient;
 
-        public PassportAiGatewayService(PassportReleaseLane? releaseLane = null)
+        public PassportAiGatewayService(PassportReleaseLane? releaseLane = null, HttpClient? httpClient = null)
         {
             this.releaseLane = releaseLane ?? PassportEnvironment.GetReleaseLane();
+            this.httpClient = httpClient ?? new HttpClient();
         }
 
         public PassportAiSessionResult CreateSessionRequest(
@@ -233,6 +238,132 @@ namespace ArchrealmsPassport.Windows.Services
             }
         }
 
+        public async Task<PassportAiSessionResult> CreateGatewaySessionAsync(
+            string workspaceRoot,
+            string requestPath,
+            string requestSha256,
+            int messageQuota,
+            int tokenQuota,
+            TimeSpan ttl,
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            var resolvedWorkspaceRoot = PassportEnvironment.ResolveWorkspaceRoot(workspaceRoot);
+            var resolvedRequestPath = ResolveWorkspaceRelativePath(resolvedWorkspaceRoot, requestPath);
+            if (!File.Exists(resolvedRequestPath))
+            {
+                return Failed("AI session request record could not be found.");
+            }
+
+            using var requestDocument = JsonDocument.Parse(File.ReadAllText(resolvedRequestPath));
+            var request = requestDocument.RootElement;
+            var gatewayUrl = ReadString(request, "gateway_url");
+            if (!ShouldUseHostedGateway(gatewayUrl))
+            {
+                return CreateLocalGatewaySession(
+                    resolvedWorkspaceRoot,
+                    resolvedRequestPath,
+                    requestSha256,
+                    messageQuota,
+                    tokenQuota,
+                    ttl);
+            }
+
+            try
+            {
+                var validation = ValidateSessionRequest(resolvedWorkspaceRoot, request);
+                if (!validation.Succeeded)
+                {
+                    return validation;
+                }
+
+                var actualRequestSha256 = ComputeSha256(File.ReadAllBytes(resolvedRequestPath));
+                if (!string.IsNullOrWhiteSpace(requestSha256)
+                    && !string.Equals(actualRequestSha256, requestSha256, StringComparison.OrdinalIgnoreCase))
+                {
+                    return Failed("AI session request hash does not match.");
+                }
+
+                if (!request.TryGetProperty("signature", out var signature))
+                {
+                    return Failed("AI session request is missing signature evidence.");
+                }
+
+                var payloadPath = ResolveWorkspaceRelativePath(resolvedWorkspaceRoot, ReadString(signature, "signed_payload_path"));
+                var signaturePath = ResolveWorkspaceRelativePath(resolvedWorkspaceRoot, ReadString(signature, "signature_path"));
+                var publicKeyPath = Path.Combine(resolvedWorkspaceRoot, "records", "registry", "public-keys", ReadString(request, "device_id") + ".spki.der");
+                if (!File.Exists(payloadPath) || !File.Exists(signaturePath) || !File.Exists(publicKeyPath))
+                {
+                    return Failed("AI session request signature or public-key evidence is missing.");
+                }
+
+                var payload = new Dictionary<string, object?>
+                {
+                    ["request_record"] = JsonSerializer.Deserialize<Dictionary<string, object?>>(request.GetRawText(), JsonOptions),
+                    ["request_record_sha256"] = actualRequestSha256,
+                    ["signed_payload_base64"] = Convert.ToBase64String(File.ReadAllBytes(payloadPath)),
+                    ["signature_base64"] = Convert.ToBase64String(File.ReadAllBytes(signaturePath)),
+                    ["device_public_key_spki_der_base64"] = Convert.ToBase64String(File.ReadAllBytes(publicKeyPath)),
+                    ["message_quota"] = Math.Max(1, messageQuota),
+                    ["token_quota"] = Math.Max(1, tokenQuota),
+                    ["ttl_minutes"] = Math.Max(1, (int)Math.Ceiling(ttl.TotalMinutes))
+                };
+
+                using var httpRequest = new HttpRequestMessage(HttpMethod.Post, BuildGatewayEndpoint(gatewayUrl, "/ai/session"));
+                httpRequest.Content = new StringContent(JsonSerializer.Serialize(payload, JsonOptions), Encoding.UTF8, "application/json");
+                using var response = await httpClient.SendAsync(httpRequest, cancellationToken).ConfigureAwait(false);
+                var responseText = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                if (!response.IsSuccessStatusCode)
+                {
+                    return Failed("Hosted AI gateway rejected the session request: " + response.StatusCode);
+                }
+
+                using var responseDocument = JsonDocument.Parse(responseText);
+                var root = responseDocument.RootElement;
+                if (!ReadBoolean(root, "succeeded"))
+                {
+                    return Failed(ReadString(root, "message"));
+                }
+
+                var sessionToken = ReadString(root, "session_token");
+                var sessionTokenSha256 = ReadString(root, "session_token_sha256");
+                if (string.IsNullOrWhiteSpace(sessionToken) || string.IsNullOrWhiteSpace(sessionTokenSha256))
+                {
+                    return Failed("Hosted AI gateway returned no usable session token.");
+                }
+
+                if (!string.Equals(ComputeSha256(Encoding.UTF8.GetBytes(sessionToken)), sessionTokenSha256, StringComparison.OrdinalIgnoreCase))
+                {
+                    return Failed("Hosted AI gateway session token hash does not match.");
+                }
+
+                if (!root.TryGetProperty("session_record", out var sessionRecord) || sessionRecord.ValueKind != JsonValueKind.Object)
+                {
+                    return Failed("Hosted AI gateway returned no session record.");
+                }
+
+                var sessionPath = WriteHostedSessionRecord(resolvedWorkspaceRoot, sessionRecord, resolvedRequestPath, actualRequestSha256);
+                return new PassportAiSessionResult
+                {
+                    Succeeded = true,
+                    Message = "Created hosted Passport AI session.",
+                    RequestId = ReadString(request, "record_id"),
+                    RequestPath = resolvedRequestPath,
+                    RequestSha256 = actualRequestSha256,
+                    SessionId = ReadString(root, "session_id"),
+                    SessionPath = sessionPath,
+                    SessionToken = sessionToken,
+                    SessionTokenSha256 = sessionTokenSha256,
+                    ExpiresUtc = ReadString(root, "expires_utc"),
+                    MessageQuota = ReadInt32(root, "message_quota"),
+                    TokenQuota = ReadInt32(root, "token_quota")
+                };
+            }
+            catch (Exception ex)
+            {
+                return Failed("Hosted AI gateway session failed: " + ex.Message);
+            }
+        }
+
         private PassportAiSessionResult ValidateSessionRequest(string workspaceRoot, JsonElement request)
         {
             if (!Matches(request, "record_type", "passport_ai_session_request"))
@@ -373,6 +504,11 @@ namespace ArchrealmsPassport.Windows.Services
                     || (property.ValueKind == JsonValueKind.String && bool.TryParse(property.GetString(), out var parsed) && parsed));
         }
 
+        private static int ReadInt32(JsonElement root, string propertyName)
+        {
+            return root.TryGetProperty(propertyName, out var property) && property.TryGetInt32(out var value) ? value : 0;
+        }
+
         private static string ResolveWorkspaceRelativePath(string workspaceRoot, string path)
         {
             if (string.IsNullOrWhiteSpace(path))
@@ -393,6 +529,47 @@ namespace ArchrealmsPassport.Windows.Services
             return fullPath.StartsWith(root, StringComparison.OrdinalIgnoreCase)
                 ? fullPath[root.Length..].TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Replace(Path.DirectorySeparatorChar, '/')
                 : path.Replace(Path.DirectorySeparatorChar, '/');
+        }
+
+        private static string WriteHostedSessionRecord(
+            string workspaceRoot,
+            JsonElement sessionRecord,
+            string requestPath,
+            string requestSha256)
+        {
+            var sessionRoot = Path.Combine(workspaceRoot, "records", "passport", "ai", "sessions");
+            Directory.CreateDirectory(sessionRoot);
+            var sessionId = ReadString(sessionRecord, "session_id");
+            if (string.IsNullOrWhiteSpace(sessionId))
+            {
+                sessionId = DateTime.UtcNow.ToString("yyyyMMddTHHmmssZ") + "-ai-session-" + Guid.NewGuid().ToString("N")[..10];
+            }
+
+            var session = JsonSerializer.Deserialize<Dictionary<string, object?>>(sessionRecord.GetRawText(), JsonOptions)
+                ?? new Dictionary<string, object?>();
+            session["request_record_path"] = ToWorkspaceRelativePath(workspaceRoot, requestPath);
+            session["request_record_sha256"] = requestSha256;
+            session.Remove("session_token");
+
+            var sessionPath = Path.Combine(sessionRoot, sessionId + ".json");
+            File.WriteAllText(sessionPath, JsonSerializer.Serialize(session, JsonOptions), Encoding.UTF8);
+            return sessionPath;
+        }
+
+        private static bool ShouldUseHostedGateway(string gatewayUrl)
+        {
+            if (!Uri.TryCreate(gatewayUrl, UriKind.Absolute, out var uri))
+            {
+                return false;
+            }
+
+            return !string.Equals(uri.Host, "ai.archrealms.local", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static Uri BuildGatewayEndpoint(string gatewayUrl, string relativePath)
+        {
+            var baseUri = new Uri(gatewayUrl.TrimEnd('/') + "/");
+            return new Uri(baseUri, relativePath.TrimStart('/'));
         }
 
         private static string ComputeSha256(byte[] value)
