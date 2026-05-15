@@ -143,6 +143,35 @@ function Test-HexSha256Environment {
     return ""
 }
 
+function Get-Sha256Hex {
+    param(
+        [byte[]]$Bytes
+    )
+
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        return [System.BitConverter]::ToString($sha256.ComputeHash($Bytes)).Replace("-", "").ToLowerInvariant()
+    }
+    finally {
+        $sha256.Dispose()
+    }
+}
+
+function Test-HostedOperatorSecret {
+    $expectedHash = [System.Environment]::GetEnvironmentVariable("ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY_SHA256")
+    $operatorKey = [System.Environment]::GetEnvironmentVariable("ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY")
+    if ([string]::IsNullOrWhiteSpace($expectedHash) -or [string]::IsNullOrWhiteSpace($operatorKey)) {
+        return ""
+    }
+
+    $actualHash = Get-Sha256Hex -Bytes ([System.Text.Encoding]::UTF8.GetBytes($operatorKey.Trim()))
+    if (-not [string]::Equals($actualHash, $expectedHash.Trim(), [System.StringComparison]::OrdinalIgnoreCase)) {
+        return "ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY does not match ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY_SHA256"
+    }
+
+    return ""
+}
+
 function Test-ManagedSigningCustody {
     $custodyValue = [System.Environment]::GetEnvironmentVariable("ARCHREALMS_PASSPORT_HOSTED_SIGNING_KEY_CUSTODY")
     if ($null -eq $custodyValue) {
@@ -279,6 +308,39 @@ function Test-HostedRuntimeStatusEndpoints {
     }
 
     return $failures
+}
+
+function Test-HostedOperatorStatusEndpoint {
+    $apiBaseUrl = Get-FirstEnvironmentValue -Names @(
+        "PASSPORT_WINDOWS_PRODUCTION_MVP_API_BASE_URL",
+        "PASSPORT_WINDOWS_RELEASE_LANE_API_BASE_URL"
+    )
+    $operatorKey = [System.Environment]::GetEnvironmentVariable("ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY")
+    if ([string]::IsNullOrWhiteSpace($apiBaseUrl) -or [string]::IsNullOrWhiteSpace($operatorKey)) {
+        return ""
+    }
+
+    $url = Join-EndpointPath -BaseUrl $apiBaseUrl -Path "/ops/operator/status"
+    try {
+        $response = Invoke-RestMethod `
+            -Method Get `
+            -Uri $url `
+            -Headers @{ "X-Archrealms-Operator-Key" = $operatorKey } `
+            -TimeoutSec $EndpointTimeoutSeconds
+    }
+    catch {
+        return "hosted operator status endpoint check failed for $url`: $($_.Exception.Message)"
+    }
+
+    if ($null -eq $response) {
+        return "hosted operator status endpoint returned no JSON for $url"
+    }
+
+    if ($response.schema -ne "archrealms.passport.hosted_operator_auth_status.v1" -or $response.authorized -ne $true) {
+        return "hosted operator status endpoint did not confirm authorization for $url"
+    }
+
+    return ""
 }
 
 function Test-ManagedSigningEndpointProbe {
@@ -563,8 +625,30 @@ $gates = @(
     New-Gate `
         -Id "hosted_operator_gate" `
         -Description "Authority-bearing hosted endpoints require a configured operator key hash." `
-        -RequiredEnvironment @("ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY_SHA256") `
-        -ExtraCheck { Test-HexSha256Environment -Name "ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY_SHA256" }
+        -RequiredEnvironment @(
+            "ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY_SHA256",
+            "ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY"
+        ) `
+        -ExtraCheck {
+            $failures = @()
+            $hashFailure = Test-HexSha256Environment -Name "ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY_SHA256"
+            if ($hashFailure) {
+                $failures += $hashFailure
+            }
+
+            $secretFailure = Test-HostedOperatorSecret
+            if ($secretFailure) {
+                $failures += $secretFailure
+            }
+
+            return $failures
+        }
+
+    New-Gate `
+        -Id "hosted_operator_status" `
+        -Description "Configured operator key authenticates against the hosted production API without mutating state." `
+        -RequiredEnvironment @() `
+        -ExtraCheck ${function:Test-HostedOperatorStatusEndpoint}
 
     New-Gate `
         -Id "managed_storage_backups" `

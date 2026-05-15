@@ -15,6 +15,7 @@ The hosted services project provides the production-facing API boundary that Win
 | `GET /health` | Liveness and contract version | Returns `passport-hosted-services-v1` |
 | `GET /ai/runtime/status` | Non-secret hosted open-weight AI readiness | Reports whether inference URL, approved model ID, model artifact hash, license approval, vector store, and knowledge approval root are configured |
 | `GET /ops/runtime/status` | Non-secret hosted operations readiness | Reports managed data root, storage/backup/restore policy, managed signing-key custody, telemetry, and incident-response configuration without exposing secrets |
+| `GET /ops/operator/status` | Non-mutating operator authentication probe | Requires `X-Archrealms-Operator-Key` and returns authorization status for production readiness checks |
 | `POST /ai/session` | Authorize a Passport-signed AI session request | Verifies request hash, device signature evidence, token/key separation, expiry, and non-authority boundaries |
 | `POST /ai/chat` | Authenticated AI guide response | Requires matching bearer session token; blocks private key, seed, and recovery-secret prompts; retrieves approved knowledge-pack chunks; calls an OpenAI-compatible open-weight runtime when configured; otherwise returns the deterministic gateway-contract fallback |
 | `POST /capacity/reports/cc` | Create conservative CC capacity reports | Enforces positive conservative capacity, no thin-market issuance, qualified independent volume, reserve exclusion, haircut range, and authority hash evidence |
@@ -38,6 +39,7 @@ The hosted services project provides the production-facing API boundary that Win
 ## Operator And Signing Controls
 
 - Authority-bearing endpoints require `X-Archrealms-Operator-Key` when `ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY_SHA256` is configured.
+- Production readiness also requires `ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY`; the gate verifies it hashes to `ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY_SHA256` and authenticates against `/ops/operator/status`.
 - Missing operator-key configuration is allowed only in local/development mode.
 - Hosted records returned by capacity, genesis, and storage-delivery endpoints are signed with the hosted service signing key.
 - Local development can use `ARCHREALMS_PASSPORT_HOSTED_SIGNING_KEY_PATH` to control the service signing-key location.

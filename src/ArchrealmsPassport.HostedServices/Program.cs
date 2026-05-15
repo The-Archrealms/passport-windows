@@ -24,6 +24,29 @@ app.MapGet("/ai/runtime/status", () => Results.Json(PassportHostedAiRuntimeReadi
 
 app.MapGet("/ops/runtime/status", () => Results.Json(PassportHostedOperationsReadiness.FromEnvironment()));
 
+app.MapGet("/ops/operator/status", (HttpRequest httpRequest) =>
+{
+    var operatorAuthorization = AuthorizeOperator(httpRequest, operatorGate);
+    if (operatorAuthorization != null)
+    {
+        return operatorAuthorization;
+    }
+
+    var rateLimit = AuthorizeRate(httpRequest, rateLimiter, "operator-status", maxRequests: 60, window: TimeSpan.FromMinutes(1));
+    if (rateLimit != null)
+    {
+        return rateLimit;
+    }
+
+    return Results.Json(new
+    {
+        schema = "archrealms.passport.hosted_operator_auth_status.v1",
+        authorized = true,
+        status = "authorized",
+        created_utc = DateTimeOffset.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
+    });
+});
+
 app.MapPost("/ai/session", (HttpRequest httpRequest, PassportAiSessionAuthorizationRequest request) =>
 {
     var rateLimit = AuthorizeRate(httpRequest, rateLimiter, "ai-session", maxRequests: 30, window: TimeSpan.FromMinutes(1));

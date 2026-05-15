@@ -36,6 +36,7 @@ $variables = @(
     New-Variable -Gate "release_lane_endpoints" -Name "PASSPORT_WINDOWS_PRODUCTION_MVP_AI_GATEWAY_URL" -Description "Production MVP hosted AI gateway URL." -Example "https://ai.archrealms.example"
 
     New-Variable -Gate "hosted_operator_gate" -Name "ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY_SHA256" -Description "SHA-256 hex digest of the operator API key accepted by authority-bearing hosted endpoints."
+    New-Variable -Gate "hosted_operator_gate" -Name "ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY" -Secret $true -Description "Actual operator API key used by the production readiness gate to verify authority-bearing hosted endpoint authentication."
 
     New-Variable -Gate "managed_storage_backups" -Name "ARCHREALMS_PASSPORT_HOSTED_DATA_ROOT" -Description "Managed hosted data root for ledger, capacity, genesis, recovery, telemetry, AI, and storage-delivery records." -Example "/mnt/archrealms-passport-hosted"
     New-Variable -Gate "managed_storage_backups" -Name "ARCHREALMS_PASSPORT_HOSTED_STORAGE_PROVIDER" -Description "Managed durable storage provider identifier." -Example "managed-object-storage"
