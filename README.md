@@ -569,6 +569,13 @@ Run the gate directly:
   -OutputPath .\artifacts\release\production-mvp-readiness-report.json
 ```
 
+The fail-closed regression check clears all ProductionMvp readiness variables and verifies that every production gate fails, including the live probe gates:
+
+```powershell
+.\tools\release\Test-PassportProductionMvpReadinessFailClosed.ps1 `
+  -OutputPath .\artifacts\release\production-mvp-readiness-fail-closed-validation-report.json
+```
+
 Generate a production MVP environment template before wiring secrets or deployment variables:
 
 ```powershell
