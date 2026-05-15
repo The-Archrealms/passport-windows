@@ -24,6 +24,7 @@ Included today:
 
 - WPF desktop app under `src/ArchrealmsPassport.Windows`
 - Windows packaging project under `src/ArchrealmsPassport.Windows.Package`
+- shared Passport protocol and monetary validation core under `src/ArchrealmsPassport.Core`
 - hosted Passport API and AI gateway under `src/ArchrealmsPassport.HostedServices`
 - hosted-service container deployment baseline under `deploy/hosted-services/`
 - Passport record schema notes under `docs/`
@@ -41,17 +42,18 @@ Included today:
 - a small verifier helper under `tools/registry-verifier/`
 - a local metering verifier helper under `tools/metering-verifier/`
 - a monetary ledger export verifier under `tools/ledger-verifier/`
+- lane-gated wallet-key binding, fixed-genesis ARCH, Crown Credit, storage redemption, conversion quote/execution, and monetary export surfaces for the Token-Ready Passport MVP
 
 Not included today:
 
 - governance log management
 - constitutional ratification tooling
 - public registry servers
-- Android or web clients
+- Mac, iOS, Android, or web clients
 - mesh networking
-- public token, wallet, redemption, trading, or marketplace systems
+- fiat rails, exchange listings, external wallet transfers, unrestricted public CC payments, guaranteed ARCH/CC conversion, stable-value claims, yield, staking, or token governance
 
-The current economy-facing path is proof and metering first. Public economy-facing release is gated on blockchain-based settlement finality. Until that layer exists, Passport may build proof, metering, admission, and settlement-handoff inputs, but it must not present local records as final settlement.
+The current economy-facing path is Token-Ready Passport MVP behind explicit release lanes. Passport includes local and hosted software for wallet-key separation, fixed-genesis ARCH records, Crown Credit records, storage redemption, floating-rate conversion records, and replayable account exports. Citizen-facing production testing is still blocked until the `ProductionMvp` readiness gate passes with real production signing, hosted endpoints, managed storage/backups, managed signing custody, issuer/genesis IDs, open-weight AI runtime, telemetry/incident response, and formal approvals.
 
 The first metering verifier is local and narrow. `Verify-ArchrealmsPassportMetering.ps1` reads a Passport workspace, verifies signed metering payloads and device signatures, and emits an authoritative-style metering report with accepted/rejected proof counts. It does not settle value.
 
@@ -133,7 +135,7 @@ The workspace contains local Passport records such as:
 - `records/passport/settlement/mock-chain/`
 - `records/passport/settlement/read-only/`
 
-The metering and settlement workspace paths are reserved for proof records and read-only status. They are not final blockchain settlement, wallet, redemption, trading, or public token records.
+The metering and settlement workspace paths are reserved for proof records and read-only status. Token-ready wallet and ARCH/CC records live under `records/passport/wallet/` and `records/passport/monetary/` and are accepted only under the active release-lane, wallet-signature, capacity, genesis, and admin-authority rules.
 
 The app includes first metering actions:
 
@@ -143,7 +145,7 @@ The app includes first metering actions:
 - `Create Local Metering Status` writes a local read-only `metering_status_record` summarizing submitted proof claims without accepting or settling them.
 - `Verify Local Metering Records` writes a local verification report checking signed payload hashes and device signatures for local metering records.
 
-These are metering input records only; they do not create payouts, wallet balances, tokens, or settlement claims. The storage epoch proof is submitted local evidence; later network metering still decides whether it is accepted, rejected, audited, or settled.
+These metering actions remain proof input records only; they do not by themselves create payouts, wallet balances, tokens, or settlement claims. The storage epoch proof is submitted local evidence; storage redemption burns require the separate proof-backed redemption path and active monetary ledger policy.
 
 ## Trust Model
 
