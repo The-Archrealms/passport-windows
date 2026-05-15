@@ -537,10 +537,30 @@ Pre-MVP internal verification has its own gate. Run it after building an `Intern
   -OutputPath .\artifacts\release\pre-mvp-simulation-run-report.json `
   -EvidenceRoot .\artifacts\release\pre-mvp-simulation-run-evidence
 
+.\tools\release\New-PassportPreMvpStaffStewardPilotReport.ps1 `
+  -OutputPath .\artifacts\release\pre-mvp-staff-steward-pilot-report.json `
+  -PilotId <pre-mvp-staff-steward-pilot-id> `
+  -PilotOwner <pilot-owner> `
+  -ParticipantCount 1 `
+  -EvidenceReference <pilot-session-record-id-or-uri> `
+  -EvidenceReference <participant-signoff-id-or-uri> `
+  -EvidenceReference <pilot-issue-review-id-or-uri> `
+  -ConfirmCompleted `
+  -ConfirmStaffOrStewardParticipants `
+  -ConfirmCrownOwnedDevices `
+  -ConfirmNoCitizenProductionTokens `
+  -ConfirmRecoveryRevocationValidated `
+  -ConfirmStorageContributionValidated `
+  -ConfirmLedgerExportValidated `
+  -ConfirmHostedAiPrivacyValidated `
+  -ConfirmProductionReadinessBlockersReviewed `
+  -ConfirmPilotSignoffSigned `
+  -ConfirmNoProductionRecordsCreated
+
 .\tools\release\Test-PassportPreMvpInternalVerification.ps1 `
   -SimulationRunReportPath .\artifacts\release\pre-mvp-simulation-run-report.json `
   -SimulationRunReportSha256 <sha256> `
-  -StaffStewardPilotReportPath <controlled-staff-steward-pilot-report.json> `
+  -StaffStewardPilotReportPath .\artifacts\release\pre-mvp-staff-steward-pilot-report.json `
   -StaffStewardPilotReportSha256 <sha256> `
   -OutputPath .\artifacts\release\pre-mvp-internal-verification-report.json
 ```

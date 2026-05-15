@@ -17,7 +17,31 @@ Generate the simulation-run report from the local test harness, then record the 
 $simulationHash = (Get-FileHash -Algorithm SHA256 .\artifacts\release\pre-mvp-simulation-run-report.json).Hash.ToLowerInvariant()
 ```
 
-Copy the staff/steward pilot template in this folder into the controlled verification evidence system, fill every placeholder, approve or sign it under the internal verification policy, then pass both evidence file paths and SHA-256 hashes to the verifier:
+After the staff/steward pilot is complete, generate the pilot report from explicit operator confirmations. Use evidence references from the controlled pilot session record, participant signoff, and issue/blocker review; do not use placeholders:
+
+```powershell
+.\tools\release\New-PassportPreMvpStaffStewardPilotReport.ps1 `
+  -OutputPath .\artifacts\release\pre-mvp-staff-steward-pilot-report.json `
+  -PilotId <pre-mvp-staff-steward-pilot-id> `
+  -PilotOwner <pilot-owner> `
+  -ParticipantCount 1 `
+  -EvidenceReference <pilot-session-record-id-or-uri> `
+  -EvidenceReference <participant-signoff-id-or-uri> `
+  -EvidenceReference <pilot-issue-review-id-or-uri> `
+  -ConfirmCompleted `
+  -ConfirmStaffOrStewardParticipants `
+  -ConfirmCrownOwnedDevices `
+  -ConfirmNoCitizenProductionTokens `
+  -ConfirmRecoveryRevocationValidated `
+  -ConfirmStorageContributionValidated `
+  -ConfirmLedgerExportValidated `
+  -ConfirmHostedAiPrivacyValidated `
+  -ConfirmProductionReadinessBlockersReviewed `
+  -ConfirmPilotSignoffSigned `
+  -ConfirmNoProductionRecordsCreated
+```
+
+The template remains available for controlled document-system review. Pass both evidence file paths and SHA-256 hashes to the verifier:
 
 ```powershell
 .\tools\release\Test-PassportPreMvpInternalVerification.ps1 `
