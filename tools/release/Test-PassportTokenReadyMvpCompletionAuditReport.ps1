@@ -370,6 +370,27 @@ function Get-ObjectBool {
     return [bool]$Object.$Name
 }
 
+function Get-OperatorCommandScriptPath {
+    param([string]$Command)
+
+    if ([string]::IsNullOrWhiteSpace($Command)) {
+        return ""
+    }
+
+    $match = [regex]::Match($Command, '(?i)(?:^|\s)-File\s+(?:"([^"]+)"|''([^'']+)''|([^\s]+))')
+    if (-not $match.Success) {
+        return ""
+    }
+
+    for ($i = 1; $i -le 3; $i++) {
+        if ($match.Groups[$i].Success -and -not [string]::IsNullOrWhiteSpace($match.Groups[$i].Value)) {
+            return [string]$match.Groups[$i].Value
+        }
+    }
+
+    return ""
+}
+
 function Get-SourceFile {
     param(
         [object]$Report,
@@ -556,6 +577,24 @@ foreach ($item in $checklist) {
         foreach ($operatorCommand in $operatorCommands) {
             if ([string]::IsNullOrWhiteSpace([string]$operatorCommand)) {
                 $itemFailures += "$id operator action includes a blank command"
+                continue
+            }
+
+            $scriptPath = Get-OperatorCommandScriptPath -Command ([string]$operatorCommand)
+            if ([string]::IsNullOrWhiteSpace($scriptPath)) {
+                $itemFailures += "$id operator action command must include a PowerShell -File script path: $operatorCommand"
+                continue
+            }
+
+            $normalizedScriptPath = $scriptPath -replace '/', '\'
+            if ($normalizedScriptPath -notmatch '^tools\\release\\[^\\]+\.ps1$') {
+                $itemFailures += "$id operator action command must target a tools\release PowerShell script: $operatorCommand"
+                continue
+            }
+
+            $resolvedScriptPath = Resolve-RepoPath -Path $scriptPath
+            if (-not (Test-Path -LiteralPath $resolvedScriptPath -PathType Leaf)) {
+                $itemFailures += "$id operator action command references a missing script: $scriptPath"
             }
         }
     }
@@ -625,6 +664,7 @@ if ($RequireComplete) {
 if ($markdownExists) {
     $markdown = Get-Content -LiteralPath $resolvedMarkdownPath -Raw
     $markdownFailures = @()
+    $markdownActionFailures = @()
     if ($markdown -notmatch '# Token-Ready MVP Completion Audit') {
         $markdownFailures += "Markdown title is missing"
     }
@@ -634,10 +674,30 @@ if ($markdownExists) {
         }
     }
 
+    foreach ($item in @($checklist | Where-Object { [string]$_.status -ne "passed" })) {
+        $itemId = [string]$item.id
+        $itemPattern = "(?s)- ``$([regex]::Escape($itemId))`` \[[^\]]+\].*?(?=\r?\n- ``|\z)"
+        $itemMatch = [regex]::Match($markdown, $itemPattern)
+        if (-not $itemMatch.Success) {
+            $markdownActionFailures += "Markdown block is missing for non-passed item: $itemId"
+            continue
+        }
+
+        $itemBlock = $itemMatch.Value
+        if ($itemBlock -notmatch '(?m)^\s+- Next: ') {
+            $markdownActionFailures += "Markdown block does not include a Next line for non-passed item: $itemId"
+        }
+        if ($itemBlock -notmatch '(?m)^\s+- Command: ') {
+            $markdownActionFailures += "Markdown block does not include a Command line for non-passed item: $itemId"
+        }
+    }
+
     $checks += New-Check -Id "markdown_checklist_coverage" -Passed ($markdownFailures.Count -eq 0) -Failures $markdownFailures -Evidence ([pscustomobject][ordered]@{ path = $resolvedMarkdownPath })
+    $checks += New-Check -Id "markdown_operator_action_coverage" -Passed ($markdownActionFailures.Count -eq 0) -Failures $markdownActionFailures -Evidence ([pscustomobject][ordered]@{ path = $resolvedMarkdownPath })
 }
 else {
     $checks += New-Check -Id "markdown_checklist_coverage" -Passed $false -Failures @("Markdown report is missing") -Evidence ([pscustomobject][ordered]@{ path = $resolvedMarkdownPath })
+    $checks += New-Check -Id "markdown_operator_action_coverage" -Passed $false -Failures @("Markdown report is missing") -Evidence ([pscustomobject][ordered]@{ path = $resolvedMarkdownPath })
 }
 
 $failedChecks = @($checks | Where-Object { $_.passed -ne $true })
