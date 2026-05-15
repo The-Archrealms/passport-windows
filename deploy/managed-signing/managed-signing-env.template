@@ -1,0 +1,25 @@
+# Archrealms Passport managed-signing endpoint env template
+# Populate in a secure deployment environment. Do not commit populated env files.
+
+# These values must match the hosted service production env values:
+# ARCHREALMS_PASSPORT_HOSTED_SIGNING_KEY_PROVIDER
+# ARCHREALMS_PASSPORT_HOSTED_SIGNING_KEY_ID
+# ARCHREALMS_PASSPORT_HOSTED_SIGNING_KEY_CUSTODY
+ARCHREALMS_MANAGED_SIGNING_KEY_PROVIDER=local-validation
+ARCHREALMS_MANAGED_SIGNING_KEY_ID=passport-managed-signing-local-validation
+ARCHREALMS_MANAGED_SIGNING_KEY_CUSTODY=local-validation
+
+# Optional API key hash. The hosted service sends the raw key in X-Archrealms-Managed-Signing-Key.
+ARCHREALMS_MANAGED_SIGNING_API_KEY_SHA256=
+
+# Local validation mode. This mode is useful for local endpoint contract testing only.
+# ProductionMvp readiness rejects local_validation_only=true responses.
+ARCHREALMS_MANAGED_SIGNING_LOCAL_PKCS8_PATH=/var/lib/archrealms/managed-signing/local-validation.pkcs8
+
+# Production adapter mode. Leave unset for local validation.
+# Set to a controlled adapter executable that signs through KMS/HSM/managed-HSM/cloud-KMS
+# and returns the managed signing response JSON contract.
+ARCHREALMS_MANAGED_SIGNING_COMMAND_PATH=
+ARCHREALMS_MANAGED_SIGNING_COMMAND_ARGUMENTS=
+
+ARCHREALMS_MANAGED_SIGNING_ALLOWED_PURPOSES=production_mvp_readiness_probe,hosted_record,ai_feedback,cc_capacity_report,arch_genesis_manifest,telemetry_access,recovery_control_validation,storage_delivery_acceptance,hosted_storage_backup_manifest,hosted_incident_report

@@ -205,6 +205,30 @@ Build the local Docker image when the machine has Docker and enough disk availab
 
 See `deploy/hosted-services/README.md` for the staging compose flow and required environment variables.
 
+## Managed Signing Endpoint Deployment
+
+Hosted services use `ARCHREALMS_PASSPORT_HOSTED_SIGNING_ENDPOINT` for production service-record signatures. The repo includes a managed-signing endpoint baseline under `deploy/managed-signing/`; local validation signs with a generated PKCS#8 key and returns `local_validation_only=true`, while production must front KMS, HSM, managed-HSM, or cloud-KMS custody and return `local_validation_only=false`.
+
+Validate the deployment files and Release publish output:
+
+```powershell
+.\tools\release\Test-PassportManagedSigningDeployment.ps1
+```
+
+After a local or private signing endpoint is running, validate the endpoint contract:
+
+```powershell
+.\tools\release\Test-PassportManagedSigningDeployment.ps1 `
+  -ProbeEndpoint `
+  -SigningEndpoint http://127.0.0.1:8081/sign `
+  -KeyProvider local-validation `
+  -KeyId passport-managed-signing-local-validation `
+  -KeyCustody local-validation `
+  -AllowLocalValidationResponse
+```
+
+The `ProductionMvp` readiness gate requires the signing endpoint response to include `signing_key_provider`, `signing_key_id`, `signing_key_custody`, and `local_validation_only=false` in addition to a verifiable RSA signature.
+
 ## Open-Weight AI Runtime Deployment
 
 The Passport hosted AI gateway expects a private OpenAI-compatible model runtime at `ARCHREALMS_PASSPORT_AI_INFERENCE_BASE_URL`. Deployment templates for vLLM and Hugging Face TGI live under `deploy/open-weight-ai-runtime/`; Passport clients still talk only to the hosted gateway, never directly to the model runtime.

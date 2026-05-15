@@ -567,6 +567,38 @@ function Test-ManagedSigningEndpointProbe {
         return "managed signing endpoint probe returned public key hash mismatch"
     }
 
+    if ($response.PSObject.Properties.Name -notcontains "signing_key_provider" -or [string]::IsNullOrWhiteSpace([string]$response.signing_key_provider)) {
+        return "managed signing endpoint probe must return signing_key_provider"
+    }
+
+    if ($response.PSObject.Properties.Name -notcontains "signing_key_id" -or [string]::IsNullOrWhiteSpace([string]$response.signing_key_id)) {
+        return "managed signing endpoint probe must return signing_key_id"
+    }
+
+    if ($response.PSObject.Properties.Name -notcontains "signing_key_custody" -or [string]::IsNullOrWhiteSpace([string]$response.signing_key_custody)) {
+        return "managed signing endpoint probe must return signing_key_custody"
+    }
+
+    if (-not [string]::Equals([string]$response.signing_key_provider, $provider, [System.StringComparison]::Ordinal)) {
+        return "managed signing endpoint probe returned signing_key_provider that does not match ARCHREALMS_PASSPORT_HOSTED_SIGNING_KEY_PROVIDER"
+    }
+
+    if (-not [string]::Equals([string]$response.signing_key_id, $keyId, [System.StringComparison]::Ordinal)) {
+        return "managed signing endpoint probe returned signing_key_id that does not match ARCHREALMS_PASSPORT_HOSTED_SIGNING_KEY_ID"
+    }
+
+    if (-not [string]::Equals([string]$response.signing_key_custody, $custody, [System.StringComparison]::Ordinal)) {
+        return "managed signing endpoint probe returned signing_key_custody that does not match ARCHREALMS_PASSPORT_HOSTED_SIGNING_KEY_CUSTODY"
+    }
+
+    if ($response.PSObject.Properties.Name -notcontains "local_validation_only") {
+        return "managed signing endpoint probe must return local_validation_only"
+    }
+
+    if ([bool]$response.local_validation_only -eq $true) {
+        return "managed signing endpoint probe reports local_validation_only=true; ProductionMvp requires managed custody"
+    }
+
     $verificationFailure = Test-RsaPkcs1Sha256Signature -PayloadBytes $payloadBytes -SignatureBytes $signatureBytes -PublicKeySpkiDer $publicKeyBytes
     if ($verificationFailure) {
         return "managed signing endpoint probe could not verify returned signature: $verificationFailure"

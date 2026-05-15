@@ -1,0 +1,30 @@
+name: archrealms-passport-managed-signing-local-validation
+
+services:
+  managed-signing:
+    build:
+      context: ../..
+      dockerfile: deploy/managed-signing/Dockerfile
+    image: archrealms/passport-managed-signing:local-validation
+    restart: unless-stopped
+    env_file:
+      - managed-signing.local-validation.env
+    environment:
+      ASPNETCORE_URLS: http://+:8080
+      ARCHREALMS_MANAGED_SIGNING_LOCAL_PKCS8_PATH: /var/lib/archrealms/managed-signing/local-validation.pkcs8
+    ports:
+      - "127.0.0.1:8081:8080"
+    volumes:
+      - managed-signing-local-validation-data:/var/lib/archrealms/managed-signing
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "wget -qO- http://127.0.0.1:8080/health >/dev/null"
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  managed-signing-local-validation-data:
+    name: archrealms-passport-managed-signing-local-validation-data

@@ -208,6 +208,11 @@ if ($SkipDotnetTests) {
         -Passed $false `
         -Failures @("Hosted service tests were skipped; pre-MVP verification cannot pass with skipped tests.")
     $checks += New-Check `
+        -Id "managed_signing_tests" `
+        -Description "Managed signing tests cover endpoint signing, custody metadata, local-validation markers, and API-key checks." `
+        -Passed $false `
+        -Failures @("Managed signing tests were skipped; pre-MVP verification cannot pass with skipped tests.")
+    $checks += New-Check `
         -Id "windows_tests" `
         -Description "Windows Passport tests cover onboarding, wallet, ledger, recovery, storage, conversion, registry, and UI behavior." `
         -Passed $false `
@@ -228,6 +233,10 @@ else {
         -Id "hosted_service_tests" `
         -Description "Hosted service tests cover AI gateway, quota, policy, storage, operator, and runtime readiness boundaries." `
         -Result (Invoke-Tool -FilePath $dotnet -Arguments @("test", "tests\ArchrealmsPassport.HostedServices.Tests\ArchrealmsPassport.HostedServices.Tests.csproj", "-c", $Configuration, "--no-restore"))
+    $checks += New-ToolCheck `
+        -Id "managed_signing_tests" `
+        -Description "Managed signing tests cover endpoint signing, custody metadata, local-validation markers, and API-key checks." `
+        -Result (Invoke-Tool -FilePath $dotnet -Arguments @("test", "tests\ArchrealmsPassport.ManagedSigning.Tests\ArchrealmsPassport.ManagedSigning.Tests.csproj", "-c", $Configuration, "--no-restore"))
     $checks += New-ToolCheck `
         -Id "windows_tests" `
         -Description "Windows Passport tests cover onboarding, wallet, ledger, recovery, storage, conversion, registry, and UI behavior." `
@@ -321,6 +330,7 @@ $requirements = @(
     New-Requirement -Id "wallet_compromise_simulations" -Description "Wallet compromise and revoked-wallet paths are exercised." -CheckIds @("windows_tests", "core_tests") -Checks $checks -Evidence "Wallet revocation and production ledger tests reject revoked wallet keys."
     New-Requirement -Id "identity_compromise_simulations" -Description "Identity compromise and device deauthorization paths are exercised." -CheckIds @("windows_tests", "hosted_service_tests") -Checks $checks -Evidence "Recovery tests cover identity_compromise freezes, device deauthorization, and hosted recovery validation."
     New-Requirement -Id "ai_privacy_and_retention_tests" -Description "AI privacy, retention, quota, and non-authority controls are exercised." -CheckIds @("core_tests", "windows_tests", "hosted_service_tests") -Checks $checks -Evidence "AI policy tests cover no-training defaults, raw-prompt retention metadata, token-hash-only records, quota enforcement, and non-authority boundaries."
+    New-Requirement -Id "managed_signing_endpoint_contract_tests" -Description "Managed signing endpoint contract, key metadata, local-validation marker, and API-key controls are exercised." -CheckIds @("managed_signing_tests") -Checks $checks -Evidence "Managed signing tests cover response signature verification, custody metadata, local-validation marker reporting, and API-key SHA-256 authorization."
     New-Requirement -Id "no_fake_record_migration" -Description "Pre-MVP fake/synthetic records cannot migrate into production ARCH, CC, Crown reserve, citizen account, or production service-liability records." -CheckIds @("core_tests", "windows_tests", "internal_verification_artifact_lane") -Checks $checks -Evidence "Release-lane artifact validation and ledger replay enforce non-production lane isolation."
 )
 
