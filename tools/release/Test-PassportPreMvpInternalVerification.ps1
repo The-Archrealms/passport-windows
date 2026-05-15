@@ -802,6 +802,11 @@ if ($SkipDeploymentValidation) {
         -Passed $false `
         -Failures @("Canary MVP readiness evidence packet validation was skipped; pre-MVP verification cannot pass with skipped deployment validation.")
     $checks += New-Check `
+        -Id "canary_mvp_readiness_closeout_validation" `
+        -Description "Canary MVP readiness closeout validates a filled canary packet and produces the report/hash inputs required by ProductionMvp readiness." `
+        -Passed $false `
+        -Failures @("Canary MVP readiness closeout validation was skipped; pre-MVP verification cannot pass with skipped deployment validation.")
+    $checks += New-Check `
         -Id "production_readiness_fail_closed_validation" `
         -Description "ProductionMvp readiness fails closed when production probe inputs are absent." `
         -Passed $false `
@@ -897,6 +902,10 @@ else {
         -Id "canary_mvp_readiness_evidence_packet_validation" `
         -Description "Canary MVP readiness evidence packet templates validate policy, incident, balance, service-delivery, support, and production approval contracts." `
         -Result (Invoke-Tool -FilePath "powershell" -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "tools\release\Test-PassportCanaryMvpReadinessEvidencePacket.ps1", "-OutputPath", "artifacts\release\canary-mvp-readiness-evidence-template-validation-report.json"))
+    $checks += New-ToolCheck `
+        -Id "canary_mvp_readiness_closeout_validation" `
+        -Description "Canary MVP readiness closeout validates a filled canary packet and produces the report/hash inputs required by ProductionMvp readiness." `
+        -Result (Invoke-Tool -FilePath "powershell" -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "tools\release\Complete-PassportCanaryMvpReadinessEvidencePacket.ps1", "-UseGeneratedFixture"))
     $checks += New-ToolCheck `
         -Id "production_readiness_fail_closed_validation" `
         -Description "ProductionMvp readiness fails closed when production probe inputs are absent." `
@@ -1045,6 +1054,7 @@ $requirements = @(
     New-Requirement -Id "staging_readiness_closeout" -Description "The filled staging readiness packet has a single fail-closed closeout path before canary or production readiness can depend on it." -CheckIds @("staging_readiness_closeout_validation") -Checks $checks -Evidence "Staging closeout validation verifies a filled packet, generates a closeout environment, runs staging readiness, and emits the staging readiness report path and SHA-256 needed downstream."
     New-Requirement -Id "canary_mvp_readiness_gate" -Description "The Canary MVP readiness gate can prove incident review, balance reconciliation, service-delivery reconciliation, support readiness, and signed production-promotion approvals before ProductionMvp release." -CheckIds @("canary_mvp_readiness_gate_validation") -Checks $checks -Evidence "Canary MVP readiness validator uses synthetic fixtures to exercise staging evidence, CanaryMvp artifact validation, policy limits, incident review, balance reconciliation, service delivery reconciliation, support readiness, and production-promotion approval checks."
     New-Requirement -Id "canary_mvp_readiness_evidence_packet" -Description "The Canary MVP readiness evidence packet can be generated and validated before canary readiness values are loaded." -CheckIds @("canary_mvp_readiness_evidence_packet_validation") -Checks $checks -Evidence "Canary readiness evidence packet validation checks policy limits, incident review, balance reconciliation, service delivery reconciliation, support readiness, production approval, hashes, and cross-references."
+    New-Requirement -Id "canary_mvp_readiness_closeout" -Description "The filled Canary MVP readiness packet has a single fail-closed closeout path before ProductionMvp readiness can depend on it." -CheckIds @("canary_mvp_readiness_closeout_validation") -Checks $checks -Evidence "Canary closeout validation verifies a filled packet, generates a closeout environment, runs canary readiness, and emits the canary readiness report path and SHA-256 needed downstream."
     New-Requirement -Id "production_readiness_fail_closed" -Description "The ProductionMvp readiness gate fails closed instead of passing live probes when production endpoints, operator secrets, storage status, or managed signing custody inputs are absent." -CheckIds @("production_readiness_fail_closed_validation") -Checks $checks -Evidence "Fail-closed validation clears all production readiness variables and verifies every ProductionMvp gate fails, including hosted runtime/operator/AI, managed storage, and managed signing probe gates."
     New-Requirement -Id "production_mvp_artifact_policy" -Description "ProductionMvp artifacts cannot validate if packaging skipped the readiness gate or omitted readiness evidence." -CheckIds @("production_mvp_artifact_policy_validation") -Checks $checks -Evidence "ProductionMvp artifact policy validation creates synthetic release artifacts and verifies artifact validation rejects missing/skipped readiness evidence while accepting an artifact that records a passing readiness gate."
     New-Requirement -Id "no_fake_record_migration" -Description "Pre-MVP fake/synthetic records cannot migrate into production ARCH, CC, Crown reserve, citizen account, or production service-liability records." -CheckIds @("core_tests", "windows_tests", "internal_verification_artifact_lane") -Checks $checks -Evidence "Release-lane artifact validation and ledger replay enforce non-production lane isolation."

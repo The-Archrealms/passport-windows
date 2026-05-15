@@ -32,6 +32,18 @@ Validate the filled packet before running the canary readiness gate:
   -RequireNoPlaceholders
 ```
 
+For operator closeout, run the single closeout command after the packet is filled. It validates the packet with `-RequireNoPlaceholders`, builds a closeout environment, runs `Test-PassportCanaryMvpReadiness.ps1`, and emits the report path and SHA-256 required by ProductionMvp readiness:
+
+```powershell
+.\tools\release\Complete-PassportCanaryMvpReadinessEvidencePacket.ps1 `
+  -PacketRoot C:\secure\passport-canary `
+  -EnvironmentFile .\artifacts\release\canary-mvp.env `
+  -StagingReadinessReportPath .\artifacts\release\staging-readiness-report.json `
+  -StagingReadinessReportSha256 "<staging-readiness-report-sha256>" `
+  -CanaryArtifactValidationReportPath .\artifacts\release\canary-mvp-artifact-validation-report.json `
+  -CanaryArtifactValidationReportSha256 "<canary-artifact-validation-report-sha256>"
+```
+
 The packet validator checks that canary policy limits prohibit non-MVP token behavior, incident review is complete, ARCH/CC/escrow/burn/refund/re-credit balances reconcile, service delivery reconciles to storage proofs and verified burn epochs, support and recovery coverage is ready, and production-promotion approval hashes match the filled canary evidence files.
 
 Synthetic canary readiness reports are valid only for validator self-tests. ProductionMvp readiness rejects synthetic canary reports.

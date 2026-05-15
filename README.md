@@ -661,6 +661,18 @@ The canary evidence packet is the operator handoff for the canary readiness envi
   -RequireNoPlaceholders
 ```
 
+When the packet is filled, use the closeout command to validate the packet, generate the closeout environment, run the canary readiness gate, and emit the report path/hash that production readiness consumes:
+
+```powershell
+.\tools\release\Complete-PassportCanaryMvpReadinessEvidencePacket.ps1 `
+  -PacketRoot C:\secure\passport-canary `
+  -EnvironmentFile .\artifacts\release\canary-mvp.env `
+  -StagingReadinessReportPath .\artifacts\release\staging-readiness-report.json `
+  -StagingReadinessReportSha256 <sha256> `
+  -CanaryArtifactValidationReportPath .\artifacts\release\canary-mvp-artifact-validation-report.json `
+  -CanaryArtifactValidationReportSha256 <sha256>
+```
+
 Then run:
 
 ```powershell
