@@ -332,7 +332,7 @@ public static class PassportMonetaryLedgerExportVerifier
         return true;
     }
 
-    private static string ComputeMerkleParent(string leftHash, string rightHash)
+    public static string ComputeMerkleParent(string leftHash, string rightHash)
     {
         var material = string.Join(
             "\n",

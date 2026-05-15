@@ -527,18 +527,7 @@ namespace ArchrealmsPassport.Windows.Services
 
         public static string ComputeEventHash(PassportMonetaryLedgerEvent ledgerEvent)
         {
-            var originalHash = ledgerEvent.EventHashSha256;
-            ledgerEvent.EventHashSha256 = string.Empty;
-
-            try
-            {
-                var payload = JsonSerializer.Serialize(ledgerEvent, JsonOptions);
-                return ComputeSha256(Encoding.UTF8.GetBytes(payload));
-            }
-            finally
-            {
-                ledgerEvent.EventHashSha256 = originalHash;
-            }
+            return PassportMonetaryLedgerExportVerifier.ComputeEventHash(ToCoreLedgerRecord(ledgerEvent));
         }
 
         public static string ComputeCrownCreditIssueIntentHash(
@@ -851,6 +840,42 @@ namespace ArchrealmsPassport.Windows.Services
             };
         }
 
+        private static PassportMonetaryLedgerRecord ToCoreLedgerRecord(PassportMonetaryLedgerEvent ledgerEvent)
+        {
+            return new PassportMonetaryLedgerRecord
+            {
+                SchemaVersion = ledgerEvent.SchemaVersion,
+                RecordType = ledgerEvent.RecordType,
+                EventId = ledgerEvent.EventId,
+                EventType = ledgerEvent.EventType,
+                CreatedUtc = ledgerEvent.CreatedUtc,
+                ReleaseLane = ledgerEvent.ReleaseLane,
+                TelemetryEnvironment = ledgerEvent.TelemetryEnvironment,
+                LedgerNamespace = ledgerEvent.LedgerNamespace,
+                ProductionTokenRecord = ledgerEvent.ProductionTokenRecord,
+                StagingRecord = ledgerEvent.StagingRecord,
+                AccountId = ledgerEvent.AccountId,
+                IdentityId = ledgerEvent.IdentityId,
+                WalletKeyId = ledgerEvent.WalletKeyId,
+                AssetCode = ledgerEvent.AssetCode,
+                AmountBaseUnits = ledgerEvent.AmountBaseUnits,
+                GlobalSequence = ledgerEvent.GlobalSequence,
+                AccountSequence = ledgerEvent.AccountSequence,
+                PriorAccountEventHash = ledgerEvent.PriorAccountEventHash,
+                ServerReceivedUtc = ledgerEvent.ServerReceivedUtc,
+                AntiReplayNonce = ledgerEvent.AntiReplayNonce,
+                DeviceSessionId = ledgerEvent.DeviceSessionId,
+                PolicyVersion = ledgerEvent.PolicyVersion,
+                EvidenceReferences = new Dictionary<string, string>(ledgerEvent.EvidenceReferences, StringComparer.Ordinal),
+                SignatureStatus = ledgerEvent.SignatureStatus,
+                WalletSignatureAlgorithm = ledgerEvent.WalletSignatureAlgorithm,
+                WalletSignatureBase64 = ledgerEvent.WalletSignatureBase64,
+                SignedEventHashSha256 = ledgerEvent.SignedEventHashSha256,
+                WalletPublicKeyPath = ledgerEvent.WalletPublicKeyPath,
+                EventHashSha256 = ledgerEvent.EventHashSha256
+            };
+        }
+
         private void ValidateEventSignature(string workspaceRoot, PassportMonetaryLedgerEvent ledgerEvent, List<string> failures)
         {
             if (releaseLane.ProductionLedger
@@ -1089,47 +1114,17 @@ namespace ArchrealmsPassport.Windows.Services
 
         private static string ComputeTransparencyLeafHash(PassportMonetaryLedgerEvent ledgerEvent)
         {
-            var material = string.Join(
-                "\n",
-                "passport-monetary-ledger-leaf-v1",
-                ledgerEvent.GlobalSequence.ToString(),
-                ledgerEvent.EventId,
-                ledgerEvent.EventHashSha256);
-            return ComputeSha256(Encoding.UTF8.GetBytes(material));
+            return PassportMonetaryLedgerExportVerifier.ComputeTransparencyLeafHash(ToCoreLedgerRecord(ledgerEvent));
         }
 
         private static string ComputeMerkleRoot(IReadOnlyList<string> leafHashes)
         {
-            if (leafHashes.Count == 0)
-            {
-                return ComputeSha256(Encoding.UTF8.GetBytes("passport-monetary-ledger-empty-root-v1"));
-            }
-
-            var level = leafHashes.Select(NormalizeHash).ToList();
-            while (level.Count > 1)
-            {
-                var next = new List<string>();
-                for (var i = 0; i < level.Count; i += 2)
-                {
-                    var left = level[i];
-                    var right = i + 1 < level.Count ? level[i + 1] : left;
-                    next.Add(ComputeMerkleParent(left, right));
-                }
-
-                level = next;
-            }
-
-            return level[0];
+            return PassportMonetaryLedgerExportVerifier.ComputeMerkleRoot(leafHashes);
         }
 
         private static string ComputeMerkleParent(string leftHash, string rightHash)
         {
-            var material = string.Join(
-                "\n",
-                "passport-monetary-ledger-node-v1",
-                NormalizeHash(leftHash),
-                NormalizeHash(rightHash));
-            return ComputeSha256(Encoding.UTF8.GetBytes(material));
+            return PassportMonetaryLedgerExportVerifier.ComputeMerkleParent(leftHash, rightHash);
         }
 
         private static Dictionary<string, object?> BuildInclusionProof(TransparencySnapshot snapshot, TransparencyLeaf leaf)

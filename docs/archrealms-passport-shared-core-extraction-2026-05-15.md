@@ -40,6 +40,10 @@
   - account hash-chain verification;
   - exported key-history material hash checks and private-key exclusion;
   - manifest balance verification through the Core replay verifier.
+- Monetary hash and Merkle helpers:
+  - shared ledger event hash calculation;
+  - shared transparency leaf hash calculation;
+  - shared empty-root, parent-node, and Merkle-root calculation.
 - Registry record inspection and envelope validation:
   - shared summary extraction for record type, record ID, created time, status, CID, signatures, wallet signatures, relative path, and SHA-256;
   - common envelope diagnostics for schema version, record type, identifier, created timestamp, signature object shape, and wallet-signature object shape;
@@ -60,6 +64,5 @@
 ## Remaining Extraction
 
 - Continue moving wallet-key binding validation into Core while leaving OS key storage platform-specific.
-- Continue reducing duplicated monetary hash/proof helpers from Windows now that Core owns replay and export verification.
-- Continue expanding registry record schema validation beyond the common envelope as record families stabilize.
+- Continue expanding registry record-family validation beyond the common envelope as schemas stabilize.
 - Keep WPF, Windows tray behavior, MSIX packaging, DPAPI/Windows Hello, and Windows background process management outside Core.
