@@ -54,6 +54,7 @@
   - shared summary extraction for record type, record ID, created time, status, CID, signatures, wallet signatures, relative path, and SHA-256;
   - common envelope diagnostics for schema version, record type, identifier, created timestamp, signature object shape, and wallet-signature object shape;
   - placeholder-aware template inspection and shared top-level required-field diagnostics for packaged registry record families;
+  - generated storage redemption quote, accepted, epoch-burn, and refund record-family diagnostics;
   - BOM-tolerant UTF-8 parsing while preserving original-byte hash calculation;
   - shared filter semantics for registry browser records and validation failures.
 - AI non-authority policy:

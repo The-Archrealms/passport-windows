@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text.Json;
+using ArchrealmsPassport.Core.Protocol;
 using ArchrealmsPassport.Windows.Models;
 using ArchrealmsPassport.Windows.Services;
 using ArchrealmsPassport.Windows.Tests.Infrastructure;
@@ -51,6 +52,7 @@ public sealed class PassportStorageRedemptionServiceTests
             serviceClass: "mvp_storage",
             quoteSource: "admin_set_mvp_storage_quote");
         Assert.True(quote.Succeeded, quote.Message);
+        AssertRegistryInspectionSucceeds(quote.RecordPath);
 
         var accepted = service.AcceptQuote(
             workspace.Root,
@@ -59,6 +61,7 @@ public sealed class PassportStorageRedemptionServiceTests
             wallet.WalletKeyReferencePath,
             wallet.WalletPublicKeyPath);
         Assert.True(accepted.Succeeded, accepted.Message);
+        AssertRegistryInspectionSucceeds(accepted.RecordPath);
         Assert.True(File.Exists(accepted.ServiceDeliveryRecordPath), accepted.ServiceDeliveryRecordPath);
 
         var deliveryRequest = PassportTestWorkspace.ReadJson(accepted.ServiceDeliveryRecordPath);
@@ -81,6 +84,7 @@ public sealed class PassportStorageRedemptionServiceTests
             walletKeyReferencePath: wallet.WalletKeyReferencePath,
             walletPublicKeyPath: wallet.WalletPublicKeyPath);
         Assert.True(burn.Succeeded, burn.Message);
+        AssertRegistryInspectionSucceeds(burn.RecordPath);
 
         var refund = service.RefundRemaining(
             workspace.Root,
@@ -90,6 +94,7 @@ public sealed class PassportStorageRedemptionServiceTests
             walletKeyReferencePath: wallet.WalletKeyReferencePath,
             walletPublicKeyPath: wallet.WalletPublicKeyPath);
         Assert.True(refund.Succeeded, refund.Message);
+        AssertRegistryInspectionSucceeds(refund.RecordPath);
 
         var replay = ledger.Replay(workspace.Root);
         Assert.True(replay.Succeeded, string.Join("; ", replay.Failures));
@@ -459,6 +464,12 @@ public sealed class PassportStorageRedemptionServiceTests
             && balance.AvailableBaseUnits == 100
             && balance.EscrowedBaseUnits == 99
             && balance.BurnedBaseUnits == 1);
+    }
+
+    private static void AssertRegistryInspectionSucceeds(string recordPath)
+    {
+        var inspection = PassportRegistryRecordInspector.Inspect(File.ReadAllBytes(recordPath), recordPath);
+        Assert.True(inspection.IsEnvelopeValid, string.Join("; ", inspection.ValidationFailures));
     }
 
     private static PassportMeteringRecordResult CreateAcceptedStorageProof(PassportTestWorkspace workspace, string serviceClass)

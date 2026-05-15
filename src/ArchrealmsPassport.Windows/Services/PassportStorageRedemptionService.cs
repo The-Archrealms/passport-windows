@@ -58,9 +58,11 @@ namespace ArchrealmsPassport.Windows.Services
                     ["schema_version"] = 1,
                     ["record_type"] = "passport_storage_redemption_quote",
                     ["record_id"] = quoteId,
+                    ["record_stage"] = "quote",
                     ["quote_id"] = quoteId,
                     ["created_utc"] = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
                     ["expires_utc"] = expiresUtc.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ"),
+                    ["quote_expires_utc"] = expiresUtc.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ"),
                     ["release_lane"] = releaseLane.Lane,
                     ["ledger_namespace"] = releaseLane.LedgerNamespace,
                     ["policy_version"] = releaseLane.PolicyVersion,
@@ -70,11 +72,14 @@ namespace ArchrealmsPassport.Windows.Services
                     ["service_class"] = NormalizeRequired(serviceClass, "service class"),
                     ["storage_gb"] = storageGb,
                     ["service_epoch_count"] = serviceEpochCount,
+                    ["epoch_count"] = serviceEpochCount,
                     ["cc_per_gb_epoch_base_units"] = ccPerGbEpochBaseUnits,
+                    ["cc_rate_per_gb_epoch_base_units"] = ccPerGbEpochBaseUnits,
                     ["total_cc_base_units"] = total,
                     ["quote_source"] = NormalizeRequired(quoteSource, "quote source"),
                     ["capacity_or_liquidity_limited"] = true,
                     ["execution_status"] = "quote_only_not_accepted",
+                    ["failure_remedy"] = "refund_or_service_extension_if_service_fails",
                     ["summary"] = "CC storage redemption quote. CC is escrowed on acceptance and burned only as verified service epochs complete."
                 };
                 File.WriteAllText(path, JsonSerializer.Serialize(record, JsonOptions), Encoding.UTF8);
@@ -1214,6 +1219,33 @@ namespace ArchrealmsPassport.Windows.Services
                 "refund" => "passport_storage_redemption_refund",
                 _ => "passport_storage_redemption_record"
             };
+            var recordStage = kind switch
+            {
+                "epoch-burn" => "epoch_burn",
+                _ => kind.Replace("-", "_")
+            };
+            var sourceEpochCount = ReadInt64(sourceRecord, "service_epoch_count");
+            if (sourceEpochCount <= 0)
+            {
+                sourceEpochCount = ReadInt64(sourceRecord, "epoch_count");
+            }
+
+            var sourceRate = ReadInt64(sourceRecord, "cc_per_gb_epoch_base_units");
+            if (sourceRate <= 0)
+            {
+                sourceRate = ReadInt64(sourceRecord, "cc_rate_per_gb_epoch_base_units");
+            }
+
+            var sourceQuoteExpiresUtc = kind == "accepted"
+                ? ReadString(sourceRecord, "expires_utc")
+                : ReadString(sourceRecord, "quote_expires_utc");
+            var sourceEscrowPath = kind == "accepted"
+                ? ToWorkspaceRelativePath(workspaceRoot, ledgerEvent.EventPath)
+                : ReadString(sourceRecord, "escrow_ledger_event_path");
+            var sourceEscrowSha256 = kind == "accepted"
+                ? ledgerEvent.EventHashSha256
+                : ReadString(sourceRecord, "escrow_ledger_event_sha256");
+            var acceptedRedemptionId = kind == "accepted" ? recordId : ReadString(sourceRecord, "redemption_id");
             var root = Path.Combine(workspaceRoot, "records", "passport", "monetary", "storage-redemptions", kind);
             Directory.CreateDirectory(root);
             var path = Path.Combine(root, recordId + ".json");
@@ -1222,7 +1254,9 @@ namespace ArchrealmsPassport.Windows.Services
                 ["schema_version"] = 1,
                 ["record_type"] = recordType,
                 ["record_id"] = recordId,
-                ["redemption_id"] = kind == "accepted" ? recordId : ReadString(sourceRecord, "redemption_id"),
+                ["record_stage"] = recordStage,
+                ["redemption_id"] = acceptedRedemptionId,
+                ["accepted_redemption_id"] = acceptedRedemptionId,
                 ["created_utc"] = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
                 ["release_lane"] = releaseLane.Lane,
                 ["ledger_namespace"] = releaseLane.LedgerNamespace,
@@ -1233,10 +1267,21 @@ namespace ArchrealmsPassport.Windows.Services
                 ["quote_id"] = kind == "accepted" ? ReadString(sourceRecord, "quote_id") : ReadString(sourceRecord, "quote_id"),
                 ["quote_path"] = kind == "accepted" && quote != null ? ToWorkspaceRelativePath(workspaceRoot, quote.RecordPath) : ReadString(sourceRecord, "quote_path"),
                 ["quote_sha256"] = kind == "accepted" && quote != null ? quote.RecordSha256 : ReadString(sourceRecord, "quote_sha256"),
+                ["service_class"] = ReadString(sourceRecord, "service_class"),
+                ["storage_gb"] = ReadInt64(sourceRecord, "storage_gb"),
+                ["service_epoch_count"] = sourceEpochCount,
+                ["epoch_count"] = sourceEpochCount,
+                ["cc_per_gb_epoch_base_units"] = sourceRate,
+                ["cc_rate_per_gb_epoch_base_units"] = sourceRate,
+                ["total_cc_base_units"] = ReadInt64(sourceRecord, "total_cc_base_units"),
+                ["quote_expires_utc"] = sourceQuoteExpiresUtc,
+                ["escrow_ledger_event_path"] = sourceEscrowPath,
+                ["escrow_ledger_event_sha256"] = sourceEscrowSha256,
                 ["ledger_event_id"] = ledgerEvent.EventId,
                 ["ledger_event_path"] = ToWorkspaceRelativePath(workspaceRoot, ledgerEvent.EventPath),
                 ["ledger_event_hash_sha256"] = ledgerEvent.EventHashSha256,
                 ["burn_timing"] = "escrow_on_acceptance_burn_per_verified_epoch",
+                ["failure_remedy"] = "automatic_cc_recredit_or_service_extension",
                 ["summary"] = "Storage redemption record linked to CC escrow, proof-backed epoch burn, refund, or re-credit behavior."
             };
             foreach (var item in extra)
