@@ -785,6 +785,15 @@ For final operator closeout after the production provisioning packet is filled a
   -ReleaseEvidencePacketDirectory .\artifacts\release\production-mvp-release-evidence-packet
 ```
 
+To produce a concise redacted list of remaining production work from the latest closeout artifacts, generate the outstanding-work report:
+
+```powershell
+.\tools\release\New-PassportProductionMvpOutstandingWorkReport.ps1 `
+  -NoFail
+```
+
+The report writes JSON and Markdown under `artifacts\release\`, groups failed readiness gates, provisioning packet checks, and release-evidence checks, and includes the next closeout command. It does not serialize secret values.
+
 Validate the package-signing provisioning packet before loading production signing secrets:
 
 ```powershell
