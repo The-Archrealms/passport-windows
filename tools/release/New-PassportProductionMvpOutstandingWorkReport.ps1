@@ -709,10 +709,13 @@ foreach ($gate in $failedReadinessGates) {
         }
 
         if ($envNames.Count -eq 0) {
+            $action = $gate.operator_action
             $readinessEvidenceItems += [pscustomobject][ordered]@{
                 readiness_gate_id = [string]$gate.id
                 missing_text = [string]$missing
-                operator_action = $(if ($null -ne $gate.operator_action) { [string]$gate.operator_action.action } else { "" })
+                operator_action = $(if ($null -ne $action) { [string]$action.action } else { "" })
+                operator_action_detail = $(if ($null -ne $action) { $action } else { $null })
+                operator_action_commands = $(if ($null -ne $action) { @($action.commands) } else { @() })
             }
         }
     }
@@ -740,6 +743,8 @@ foreach ($check in $failedReleaseEvidenceChecks) {
         id = [string]$check.id
         failures = @($check.failures)
         operator_action = [string]$check.operator_action_text
+        operator_action_detail = $(if ($null -ne $check.operator_action) { $check.operator_action } else { $null })
+        operator_action_commands = $(if ($null -ne $check.operator_action) { @($check.operator_action.commands) } else { @() })
     }
 }
 
@@ -747,6 +752,9 @@ $failedProvisioningChildCheckCount = (@($failedProvisioningChecks | ForEach-Obje
 if ($null -eq $failedProvisioningChildCheckCount) {
     $failedProvisioningChildCheckCount = 0
 }
+
+$readinessEvidenceItemCommandCount = @($readinessEvidenceItems | Where-Object { @($_.operator_action_commands).Count -gt 0 }).Count
+$releaseEvidenceItemCommandCount = @($releaseEvidenceItems | Where-Object { @($_.operator_action_commands).Count -gt 0 }).Count
 
 $readyForProductionTesting = (
     $inputFailures.Count -eq 0 -and
@@ -779,8 +787,10 @@ $report = [pscustomobject][ordered]@{
         failed_release_evidence_check_count = $failedReleaseEvidenceChecks.Count
         required_environment_variable_count = $requiredEnvironmentVariables.Count
         required_readiness_evidence_item_count = $readinessEvidenceItems.Count
+        required_readiness_evidence_item_command_count = $readinessEvidenceItemCommandCount
         required_provisioning_evidence_file_count = $requiredProvisioningEvidenceFiles.Count
         required_release_evidence_item_count = $releaseEvidenceItems.Count
+        required_release_evidence_item_command_count = $releaseEvidenceItemCommandCount
     }
     closeout_failures = $closeoutFailures
     failed_readiness_gates = $failedReadinessGates
@@ -853,6 +863,14 @@ if (-not [string]::IsNullOrWhiteSpace($MarkdownOutputPath)) {
     $lines.Add("- Readiness evidence items to complete: $($readinessEvidenceItems.Count)")
     foreach ($item in @($readinessEvidenceItems | Select-Object -First 10)) {
         $lines.Add("  - ``$($item.readiness_gate_id)``: $($item.missing_text)")
+        if (-not [string]::IsNullOrWhiteSpace([string]$item.operator_action)) {
+            $lines.Add("    - Action: $($item.operator_action)")
+        }
+        foreach ($command in @($item.operator_action_commands | Select-Object -First 2)) {
+            if (-not [string]::IsNullOrWhiteSpace($command)) {
+                $lines.Add("    - Next command: ``$command``")
+            }
+        }
     }
     if ($readinessEvidenceItems.Count -gt 10) {
         $lines.Add("  - ...$($readinessEvidenceItems.Count - 10) more in the JSON report")
@@ -870,6 +888,14 @@ if (-not [string]::IsNullOrWhiteSpace($MarkdownOutputPath)) {
     foreach ($item in @($releaseEvidenceItems | Select-Object -First 10)) {
         $message = (@($item.failures) -join "; ")
         $lines.Add("  - ``$($item.id)``: $message")
+        if (-not [string]::IsNullOrWhiteSpace([string]$item.operator_action)) {
+            $lines.Add("    - Action: $($item.operator_action)")
+        }
+        foreach ($command in @($item.operator_action_commands | Select-Object -First 2)) {
+            if (-not [string]::IsNullOrWhiteSpace($command)) {
+                $lines.Add("    - Next command: ``$command``")
+            }
+        }
     }
     if ($releaseEvidenceItems.Count -gt 10) {
         $lines.Add("  - ...$($releaseEvidenceItems.Count - 10) more in the JSON report")
@@ -965,8 +991,10 @@ $result = [pscustomobject][ordered]@{
     failed_release_evidence_check_count = $failedReleaseEvidenceChecks.Count
     required_environment_variable_count = $requiredEnvironmentVariables.Count
     required_readiness_evidence_item_count = $readinessEvidenceItems.Count
+    required_readiness_evidence_item_command_count = $readinessEvidenceItemCommandCount
     required_provisioning_evidence_file_count = $requiredProvisioningEvidenceFiles.Count
     required_release_evidence_item_count = $releaseEvidenceItems.Count
+    required_release_evidence_item_command_count = $releaseEvidenceItemCommandCount
 }
 
 $result | ConvertTo-Json -Depth 4
