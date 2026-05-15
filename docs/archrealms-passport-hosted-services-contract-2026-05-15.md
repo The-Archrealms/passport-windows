@@ -20,10 +20,16 @@ The hosted services project provides the production-facing API boundary that Win
 | `POST /admin/authority/validate` | Validate dual-control admin authority evidence | Checks action/scope/hash binding, distinct requester and approver devices, non-AI approval, and requester/approver signature record types |
 | `POST /storage/delivery/requests` | Accept storage delivery requests | Verifies storage delivery request hash, positive storage/epoch terms, and returns proof requirements before burn |
 
+## Storage
+
+- The service uses `PassportHostedFileStore` by default.
+- Set `ARCHREALMS_PASSPORT_HOSTED_DATA_ROOT` to control the hosted data root.
+- AI session records are written without bearer tokens.
+- Hosted records are written with SHA-256 sidecars and append-log entries under `append-log/*.jsonl`.
+
 ## Current Limits
 
-- The scaffold uses in-memory storage only.
-- Production deployment still needs durable append-only storage, signing-key custody, operator authentication, role membership lookup, telemetry, rate limits, incident logging, and release-lane configuration.
+- Production deployment still needs managed durable storage, backups, service signing-key custody, operator authentication, role membership lookup, telemetry, rate limits, incident logging, and release-lane configuration.
 - The AI chat endpoint currently returns a gateway-contract response; production still needs the open-weight model runtime and vector store behind the gateway.
 - The service does not make fiat, exchange, external wallet, staking, yield, governance, or public stable-value claims.
 

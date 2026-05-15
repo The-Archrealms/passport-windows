@@ -4,7 +4,7 @@ using ArchrealmsPassport.HostedServices.Contracts;
 var builder = WebApplication.CreateBuilder(args);
 var app = builder.Build();
 
-var store = new PassportHostedInMemoryStore();
+var store = PassportHostedFileStore.FromEnvironment();
 
 app.MapGet("/health", () => Results.Json(new
 {

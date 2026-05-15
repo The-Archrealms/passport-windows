@@ -2,7 +2,7 @@ using ArchrealmsPassport.HostedServices.Contracts;
 
 namespace ArchrealmsPassport.HostedServices;
 
-public sealed class PassportHostedInMemoryStore : IPassportHostedSessionStore
+public sealed class PassportHostedInMemoryStore : IPassportHostedStore
 {
     private readonly Dictionary<string, PassportAiSessionAuthorizationResponse> aiSessions = new(StringComparer.Ordinal);
     private readonly Dictionary<string, StoredHostedRecord> records = new(StringComparer.Ordinal);
@@ -64,6 +64,15 @@ public sealed class PassportHostedInMemoryStore : IPassportHostedSessionStore
 public interface IPassportHostedSessionStore
 {
     bool TryGetAiSession(string sessionId, out PassportAiSessionAuthorizationResponse session);
+}
+
+public interface IPassportHostedStore : IPassportHostedSessionStore
+{
+    void SaveAiSession(Dictionary<string, object?> sessionRecord);
+
+    void SaveRecord(string recordId, Dictionary<string, object?> record, string recordSha256);
+
+    bool TryGetRecord(string recordId, out StoredHostedRecord record);
 }
 
 public sealed record StoredHostedRecord(Dictionary<string, object?> Record, string RecordSha256);
