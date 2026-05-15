@@ -97,6 +97,8 @@ namespace ArchrealmsPassport.Windows.Services
                     ["destination_asset_code"] = normalizedDestinationAsset,
                     ["source_amount_base_units"] = sourceAmountBaseUnits,
                     ["destination_amount_base_units"] = destinationAmountBaseUnits,
+                    ["rate_numerator"] = destinationAmountBaseUnits,
+                    ["rate_denominator"] = sourceAmountBaseUnits,
                     ["rate_numerator_base_units"] = destinationAmountBaseUnits,
                     ["rate_denominator_base_units"] = sourceAmountBaseUnits,
                     ["rate_source"] = normalizedRateSource,
@@ -104,6 +106,8 @@ namespace ArchrealmsPassport.Windows.Services
                     ["quote_method"] = normalizedQuoteMethod,
                     ["counterparty_class"] = normalizedCounterpartyClass,
                     ["crown_is_counterparty"] = crownIsCounterparty,
+                    ["spread_fee_base_units"] = feeBaseUnits,
+                    ["max_slippage_bps"] = maxSlippageBasisPoints,
                     ["spread_basis_points"] = spreadBasisPoints,
                     ["fee_base_units"] = feeBaseUnits,
                     ["max_slippage_basis_points"] = maxSlippageBasisPoints,
@@ -112,6 +116,7 @@ namespace ArchrealmsPassport.Windows.Services
                     ["fixed_parity"] = false,
                     ["minimum_arch_price_guaranteed"] = false,
                     ["unlimited_crown_convertibility"] = false,
+                    ["unlimited_convertibility"] = false,
                     ["stable_value_claim"] = false,
                     ["legal_tender_claim"] = false,
                     ["execution_status"] = "quote_only_not_executed",
@@ -177,8 +182,8 @@ namespace ArchrealmsPassport.Windows.Services
 
                 if (ReadInt64(root, "source_amount_base_units") <= 0
                     || ReadInt64(root, "destination_amount_base_units") <= 0
-                    || ReadInt64(root, "rate_numerator_base_units") <= 0
-                    || ReadInt64(root, "rate_denominator_base_units") <= 0)
+                    || ReadInt64(root, "rate_numerator_base_units", "rate_numerator") <= 0
+                    || ReadInt64(root, "rate_denominator_base_units", "rate_denominator") <= 0)
                 {
                     return Failed("The conversion quote amounts and rate must be greater than zero.");
                 }
@@ -192,8 +197,8 @@ namespace ArchrealmsPassport.Windows.Services
                 }
 
                 if (ReadInt64(root, "spread_basis_points") < 0
-                    || ReadInt64(root, "fee_base_units") < 0
-                    || ReadInt64(root, "max_slippage_basis_points") < 0
+                    || ReadInt64(root, "fee_base_units", "spread_fee_base_units") < 0
+                    || ReadInt64(root, "max_slippage_basis_points", "max_slippage_bps") < 0
                     || ReadInt64(root, "liquidity_limit_base_units") <= 0)
                 {
                     return Failed("The conversion quote has invalid fee, slippage, or liquidity disclosure.");
@@ -203,6 +208,7 @@ namespace ArchrealmsPassport.Windows.Services
                     || ReadBool(root, "fixed_parity")
                     || ReadBool(root, "minimum_arch_price_guaranteed")
                     || ReadBool(root, "unlimited_crown_convertibility")
+                    || ReadBool(root, "unlimited_convertibility")
                     || ReadBool(root, "stable_value_claim")
                     || ReadBool(root, "legal_tender_claim"))
                 {
@@ -280,9 +286,17 @@ namespace ArchrealmsPassport.Windows.Services
                 : string.Empty;
         }
 
-        private static long ReadInt64(JsonElement root, string propertyName)
+        private static long ReadInt64(JsonElement root, params string[] propertyNames)
         {
-            return root.TryGetProperty(propertyName, out var property) && property.TryGetInt64(out var value) ? value : 0;
+            foreach (var propertyName in propertyNames)
+            {
+                if (root.TryGetProperty(propertyName, out var property) && property.TryGetInt64(out var value))
+                {
+                    return value;
+                }
+            }
+
+            return 0;
         }
 
         private static bool ReadBool(JsonElement root, string propertyName)

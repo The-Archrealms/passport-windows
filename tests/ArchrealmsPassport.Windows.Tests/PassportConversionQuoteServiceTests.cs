@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using ArchrealmsPassport.Core.Protocol;
 using ArchrealmsPassport.Windows.Models;
 using ArchrealmsPassport.Windows.Services;
 using ArchrealmsPassport.Windows.Tests.Infrastructure;
@@ -50,6 +51,14 @@ public sealed class PassportConversionQuoteServiceTests
         Assert.False(record.GetProperty("guaranteed_conversion").GetBoolean());
         Assert.False(record.GetProperty("fixed_parity").GetBoolean());
         Assert.False(record.GetProperty("stable_value_claim").GetBoolean());
+        Assert.Equal(2_500, record.GetProperty("rate_numerator").GetInt64());
+        Assert.Equal(10, record.GetProperty("rate_denominator").GetInt64());
+        Assert.Equal(0, record.GetProperty("spread_fee_base_units").GetInt64());
+        Assert.Equal(50, record.GetProperty("max_slippage_bps").GetInt64());
+        Assert.False(record.GetProperty("unlimited_convertibility").GetBoolean());
+
+        var inspection = PassportRegistryRecordInspector.Inspect(File.ReadAllBytes(quote.QuotePath), quote.QuotePath);
+        Assert.True(inspection.IsEnvelopeValid, string.Join("; ", inspection.ValidationFailures));
 
         var validation = service.ValidateQuoteForExecution(workspace.Root, quote.QuotePath, quote.QuoteSha256);
         Assert.True(validation.Succeeded, validation.Message);
