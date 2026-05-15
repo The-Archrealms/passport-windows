@@ -21,6 +21,10 @@
   - supported ARCH and CC ledger event types;
   - shared monetary signature-status labels;
   - wallet-authorized and wallet-prohibited scope semantics.
+- Monetary ledger replay semantics:
+  - ARCH genesis, transfer-in, and transfer-out balance rules;
+  - CC issue, escrow, burn, refund, re-credit, transfer-in, and transfer-out balance rules;
+  - deterministic overspend failure reporting while preserving replay state transitions.
 - AI non-authority policy:
   - fields AI must not be allowed to set;
   - reusable non-authority boundary record creation;
@@ -29,12 +33,11 @@
 
 ## Consumers
 
-- Windows Passport references `ArchrealmsPassport.Core` for AI gateway defaults, record types, monetary asset/event constants, wallet authority scopes, AI authority boundary validation, and secret-material prompt blocking.
+- Windows Passport references `ArchrealmsPassport.Core` for AI gateway defaults, record types, monetary asset/event constants, wallet authority scopes, monetary balance semantics, AI authority boundary validation, and secret-material prompt blocking.
 - `ArchrealmsPassport.HostedServices` references the same core package for hosted AI session/chat validation, hosted record-type creation, admin authority record types, and telemetry access record types.
 
 ## Remaining Extraction
 
-- Continue moving deeper monetary validation into Core.
 - Continue moving wallet-key binding validation into Core while leaving OS key storage platform-specific.
 - Move ledger replay/export verifier logic into Core.
 - Move registry record schemas and validation into Core.

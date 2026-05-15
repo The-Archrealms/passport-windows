@@ -1057,35 +1057,7 @@ namespace ArchrealmsPassport.Windows.Services
             List<string> failures)
         {
             var balance = GetBalance(balances, ledgerEvent.AccountId, AssetArch);
-
-            switch (ledgerEvent.EventType)
-            {
-                case EventArchGenesisAllocation:
-                    if (balance.AvailableBaseUnits > 0)
-                    {
-                        failures.Add("ARCH genesis allocation can appear only once for account " + ledgerEvent.AccountId + ".");
-                    }
-
-                    balance.AvailableBaseUnits += ledgerEvent.AmountBaseUnits;
-                    break;
-
-                case EventArchTransferIn:
-                    balance.AvailableBaseUnits += ledgerEvent.AmountBaseUnits;
-                    break;
-
-                case EventArchTransferOut:
-                    if (balance.AvailableBaseUnits < ledgerEvent.AmountBaseUnits)
-                    {
-                        failures.Add("ARCH transfer out exceeds available balance for account " + ledgerEvent.AccountId + ".");
-                    }
-
-                    balance.AvailableBaseUnits -= ledgerEvent.AmountBaseUnits;
-                    break;
-
-                default:
-                    failures.Add("Unsupported ARCH event type " + ledgerEvent.EventType + ". ARCH can be allocated from genesis or transferred; it cannot be minted after genesis.");
-                    break;
-            }
+            ApplyCoreBalanceSemantics(balance, ledgerEvent, failures);
         }
 
         private static void ApplyCrownCreditEvent(
@@ -1094,64 +1066,40 @@ namespace ArchrealmsPassport.Windows.Services
             List<string> failures)
         {
             var balance = GetBalance(balances, ledgerEvent.AccountId, AssetCrownCredit);
+            ApplyCoreBalanceSemantics(balance, ledgerEvent, failures);
+        }
 
-            switch (ledgerEvent.EventType)
+        private static void ApplyCoreBalanceSemantics(
+            PassportMonetaryBalance balance,
+            PassportMonetaryLedgerEvent ledgerEvent,
+            List<string> failures)
+        {
+            var result = PassportMonetaryLedgerSemantics.ApplyEvent(
+                new PassportMonetaryBalanceState
+                {
+                    AccountId = balance.AccountId,
+                    AssetCode = balance.AssetCode,
+                    AvailableBaseUnits = balance.AvailableBaseUnits,
+                    EscrowedBaseUnits = balance.EscrowedBaseUnits,
+                    BurnedBaseUnits = balance.BurnedBaseUnits
+                },
+                new PassportMonetaryLedgerEventState
+                {
+                    EventId = ledgerEvent.EventId,
+                    AccountId = ledgerEvent.AccountId,
+                    AssetCode = ledgerEvent.AssetCode,
+                    EventType = ledgerEvent.EventType,
+                    AmountBaseUnits = ledgerEvent.AmountBaseUnits
+                });
+
+            foreach (var failure in result.Failures)
             {
-                case EventCrownCreditIssue:
-                    balance.AvailableBaseUnits += ledgerEvent.AmountBaseUnits;
-                    break;
-
-                case EventCrownCreditEscrow:
-                    if (balance.AvailableBaseUnits < ledgerEvent.AmountBaseUnits)
-                    {
-                        failures.Add("CC escrow exceeds available balance for account " + ledgerEvent.AccountId + ".");
-                    }
-
-                    balance.AvailableBaseUnits -= ledgerEvent.AmountBaseUnits;
-                    balance.EscrowedBaseUnits += ledgerEvent.AmountBaseUnits;
-                    break;
-
-                case EventCrownCreditBurn:
-                    if (balance.EscrowedBaseUnits < ledgerEvent.AmountBaseUnits)
-                    {
-                        failures.Add("CC burn exceeds escrowed balance for account " + ledgerEvent.AccountId + ".");
-                    }
-
-                    balance.EscrowedBaseUnits -= ledgerEvent.AmountBaseUnits;
-                    balance.BurnedBaseUnits += ledgerEvent.AmountBaseUnits;
-                    break;
-
-                case EventCrownCreditRefund:
-                    if (balance.EscrowedBaseUnits < ledgerEvent.AmountBaseUnits)
-                    {
-                        failures.Add("CC refund exceeds escrowed balance for account " + ledgerEvent.AccountId + ".");
-                    }
-
-                    balance.EscrowedBaseUnits -= ledgerEvent.AmountBaseUnits;
-                    balance.AvailableBaseUnits += ledgerEvent.AmountBaseUnits;
-                    break;
-
-                case EventCrownCreditRecredit:
-                    balance.AvailableBaseUnits += ledgerEvent.AmountBaseUnits;
-                    break;
-
-                case EventCrownCreditTransferIn:
-                    balance.AvailableBaseUnits += ledgerEvent.AmountBaseUnits;
-                    break;
-
-                case EventCrownCreditTransferOut:
-                    if (balance.AvailableBaseUnits < ledgerEvent.AmountBaseUnits)
-                    {
-                        failures.Add("CC transfer out exceeds available balance for account " + ledgerEvent.AccountId + ".");
-                    }
-
-                    balance.AvailableBaseUnits -= ledgerEvent.AmountBaseUnits;
-                    break;
-
-                default:
-                    failures.Add("Unsupported CC event type " + ledgerEvent.EventType + ". MVP CC events are issue, escrow, burn, refund, re-credit, transfer-in, and transfer-out only.");
-                    break;
+                failures.Add(failure);
             }
+
+            balance.AvailableBaseUnits = result.Balance.AvailableBaseUnits;
+            balance.EscrowedBaseUnits = result.Balance.EscrowedBaseUnits;
+            balance.BurnedBaseUnits = result.Balance.BurnedBaseUnits;
         }
 
         private static PassportMonetaryBalance GetBalance(
