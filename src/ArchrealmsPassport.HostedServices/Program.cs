@@ -7,6 +7,7 @@ var app = builder.Build();
 var store = PassportHostedFileStore.FromEnvironment();
 var signer = PassportHostedServiceSigner.FromDataRoot(store.Root);
 var operatorGate = PassportHostedOperatorGate.FromEnvironment();
+var rateLimiter = new PassportHostedRateLimiter();
 
 app.MapGet("/health", () => Results.Json(new
 {
@@ -16,8 +17,14 @@ app.MapGet("/health", () => Results.Json(new
     utc = DateTimeOffset.UtcNow
 }));
 
-app.MapPost("/ai/session", (PassportAiSessionAuthorizationRequest request) =>
+app.MapPost("/ai/session", (HttpRequest httpRequest, PassportAiSessionAuthorizationRequest request) =>
 {
+    var rateLimit = AuthorizeRate(httpRequest, rateLimiter, "ai-session", maxRequests: 30, window: TimeSpan.FromMinutes(1));
+    if (rateLimit != null)
+    {
+        return rateLimit;
+    }
+
     var result = PassportHostedPolicy.AuthorizeAiSession(request);
     if (!result.Succeeded || result.Session == null)
     {
@@ -30,6 +37,12 @@ app.MapPost("/ai/session", (PassportAiSessionAuthorizationRequest request) =>
 
 app.MapPost("/ai/chat", (HttpRequest httpRequest, PassportAiChatRequest request) =>
 {
+    var rateLimit = AuthorizeRate(httpRequest, rateLimiter, "ai-chat:" + request.SessionId, maxRequests: 60, window: TimeSpan.FromMinutes(1));
+    if (rateLimit != null)
+    {
+        return rateLimit;
+    }
+
     var bearerToken = PassportHostedPolicy.ReadBearerToken(httpRequest.Headers.Authorization.ToString());
     var result = PassportHostedPolicy.CreateAiChatResponse(request, bearerToken, store);
     return result.Succeeded ? Results.Json(result) : Results.BadRequest(result);
@@ -41,6 +54,12 @@ app.MapPost("/capacity/reports/cc", (HttpRequest httpRequest, PassportCcCapacity
     if (operatorAuthorization != null)
     {
         return operatorAuthorization;
+    }
+
+    var rateLimit = AuthorizeRate(httpRequest, rateLimiter, "operator-capacity", maxRequests: 20, window: TimeSpan.FromMinutes(1));
+    if (rateLimit != null)
+    {
+        return rateLimit;
     }
 
     var result = PassportHostedPolicy.CreateCcCapacityReport(request);
@@ -62,6 +81,12 @@ app.MapPost("/arch/genesis/manifests", (HttpRequest httpRequest, PassportArchGen
         return operatorAuthorization;
     }
 
+    var rateLimit = AuthorizeRate(httpRequest, rateLimiter, "operator-genesis", maxRequests: 10, window: TimeSpan.FromMinutes(1));
+    if (rateLimit != null)
+    {
+        return rateLimit;
+    }
+
     var result = PassportHostedPolicy.CreateArchGenesisManifest(request);
     if (!result.Succeeded || result.Record == null)
     {
@@ -81,6 +106,12 @@ app.MapPost("/admin/authority/validate", (HttpRequest httpRequest, PassportAdmin
         return operatorAuthorization;
     }
 
+    var rateLimit = AuthorizeRate(httpRequest, rateLimiter, "operator-authority", maxRequests: 60, window: TimeSpan.FromMinutes(1));
+    if (rateLimit != null)
+    {
+        return rateLimit;
+    }
+
     var result = PassportHostedPolicy.ValidateAdminAuthority(request);
     return result.Succeeded ? Results.Json(result) : Results.BadRequest(result);
 });
@@ -91,6 +122,12 @@ app.MapPost("/storage/delivery/requests", (HttpRequest httpRequest, PassportStor
     if (operatorAuthorization != null)
     {
         return operatorAuthorization;
+    }
+
+    var rateLimit = AuthorizeRate(httpRequest, rateLimiter, "operator-storage-delivery", maxRequests: 60, window: TimeSpan.FromMinutes(1));
+    if (rateLimit != null)
+    {
+        return rateLimit;
     }
 
     var result = PassportHostedPolicy.AcceptStorageDeliveryRequest(request);
@@ -122,6 +159,31 @@ static IResult? AuthorizeOperator(HttpRequest request, PassportHostedOperatorGat
     return authorization.ConfigurationMissing
         ? Results.Json(body, statusCode: StatusCodes.Status503ServiceUnavailable)
         : Results.Json(body, statusCode: StatusCodes.Status401Unauthorized);
+}
+
+static IResult? AuthorizeRate(
+    HttpRequest request,
+    PassportHostedRateLimiter rateLimiter,
+    string scope,
+    int maxRequests,
+    TimeSpan window)
+{
+    var key = scope + ":" + (request.HttpContext.Connection.RemoteIpAddress?.ToString() ?? "local");
+    var result = rateLimiter.Check(key, maxRequests, window);
+    if (result.Succeeded)
+    {
+        return null;
+    }
+
+    request.HttpContext.Response.Headers.RetryAfter = Math.Ceiling(result.RetryAfter.TotalSeconds).ToString("0");
+    return Results.Json(new
+    {
+        succeeded = false,
+        message = result.Message,
+        max_requests = result.MaxRequests,
+        window_seconds = Math.Ceiling(result.Window.TotalSeconds),
+        retry_after_seconds = Math.Ceiling(result.RetryAfter.TotalSeconds)
+    }, statusCode: StatusCodes.Status429TooManyRequests);
 }
 
 public partial class Program

@@ -33,6 +33,7 @@ The hosted services project provides the production-facing API boundary that Win
 - Missing operator-key configuration is allowed only in local/development mode.
 - Hosted records returned by capacity, genesis, and storage-delivery endpoints are signed with the hosted service signing key.
 - Set `ARCHREALMS_PASSPORT_HOSTED_SIGNING_KEY_PATH` to control the service signing-key location.
+- Hosted endpoints apply in-process per-scope rate limits and return `429` with `Retry-After` when exceeded.
 
 ## Release-Lane Configuration
 
