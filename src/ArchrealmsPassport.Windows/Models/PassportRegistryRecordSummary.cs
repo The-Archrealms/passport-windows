@@ -1,7 +1,12 @@
+using System;
+using System.Collections.Generic;
+
 namespace ArchrealmsPassport.Windows.Models
 {
     public sealed class PassportRegistryRecordSummary
     {
+        public string SchemaVersion { get; set; } = string.Empty;
+
         public string RecordType { get; set; } = string.Empty;
 
         public string RecordId { get; set; } = string.Empty;
@@ -25,5 +30,7 @@ namespace ArchrealmsPassport.Windows.Models
         public string WalletPublicKeyPath { get; set; } = string.Empty;
 
         public string WalletSignedPayloadSha256 { get; set; } = string.Empty;
+
+        public IReadOnlyList<string> ValidationFailures { get; set; } = Array.Empty<string>();
     }
 }

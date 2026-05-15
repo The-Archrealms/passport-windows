@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Text.Json;
+using ArchrealmsPassport.Core.Protocol;
 using Xunit;
 
 namespace ArchrealmsPassport.Windows.Tests;
@@ -17,6 +18,10 @@ public sealed class PassportRegistryTemplateTests
             using var document = JsonDocument.Parse(File.ReadAllText(templatePath));
             Assert.True(document.RootElement.TryGetProperty("schema_version", out _), templatePath);
             Assert.True(document.RootElement.TryGetProperty("record_type", out _), templatePath);
+
+            var inspection = PassportRegistryRecordInspector.Inspect(File.ReadAllBytes(templatePath), Path.GetFileName(templatePath));
+            Assert.True(inspection.IsRecord, templatePath);
+            Assert.False(string.IsNullOrWhiteSpace(inspection.SchemaVersion), templatePath);
         }
     }
 

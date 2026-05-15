@@ -2,8 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Security.Cryptography;
-using System.Text.Json;
+using ArchrealmsPassport.Core.Protocol;
 using ArchrealmsPassport.Windows.Models;
 
 namespace ArchrealmsPassport.Windows.Services
@@ -34,7 +33,7 @@ namespace ArchrealmsPassport.Windows.Services
                     continue;
                 }
 
-                if (!MatchesFilter(summary, filter))
+                if (!PassportRegistryRecordInspector.MatchesFilter(ToCoreSummary(summary), filter))
                 {
                     continue;
                 }
@@ -67,10 +66,16 @@ namespace ArchrealmsPassport.Windows.Services
             var lines = new List<string>
             {
                 record.RecordType + " | " + record.RecordId + " | " + record.Status,
+                "schema: " + record.SchemaVersion,
                 "created: " + record.CreatedUtc,
                 "sha256: " + record.Sha256,
                 "path: " + record.RelativePath
             };
+
+            if (record.ValidationFailures.Count > 0)
+            {
+                lines.Add("validation: " + string.Join(", ", record.ValidationFailures));
+            }
 
             AddDetailLine(lines, "cid", record.Cid);
             AddDetailLine(lines, "signed payload", record.SignedPayloadPath);
@@ -85,95 +90,36 @@ namespace ArchrealmsPassport.Windows.Services
         {
             try
             {
-                using var document = JsonDocument.Parse(File.ReadAllText(path));
-                var root = document.RootElement;
-                if (!root.TryGetProperty("record_type", out var recordType) || recordType.ValueKind != JsonValueKind.String)
+                var inspection = PassportRegistryRecordInspector.Inspect(
+                    File.ReadAllBytes(path),
+                    ToWorkspaceRelativePath(workspaceRoot, path));
+                if (!inspection.IsRecord)
                 {
                     return null;
                 }
 
-                var summary = new PassportRegistryRecordSummary
+                return new PassportRegistryRecordSummary
                 {
-                    RecordType = recordType.GetString() ?? string.Empty,
-                    RecordId = ReadString(root, "record_id", "event_id", "quote_id", "execution_id", "correction_id"),
-                    CreatedUtc = ReadString(root, "created_utc"),
-                    Status = ReadString(root, "status", "record_stage", "signature_status"),
-                    RelativePath = ToWorkspaceRelativePath(workspaceRoot, path),
-                    Sha256 = ComputeSha256(File.ReadAllBytes(path)),
-                    Cid = ReadCid(root)
+                    SchemaVersion = inspection.SchemaVersion,
+                    RecordType = inspection.RecordType,
+                    RecordId = inspection.RecordId,
+                    CreatedUtc = inspection.CreatedUtc,
+                    Status = inspection.Status,
+                    RelativePath = inspection.RelativePath,
+                    Sha256 = inspection.Sha256,
+                    Cid = inspection.Cid,
+                    SignedPayloadPath = inspection.SignedPayloadPath,
+                    SignedPayloadSha256 = inspection.SignedPayloadSha256,
+                    SignaturePath = inspection.SignaturePath,
+                    WalletPublicKeyPath = inspection.WalletPublicKeyPath,
+                    WalletSignedPayloadSha256 = inspection.WalletSignedPayloadSha256,
+                    ValidationFailures = inspection.ValidationFailures
                 };
-
-                if (root.TryGetProperty("signature", out var signature))
-                {
-                    summary.SignedPayloadPath = ReadString(signature, "signed_payload_path");
-                    summary.SignedPayloadSha256 = ReadString(signature, "signed_payload_sha256");
-                    summary.SignaturePath = ReadString(signature, "signature_path");
-                }
-
-                if (root.TryGetProperty("wallet_signature", out var walletSignature))
-                {
-                    summary.WalletPublicKeyPath = ReadString(walletSignature, "wallet_public_key_path");
-                    summary.WalletSignedPayloadSha256 = ReadString(walletSignature, "signed_payload_sha256");
-                }
-
-                return summary;
             }
             catch
             {
                 return null;
             }
-        }
-
-        private static bool MatchesFilter(PassportRegistryRecordSummary record, string filter)
-        {
-            if (string.IsNullOrWhiteSpace(filter))
-            {
-                return true;
-            }
-
-            return Contains(record.RecordType, filter)
-                || Contains(record.RecordId, filter)
-                || Contains(record.Status, filter)
-                || Contains(record.RelativePath, filter)
-                || Contains(record.Sha256, filter)
-                || Contains(record.Cid, filter)
-                || Contains(record.SignaturePath, filter)
-                || Contains(record.SignedPayloadPath, filter)
-                || Contains(record.WalletPublicKeyPath, filter);
-        }
-
-        private static string ReadString(JsonElement root, params string[] propertyNames)
-        {
-            foreach (var propertyName in propertyNames)
-            {
-                if (root.TryGetProperty(propertyName, out var property) && property.ValueKind == JsonValueKind.String)
-                {
-                    return property.GetString() ?? string.Empty;
-                }
-            }
-
-            return string.Empty;
-        }
-
-        private static string ReadCid(JsonElement root)
-        {
-            var direct = ReadString(root, "cid", "root_cid", "content_cid", "registry_submission_cid");
-            if (!string.IsNullOrWhiteSpace(direct))
-            {
-                return direct;
-            }
-
-            if (root.TryGetProperty("content_ref", out var contentRef))
-            {
-                return ReadString(contentRef, "cid");
-            }
-
-            if (root.TryGetProperty("source", out var source))
-            {
-                return ReadString(source, "cid", "root_cid");
-            }
-
-            return string.Empty;
         }
 
         private static void AddDetailLine(List<string> lines, string label, string value)
@@ -184,19 +130,31 @@ namespace ArchrealmsPassport.Windows.Services
             }
         }
 
-        private static bool Contains(string value, string filter)
-        {
-            return (value ?? string.Empty).IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0;
-        }
-
         private static string ToWorkspaceRelativePath(string workspaceRoot, string path)
         {
             return Path.GetRelativePath(workspaceRoot, path).Replace(Path.DirectorySeparatorChar, '/');
         }
 
-        private static string ComputeSha256(byte[] value)
+        private static PassportRegistryRecordInspection ToCoreSummary(PassportRegistryRecordSummary summary)
         {
-            return Convert.ToHexString(SHA256.HashData(value)).ToLowerInvariant();
+            return new PassportRegistryRecordInspection
+            {
+                IsRecord = true,
+                SchemaVersion = summary.SchemaVersion,
+                RecordType = summary.RecordType,
+                RecordId = summary.RecordId,
+                CreatedUtc = summary.CreatedUtc,
+                Status = summary.Status,
+                RelativePath = summary.RelativePath,
+                Sha256 = summary.Sha256,
+                Cid = summary.Cid,
+                SignedPayloadPath = summary.SignedPayloadPath,
+                SignedPayloadSha256 = summary.SignedPayloadSha256,
+                SignaturePath = summary.SignaturePath,
+                WalletPublicKeyPath = summary.WalletPublicKeyPath,
+                WalletSignedPayloadSha256 = summary.WalletSignedPayloadSha256,
+                ValidationFailures = summary.ValidationFailures
+            };
         }
     }
 }

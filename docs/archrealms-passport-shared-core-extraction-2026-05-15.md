@@ -1,7 +1,7 @@
 # Archrealms Passport Shared Core Extraction
 
 - Date: 2026-05-15
-- Status: first extraction slice implemented
+- Status: registry and monetary extraction slices implemented
 - Project: `src/ArchrealmsPassport.Core`
 
 ## Purpose
@@ -25,6 +25,11 @@
   - ARCH genesis, transfer-in, and transfer-out balance rules;
   - CC issue, escrow, burn, refund, re-credit, transfer-in, and transfer-out balance rules;
   - deterministic overspend failure reporting while preserving replay state transitions.
+- Registry record inspection and envelope validation:
+  - shared summary extraction for record type, record ID, created time, status, CID, signatures, wallet signatures, relative path, and SHA-256;
+  - common envelope diagnostics for schema version, record type, identifier, created timestamp, signature object shape, and wallet-signature object shape;
+  - BOM-tolerant UTF-8 parsing while preserving original-byte hash calculation;
+  - shared filter semantics for registry browser records and validation failures.
 - AI non-authority policy:
   - fields AI must not be allowed to set;
   - reusable non-authority boundary record creation;
@@ -33,12 +38,12 @@
 
 ## Consumers
 
-- Windows Passport references `ArchrealmsPassport.Core` for AI gateway defaults, record types, monetary asset/event constants, wallet authority scopes, monetary balance semantics, AI authority boundary validation, and secret-material prompt blocking.
+- Windows Passport references `ArchrealmsPassport.Core` for AI gateway defaults, record types, monetary asset/event constants, wallet authority scopes, monetary balance semantics, registry record inspection/filtering, AI authority boundary validation, and secret-material prompt blocking.
 - `ArchrealmsPassport.HostedServices` references the same core package for hosted AI session/chat validation, hosted record-type creation, admin authority record types, and telemetry access record types.
 
 ## Remaining Extraction
 
 - Continue moving wallet-key binding validation into Core while leaving OS key storage platform-specific.
 - Move ledger replay/export verifier logic into Core.
-- Move registry record schemas and validation into Core.
+- Continue expanding registry record schema validation beyond the common envelope as record families stabilize.
 - Keep WPF, Windows tray behavior, MSIX packaging, DPAPI/Windows Hello, and Windows background process management outside Core.

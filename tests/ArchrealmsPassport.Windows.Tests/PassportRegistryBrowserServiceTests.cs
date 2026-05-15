@@ -1,4 +1,6 @@
 using System.Linq;
+using System.IO;
+using ArchrealmsPassport.Core.Protocol;
 using ArchrealmsPassport.Windows.Services;
 using ArchrealmsPassport.Windows.Tests.Infrastructure;
 using Xunit;
@@ -11,6 +13,11 @@ public sealed class PassportRegistryBrowserServiceTests
     public void RegistryBrowserIndexesLocalWorkspaceRecords()
     {
         using var workspace = PassportTestWorkspace.Create();
+
+        var fixtureFiles = Directory.EnumerateFiles(Path.Combine(workspace.Root, "records"), "*.json", SearchOption.AllDirectories).ToArray();
+        Assert.NotEmpty(fixtureFiles);
+        var firstInspection = PassportRegistryRecordInspector.Inspect(File.ReadAllBytes(fixtureFiles[0]), fixtureFiles[0]);
+        Assert.True(firstInspection.IsRecord, fixtureFiles[0] + " " + string.Join(",", firstInspection.ValidationFailures));
 
         var records = new PassportRegistryBrowserService().ListRecords(workspace.Root);
 
@@ -60,6 +67,7 @@ public sealed class PassportRegistryBrowserServiceTests
         var formatted = service.FormatRecordDetail(proofSummary);
 
         Assert.Contains("cid:", formatted);
+        Assert.Contains("schema:", formatted);
         Assert.Contains("signature:", formatted);
         Assert.Contains("signed payload:", formatted);
         Assert.Contains("sha256:", formatted);
