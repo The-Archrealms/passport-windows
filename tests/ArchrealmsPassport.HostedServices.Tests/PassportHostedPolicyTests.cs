@@ -417,6 +417,8 @@ public sealed class PassportHostedPolicyTests
         Assert.Equal(false, result.Record["private_key_material_included"]);
         Assert.Equal(2, result.Record["manifest_file_count"]);
         Assert.Matches("^[0-9a-f]{64}$", result.Record["manifest_root_sha256"]?.ToString() ?? string.Empty);
+        var inspection = PassportRegistryRecordInspector.Inspect(JsonSerializer.SerializeToUtf8Bytes(result.Record, JsonOptions));
+        Assert.True(inspection.IsEnvelopeValid, string.Join("; ", inspection.ValidationFailures));
 
         var rejectedKeyMaterial = PassportHostedPolicy.CreateBackupManifestRecord(new PassportHostedBackupManifestRequest
         {
@@ -463,6 +465,8 @@ public sealed class PassportHostedPolicyTests
         Assert.Equal("passport_hosted_incident_report", result.Record!["record_type"]);
         Assert.Equal("high", result.Record["severity"]);
         Assert.Equal(false, result.Record["contains_raw_ai_prompts"]);
+        var inspection = PassportRegistryRecordInspector.Inspect(JsonSerializer.SerializeToUtf8Bytes(result.Record, JsonOptions));
+        Assert.True(inspection.IsEnvelopeValid, string.Join("; ", inspection.ValidationFailures));
 
         var rejectedRawPrompt = PassportHostedPolicy.CreateIncidentReportRecord(new PassportHostedIncidentReportRequest
         {

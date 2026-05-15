@@ -55,6 +55,7 @@
   - common envelope diagnostics for schema version, record type, identifier, created timestamp, signature object shape, and wallet-signature object shape;
   - placeholder-aware template inspection and shared top-level required-field diagnostics for packaged registry record families;
   - generated storage redemption quote, accepted, epoch-burn, and refund record-family diagnostics;
+  - runtime semantic diagnostics for ARCH/CC conversion quote policy, hosted backup-manifest safety, hosted incident-report redaction, and recovery-control validation records;
   - BOM-tolerant UTF-8 parsing while preserving original-byte hash calculation;
   - shared filter semantics for registry browser records and validation failures.
 - AI non-authority policy:

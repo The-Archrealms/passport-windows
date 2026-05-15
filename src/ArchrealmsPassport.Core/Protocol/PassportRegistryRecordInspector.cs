@@ -63,6 +63,8 @@ public static class PassportRegistryRecordInspector
         ["passport_monetary_account_export"] = new[] { "record_id", "created_utc", "release_lane", "ledger_namespace", "policy_version", "account_id", "event_count", "events", "balances", "account_hash_chain", "key_history", "transparency_root_sha256", "transparency_root_export_path", "verifier_replay_root", "verifier", "summary" },
         ["passport_monetary_ledger_event"] = new[] { "event_id", "event_type", "created_utc", "release_lane", "telemetry_environment", "ledger_namespace", "production_token_record", "staging_record", "account_id", "archrealms_identity_id", "wallet_key_id", "asset_code", "amount_base_units", "global_sequence", "account_sequence", "prior_account_event_hash", "server_received_utc", "anti_replay_nonce", "device_session_id", "policy_version", "evidence_references", "signature_status", "wallet_signature_algorithm", "wallet_signature_base64", "signed_event_hash_sha256", "wallet_public_key_path", "event_hash_sha256" },
         ["passport_monetary_transparency_root"] = new[] { "record_id", "created_utc", "release_lane", "ledger_namespace", "policy_version", "root_algorithm", "event_count", "first_global_sequence", "last_global_sequence", "event_hashes", "event_leaves", "epoch_root_sha256", "public_chain_anchor_status", "summary" },
+        ["passport_hosted_incident_report"] = new[] { "record_id", "created_utc", "release_lane", "ledger_namespace", "policy_version", "severity", "incident_type", "detected_utc", "incident_response_runbook_uri", "incident_response_owner", "telemetry_retention_policy_uri", "contains_personal_data", "contains_raw_ai_prompts", "contains_storage_payload_details", "redaction_policy", "summary" },
+        ["passport_hosted_storage_backup_manifest"] = new[] { "record_id", "created_utc", "release_lane", "ledger_namespace", "policy_version", "storage_provider", "backup_policy_uri", "restore_runbook_uri", "backup_snapshot_id", "manifest_file_count", "manifest_total_bytes", "manifest_root_sha256", "private_key_material_included", "raw_ai_prompts_included", "storage_payloads_included", "entries", "summary" },
         ["node_capacity_snapshot_record"] = new[] { "record_id", "created_utc", "effective_utc", "status", "archrealms_identity_id", "device_id", "node_id", "client_platform", "passport_client", "storage_mode", "storage_limit_bytes", "local_repo_path_hash", "ipfs_peer_id", "participation_scopes", "measurement_epoch", "observed_capacity", "signature", "summary" },
         ["passport_identity_record"] = new[] { "record_id", "created_utc", "effective_utc", "status", "archrealms_identity_id", "display_name", "identity_mode", "citizenship_class", "declared_scope", "recovery_authority", "attestation_refs", "summary" },
         ["passport_recovery_control_validation"] = new[] { "record_id", "created_utc", "release_lane", "ledger_namespace", "policy_version", "recovery_control_record_type", "recovery_control_record_id", "recovery_control_record_sha256", "validation_mode", "ai_approved", "summary" },
@@ -123,7 +125,7 @@ public static class PassportRegistryRecordInspector
                 }
             }
 
-            ValidateRecordFamily(root, recordType, validationFailures);
+            ValidateRecordFamily(root, recordType, validationFailures, allowTemplatePlaceholders);
 
             var inspection = new PassportRegistryRecordInspection
             {
@@ -265,7 +267,8 @@ public static class PassportRegistryRecordInspector
     private static void ValidateRecordFamily(
         JsonElement root,
         string recordType,
-        List<string> validationFailures)
+        List<string> validationFailures,
+        bool allowTemplatePlaceholders)
     {
         if (!RequiredFieldsByRecordType.TryGetValue(recordType, out var requiredFields))
         {
@@ -280,9 +283,34 @@ public static class PassportRegistryRecordInspector
             }
         }
 
+        if (allowTemplatePlaceholders)
+        {
+            return;
+        }
+
         if (string.Equals(recordType, PassportRecordTypes.WalletKeyBinding, StringComparison.Ordinal))
         {
             ValidateWalletKeyBindingRecord(root, validationFailures);
+        }
+
+        if (string.Equals(recordType, "passport_arch_cc_conversion_quote", StringComparison.Ordinal))
+        {
+            ValidateConversionQuoteRecord(root, validationFailures);
+        }
+
+        if (string.Equals(recordType, PassportRecordTypes.RecoveryControlValidation, StringComparison.Ordinal))
+        {
+            ValidateRecoveryControlValidationRecord(root, validationFailures);
+        }
+
+        if (string.Equals(recordType, PassportRecordTypes.HostedStorageBackupManifest, StringComparison.Ordinal))
+        {
+            ValidateHostedStorageBackupManifestRecord(root, validationFailures);
+        }
+
+        if (string.Equals(recordType, PassportRecordTypes.HostedIncidentReport, StringComparison.Ordinal))
+        {
+            ValidateHostedIncidentReportRecord(root, validationFailures);
         }
     }
 
@@ -312,6 +340,101 @@ public static class PassportRegistryRecordInspector
         }
     }
 
+    private static void ValidateConversionQuoteRecord(JsonElement root, List<string> validationFailures)
+    {
+        var sourceAsset = ReadString(root, "source_asset_code");
+        var destinationAsset = ReadString(root, "destination_asset_code");
+        if (!IsArchOrCc(sourceAsset) || !IsArchOrCc(destinationAsset))
+        {
+            validationFailures.Add("conversion_quote_policy:asset_pair_must_be_arch_cc");
+        }
+
+        if (string.Equals(sourceAsset, destinationAsset, StringComparison.OrdinalIgnoreCase))
+        {
+            validationFailures.Add("conversion_quote_policy:source_destination_must_differ");
+        }
+
+        if (ReadInt64(root, "source_amount_base_units") <= 0
+            || ReadInt64(root, "destination_amount_base_units") <= 0
+            || ReadInt64(root, "rate_numerator") <= 0
+            || ReadInt64(root, "rate_denominator") <= 0)
+        {
+            validationFailures.Add("conversion_quote_policy:positive_amounts_and_rate_required");
+        }
+
+        AddIfTrue(root, "guaranteed_conversion", "conversion_quote_policy:guaranteed_conversion_forbidden", validationFailures);
+        AddIfTrue(root, "fixed_parity", "conversion_quote_policy:fixed_parity_forbidden", validationFailures);
+        AddIfTrue(root, "stable_value_claim", "conversion_quote_policy:stable_value_claim_forbidden", validationFailures);
+        AddIfTrue(root, "legal_tender_claim", "conversion_quote_policy:legal_tender_claim_forbidden", validationFailures);
+        AddIfTrue(root, "unlimited_convertibility", "conversion_quote_policy:unlimited_convertibility_forbidden", validationFailures);
+    }
+
+    private static void ValidateRecoveryControlValidationRecord(JsonElement root, List<string> validationFailures)
+    {
+        var validationMode = ReadString(root, "validation_mode");
+        if (validationMode is not "self_service_device_signature" and not "support_mediated_dual_control")
+        {
+            validationFailures.Add("recovery_validation_policy:validation_mode_invalid");
+        }
+
+        if (!LooksLikeSha256(ReadString(root, "recovery_control_record_sha256")))
+        {
+            validationFailures.Add("recovery_validation_policy:recovery_control_record_sha256_invalid");
+        }
+
+        AddIfTrue(root, "ai_approved", "recovery_validation_policy:ai_approval_forbidden", validationFailures);
+    }
+
+    private static void ValidateHostedStorageBackupManifestRecord(JsonElement root, List<string> validationFailures)
+    {
+        if (!LooksLikeSha256(ReadString(root, "manifest_root_sha256")))
+        {
+            validationFailures.Add("hosted_backup_policy:manifest_root_sha256_invalid");
+        }
+
+        if (ReadInt64(root, "manifest_file_count") <= 0 || ReadInt64(root, "manifest_total_bytes") < 0)
+        {
+            validationFailures.Add("hosted_backup_policy:manifest_counts_invalid");
+        }
+
+        AddIfTrue(root, "private_key_material_included", "hosted_backup_policy:private_key_material_forbidden", validationFailures);
+        AddIfTrue(root, "raw_ai_prompts_included", "hosted_backup_policy:raw_ai_prompts_forbidden", validationFailures);
+        AddIfTrue(root, "storage_payloads_included", "hosted_backup_policy:storage_payloads_forbidden", validationFailures);
+    }
+
+    private static void ValidateHostedIncidentReportRecord(JsonElement root, List<string> validationFailures)
+    {
+        var severity = ReadString(root, "severity");
+        if (severity is not "low" and not "medium" and not "high" and not "critical")
+        {
+            validationFailures.Add("hosted_incident_policy:severity_invalid");
+        }
+
+        var detectedUtc = ReadString(root, "detected_utc");
+        if (string.IsNullOrWhiteSpace(detectedUtc) || !DateTimeOffset.TryParse(detectedUtc, out _))
+        {
+            validationFailures.Add("hosted_incident_policy:detected_utc_invalid");
+        }
+
+        AddIfTrue(root, "contains_personal_data", "hosted_incident_policy:personal_data_forbidden", validationFailures);
+        AddIfTrue(root, "contains_raw_ai_prompts", "hosted_incident_policy:raw_ai_prompts_forbidden", validationFailures);
+        AddIfTrue(root, "contains_storage_payload_details", "hosted_incident_policy:storage_payload_details_forbidden", validationFailures);
+    }
+
+    private static bool IsArchOrCc(string assetCode)
+    {
+        return string.Equals(assetCode, "ARCH", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(assetCode, "CC", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void AddIfTrue(JsonElement root, string propertyName, string failure, List<string> validationFailures)
+    {
+        if (ReadBool(root, propertyName))
+        {
+            validationFailures.Add(failure);
+        }
+    }
+
     private static int ReadInt(JsonElement root, string propertyName)
     {
         if (!root.TryGetProperty(propertyName, out var element))
@@ -325,6 +448,34 @@ public static class PassportRegistryRecordInspector
         }
 
         return 0;
+    }
+
+    private static long ReadInt64(JsonElement root, string propertyName)
+    {
+        if (!root.TryGetProperty(propertyName, out var element))
+        {
+            return 0;
+        }
+
+        if (element.ValueKind == JsonValueKind.Number && element.TryGetInt64(out var value))
+        {
+            return value;
+        }
+
+        return 0;
+    }
+
+    private static bool ReadBool(JsonElement root, string propertyName)
+    {
+        return root.TryGetProperty(propertyName, out var element)
+            && (element.ValueKind == JsonValueKind.True
+                || (element.ValueKind == JsonValueKind.String && bool.TryParse(element.GetString(), out var parsed) && parsed));
+    }
+
+    private static bool LooksLikeSha256(string value)
+    {
+        var normalized = (value ?? string.Empty).Trim();
+        return normalized.Length == 64 && normalized.All(Uri.IsHexDigit);
     }
 
     private static string[] ReadStringArray(JsonElement root, string propertyName)

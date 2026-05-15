@@ -166,6 +166,111 @@ public sealed class PassportRegistryRecordInspectorTests
             inspection.ValidationFailures);
     }
 
+    [Fact]
+    public void ReportsConversionQuotePolicyFailures()
+    {
+        var json = """
+        {
+          "schema_version": 1,
+          "record_type": "passport_arch_cc_conversion_quote",
+          "quote_id": "quote-1",
+          "created_utc": "2026-05-15T00:00:00Z",
+          "expires_utc": "2026-05-15T00:05:00Z",
+          "release_lane": "production-mvp",
+          "ledger_namespace": "archrealms-passport-production-mvp",
+          "policy_version": "passport-release-lanes-v1",
+          "account_id": "account-1",
+          "archrealms_identity_id": "identity-1",
+          "wallet_key_id": "wallet-1",
+          "source_asset_code": "ARCH",
+          "destination_asset_code": "ARCH",
+          "source_amount_base_units": 0,
+          "destination_amount_base_units": 0,
+          "rate_numerator": 0,
+          "rate_denominator": 0,
+          "rate_source": "qualified_order_book",
+          "liquidity_source": "qualified_liquidity",
+          "quote_method": "floating_rate_twap",
+          "counterparty_class": "qualified_liquidity_provider",
+          "crown_is_counterparty": false,
+          "spread_fee_base_units": 0,
+          "max_slippage_bps": 0,
+          "liquidity_limit_base_units": 100,
+          "guaranteed_conversion": true,
+          "fixed_parity": true,
+          "stable_value_claim": true,
+          "legal_tender_claim": true,
+          "unlimited_convertibility": true,
+          "summary": "Invalid quote."
+        }
+        """;
+
+        var inspection = PassportRegistryRecordInspector.Inspect(Encoding.UTF8.GetBytes(json));
+
+        Assert.True(inspection.IsRecord);
+        Assert.False(inspection.IsEnvelopeValid);
+        Assert.Contains("conversion_quote_policy:source_destination_must_differ", inspection.ValidationFailures);
+        Assert.Contains("conversion_quote_policy:positive_amounts_and_rate_required", inspection.ValidationFailures);
+        Assert.Contains("conversion_quote_policy:guaranteed_conversion_forbidden", inspection.ValidationFailures);
+        Assert.Contains("conversion_quote_policy:fixed_parity_forbidden", inspection.ValidationFailures);
+        Assert.Contains("conversion_quote_policy:stable_value_claim_forbidden", inspection.ValidationFailures);
+        Assert.Contains("conversion_quote_policy:legal_tender_claim_forbidden", inspection.ValidationFailures);
+        Assert.Contains("conversion_quote_policy:unlimited_convertibility_forbidden", inspection.ValidationFailures);
+    }
+
+    [Fact]
+    public void ValidatesHostedOperationalRecordPolicies()
+    {
+        var backup = """
+        {
+          "schema_version": 1,
+          "record_type": "passport_hosted_storage_backup_manifest",
+          "record_id": "backup-1",
+          "created_utc": "2026-05-15T00:00:00Z",
+          "release_lane": "production-mvp",
+          "ledger_namespace": "archrealms-passport-production-mvp",
+          "policy_version": "passport-release-lanes-v1",
+          "storage_provider": "managed-object-storage",
+          "backup_policy_uri": "archrealms://runbooks/backup",
+          "restore_runbook_uri": "archrealms://runbooks/restore",
+          "backup_snapshot_id": "snapshot-1",
+          "manifest_file_count": 1,
+          "manifest_total_bytes": 128,
+          "manifest_root_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "private_key_material_included": false,
+          "raw_ai_prompts_included": false,
+          "storage_payloads_included": false,
+          "entries": [],
+          "summary": "Backup manifest."
+        }
+        """;
+        var incident = """
+        {
+          "schema_version": 1,
+          "record_type": "passport_hosted_incident_report",
+          "record_id": "incident-1",
+          "created_utc": "2026-05-15T00:00:00Z",
+          "release_lane": "production-mvp",
+          "ledger_namespace": "archrealms-passport-production-mvp",
+          "policy_version": "passport-release-lanes-v1",
+          "severity": "high",
+          "incident_type": "storage_delivery_failure",
+          "detected_utc": "2026-05-15T00:00:00Z",
+          "incident_response_runbook_uri": "archrealms://runbooks/incident",
+          "incident_response_owner": "ops-duty-officer",
+          "telemetry_retention_policy_uri": "archrealms://policies/telemetry",
+          "contains_personal_data": false,
+          "contains_raw_ai_prompts": false,
+          "contains_storage_payload_details": false,
+          "redaction_policy": "metadata_only",
+          "summary": "Incident report."
+        }
+        """;
+
+        Assert.True(PassportRegistryRecordInspector.Inspect(Encoding.UTF8.GetBytes(backup)).IsEnvelopeValid);
+        Assert.True(PassportRegistryRecordInspector.Inspect(Encoding.UTF8.GetBytes(incident)).IsEnvelopeValid);
+    }
+
     [Theory]
     [InlineData("record_id")]
     [InlineData("event_id")]
