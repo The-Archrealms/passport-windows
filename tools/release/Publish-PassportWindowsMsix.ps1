@@ -421,16 +421,20 @@ if (-not $OutputRoot) {
 }
 $OutputRoot = [System.IO.Path]::GetFullPath($OutputRoot)
 
-if (-not $TimestampUrl -and $env:PASSPORT_WINDOWS_MSIX_TIMESTAMP_URL) {
-    $TimestampUrl = $env:PASSPORT_WINDOWS_MSIX_TIMESTAMP_URL
+if (-not $TimestampUrl) {
+    $TimestampUrl = Get-ChannelEnvironmentValue -Channel $Channel -Name "TIMESTAMP_URL"
 }
 
-if (-not $CertificatePfxBase64 -and $env:PASSPORT_WINDOWS_MSIX_PFX_BASE64) {
-    $CertificatePfxBase64 = $env:PASSPORT_WINDOWS_MSIX_PFX_BASE64
+if (-not $CertificatePfxPath) {
+    $CertificatePfxPath = Get-ChannelEnvironmentValue -Channel $Channel -Name "PFX_PATH"
 }
 
-if (-not $CertificatePassword -and $env:PASSPORT_WINDOWS_MSIX_PFX_PASSWORD) {
-    $CertificatePassword = $env:PASSPORT_WINDOWS_MSIX_PFX_PASSWORD
+if (-not $CertificatePfxBase64) {
+    $CertificatePfxBase64 = Get-ChannelEnvironmentValue -Channel $Channel -Name "PFX_BASE64"
+}
+
+if (-not $CertificatePassword) {
+    $CertificatePassword = Get-ChannelEnvironmentValue -Channel $Channel -Name "PFX_PASSWORD"
 }
 
 & powershell -ExecutionPolicy Bypass -File $assetScript
