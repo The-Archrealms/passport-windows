@@ -59,6 +59,7 @@ The hosted services project provides the production-facing API boundary that Win
 
 ## Current Limits
 
+- Production MVP package publishing is guarded by `tools/release/Test-PassportProductionMvpReadiness.ps1`; the MSIX publisher runs it automatically for `-Lane ProductionMvp` unless explicitly skipped.
 - Production deployment still needs managed durable storage, backups, managed signing-key custody, incident logging, and managed release-lane deployment configuration.
 - Production still needs final model endpoint selection, model artifact/license approval, managed vector store deployment, and production knowledge-pack approval workflow.
 - The service does not make fiat, exchange, external wallet, staking, yield, governance, or public stable-value claims.

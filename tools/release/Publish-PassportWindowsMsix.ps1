@@ -25,7 +25,8 @@ param(
     [string]$CertificatePfxBase64,
     [bool]$SelfContained = $true,
     [switch]$SkipIpfsRuntimeBootstrap,
-    [switch]$SkipSignatureVerification
+    [switch]$SkipSignatureVerification,
+    [switch]$SkipProductionMvpReadinessGate
 )
 
 $ErrorActionPreference = "Stop"
@@ -371,8 +372,6 @@ $packageVersion = ConvertTo-AppxVersion -RawVersion $Version
 $assemblyVersion = ConvertTo-AssemblyVersion -RawVersion $Version
 $runtimeIdentifier = "win-" + $Platform
 $dotnet = Resolve-DotnetPath -PreferredPath $DotnetPath
-$makeAppx = Resolve-WindowsSdkTool -PreferredPath $MakeAppxPath -ToolName "makeappx.exe"
-$signTool = Resolve-WindowsSdkTool -PreferredPath $SignToolPath -ToolName "signtool.exe"
 
 if (-not $OutputRoot) {
     $OutputRoot = Join-Path $repoRoot ("artifacts\release\passport-windows-msix-" + $channelSlug)
@@ -438,6 +437,30 @@ try {
 }
 catch {
 }
+
+if ([string]::Equals($laneSlug, "production-mvp", [System.StringComparison]::Ordinal)) {
+    if ($SkipProductionMvpReadinessGate) {
+        Write-Warning "Skipping ProductionMvp readiness gate. This package must not be treated as production-test ready until the readiness gate passes."
+    }
+    else {
+        $readinessScript = Join-Path $repoRoot "tools\release\Test-PassportProductionMvpReadiness.ps1"
+        $readinessReportPath = Join-Path $artifactRoot "production-mvp-readiness-report.json"
+        $packageSigningConfigured = -not [string]::Equals($certificateSource, "generated-test-certificate", [System.StringComparison]::Ordinal)
+        $timestampConfigured = -not [string]::IsNullOrWhiteSpace($TimestampUrl)
+        $packageSigningConfiguredValue = if ($packageSigningConfigured) { "1" } else { "0" }
+        $timestampConfiguredValue = if ($timestampConfigured) { "1" } else { "0" }
+        & powershell -ExecutionPolicy Bypass -File $readinessScript `
+            -OutputPath $readinessReportPath `
+            -PackageSigningConfigured $packageSigningConfiguredValue `
+            -TimestampConfigured $timestampConfiguredValue
+        if ($LASTEXITCODE -ne 0) {
+            throw "ProductionMvp readiness gate failed. See $readinessReportPath."
+        }
+    }
+}
+
+$makeAppx = Resolve-WindowsSdkTool -PreferredPath $MakeAppxPath -ToolName "makeappx.exe"
+$signTool = Resolve-WindowsSdkTool -PreferredPath $SignToolPath -ToolName "signtool.exe"
 
 if ($CertificatePfxPath) {
     Copy-Item -LiteralPath $CertificatePfxPath -Destination $certificatePfx -Force

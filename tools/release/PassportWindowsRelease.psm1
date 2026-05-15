@@ -300,8 +300,10 @@ function Get-PassportWindowsReleaseLaneSlug {
         "stage" { return "staging" }
         "staging" { return "staging" }
         "canary" { return "canary-mvp" }
+        "canarymvp" { return "canary-mvp" }
         "canary-mvp" { return "canary-mvp" }
         "production" { return "production-mvp" }
+        "productionmvp" { return "production-mvp" }
         "production-mvp" { return "production-mvp" }
         "prod" { return "production-mvp" }
         default { throw "Unsupported Passport release lane: $Lane" }

@@ -1,0 +1,234 @@
+param(
+    [string]$OutputPath,
+    [string]$PackageSigningConfigured = "false",
+    [string]$TimestampConfigured = "false",
+    [switch]$NoFail
+)
+
+$ErrorActionPreference = "Stop"
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+
+function Test-NonEmptyEnvironment {
+    param(
+        [string]$Name
+    )
+
+    return -not [string]::IsNullOrWhiteSpace([System.Environment]::GetEnvironmentVariable($Name))
+}
+
+function Test-AnyEnvironment {
+    param(
+        [string[]]$Names
+    )
+
+    foreach ($name in $Names) {
+        if (Test-NonEmptyEnvironment -Name $name) {
+            return $true
+        }
+    }
+
+    return $false
+}
+
+function New-Gate {
+    param(
+        [string]$Id,
+        [string]$Description,
+        [string[]]$RequiredEnvironment,
+        [string[][]]$RequiredAnyEnvironment = @(),
+        [scriptblock]$ExtraCheck = $null
+    )
+
+    $missing = @()
+    foreach ($name in $RequiredEnvironment) {
+        if (-not (Test-NonEmptyEnvironment -Name $name)) {
+            $missing += $name
+        }
+    }
+
+    foreach ($group in $RequiredAnyEnvironment) {
+        if (-not (Test-AnyEnvironment -Names $group)) {
+            $missing += ($group -join " or ")
+        }
+    }
+
+    $extraFailure = ""
+    if ($ExtraCheck) {
+        $extraFailure = & $ExtraCheck
+        if ($extraFailure) {
+            $missing += $extraFailure
+        }
+    }
+
+    return [pscustomobject][ordered]@{
+        id = $Id
+        description = $Description
+        passed = ($missing.Count -eq 0)
+        missing = $missing
+    }
+}
+
+function Test-HexSha256Environment {
+    param(
+        [string]$Name
+    )
+
+    $value = [System.Environment]::GetEnvironmentVariable($Name)
+    if ([string]::IsNullOrWhiteSpace($value)) {
+        return ""
+    }
+
+    if ($value.Trim() -notmatch '^[0-9a-fA-F]{64}$') {
+        return "$Name must be a SHA-256 hex string"
+    }
+
+    return ""
+}
+
+function Test-ManagedSigningCustody {
+    $custodyValue = [System.Environment]::GetEnvironmentVariable("ARCHREALMS_PASSPORT_HOSTED_SIGNING_KEY_CUSTODY")
+    if ($null -eq $custodyValue) {
+        $custodyValue = ""
+    }
+
+    $custody = $custodyValue.Trim().ToLowerInvariant()
+    if (-not [string]::IsNullOrWhiteSpace($custody) -and $custody -notin @("managed", "kms", "hsm", "managed-hsm", "cloud-kms")) {
+        return "ARCHREALMS_PASSPORT_HOSTED_SIGNING_KEY_CUSTODY must be managed/kms/hsm"
+    }
+
+    $localPath = [System.Environment]::GetEnvironmentVariable("ARCHREALMS_PASSPORT_HOSTED_SIGNING_KEY_PATH")
+    if (-not [string]::IsNullOrWhiteSpace($localPath)) {
+        return "ARCHREALMS_PASSPORT_HOSTED_SIGNING_KEY_PATH must not be used for ProductionMvp managed custody"
+    }
+
+    return ""
+}
+
+function Test-PackageSigning {
+    if (-not (Test-Truthy -Value $PackageSigningConfigured)) {
+        return "production package signing certificate is not configured"
+    }
+
+    if (-not (Test-Truthy -Value $TimestampConfigured) -and -not (Test-NonEmptyEnvironment -Name "PASSPORT_WINDOWS_MSIX_TIMESTAMP_URL")) {
+        return "PASSPORT_WINDOWS_MSIX_TIMESTAMP_URL"
+    }
+
+    return ""
+}
+
+function Test-Truthy {
+    param(
+        [string]$Value
+    )
+
+    return $Value -in @("1", "true", "True", "TRUE", "yes", "Yes", "YES")
+}
+
+$gates = @(
+    New-Gate `
+        -Id "package_signing" `
+        -Description "Production MVP package signing uses a stable certificate and timestamping, not a generated test certificate." `
+        -RequiredEnvironment @() `
+        -ExtraCheck ${function:Test-PackageSigning}
+
+    New-Gate `
+        -Id "release_lane_endpoints" `
+        -Description "Production MVP package lane has production API and AI gateway endpoints." `
+        -RequiredEnvironment @() `
+        -RequiredAnyEnvironment @(
+            @("PASSPORT_WINDOWS_PRODUCTION_MVP_API_BASE_URL", "PASSPORT_WINDOWS_RELEASE_LANE_API_BASE_URL"),
+            @("PASSPORT_WINDOWS_PRODUCTION_MVP_AI_GATEWAY_URL", "PASSPORT_WINDOWS_RELEASE_LANE_AI_GATEWAY_URL")
+        )
+
+    New-Gate `
+        -Id "hosted_operator_gate" `
+        -Description "Authority-bearing hosted endpoints require a configured operator key hash." `
+        -RequiredEnvironment @("ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY_SHA256") `
+        -ExtraCheck { Test-HexSha256Environment -Name "ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY_SHA256" }
+
+    New-Gate `
+        -Id "managed_storage_backups" `
+        -Description "Hosted ledger, capacity, genesis, recovery, telemetry, and AI records use managed durable storage with backup and restore policy." `
+        -RequiredEnvironment @(
+            "ARCHREALMS_PASSPORT_HOSTED_DATA_ROOT",
+            "ARCHREALMS_PASSPORT_HOSTED_STORAGE_PROVIDER",
+            "ARCHREALMS_PASSPORT_HOSTED_STORAGE_BACKUP_POLICY_URI",
+            "ARCHREALMS_PASSPORT_HOSTED_STORAGE_RESTORE_RUNBOOK_URI"
+        )
+
+    New-Gate `
+        -Id "managed_signing_key_custody" `
+        -Description "Hosted service signing keys and Crown issuance keys are in managed production custody." `
+        -RequiredEnvironment @(
+            "ARCHREALMS_PASSPORT_HOSTED_SIGNING_KEY_PROVIDER",
+            "ARCHREALMS_PASSPORT_HOSTED_SIGNING_KEY_ID",
+            "ARCHREALMS_PASSPORT_HOSTED_SIGNING_KEY_CUSTODY"
+        ) `
+        -ExtraCheck ${function:Test-ManagedSigningCustody}
+
+    New-Gate `
+        -Id "issuer_capacity_genesis_secrets" `
+        -Description "Production issuer, capacity report, and ARCH genesis authority identifiers are wired." `
+        -RequiredEnvironment @(
+            "ARCHREALMS_PASSPORT_CC_ISSUER_AUTHORITY_ID",
+            "ARCHREALMS_PASSPORT_CAPACITY_REPORT_ISSUER_ID",
+            "ARCHREALMS_PASSPORT_ARCH_GENESIS_MANIFEST_ID",
+            "ARCHREALMS_PASSPORT_PRODUCTION_LEDGER_NAMESPACE"
+        )
+
+    New-Gate `
+        -Id "open_weight_ai_runtime" `
+        -Description "Hosted AI has an approved open-weight model endpoint, artifact/license evidence, vector store, and knowledge-pack approval root." `
+        -RequiredEnvironment @(
+            "ARCHREALMS_PASSPORT_AI_INFERENCE_BASE_URL",
+            "ARCHREALMS_PASSPORT_AI_MODEL_ID",
+            "ARCHREALMS_PASSPORT_AI_MODEL_ARTIFACT_SHA256",
+            "ARCHREALMS_PASSPORT_AI_MODEL_LICENSE_APPROVAL_ID",
+            "ARCHREALMS_PASSPORT_AI_VECTOR_STORE_PROVIDER",
+            "ARCHREALMS_PASSPORT_AI_VECTOR_STORE_ID",
+            "ARCHREALMS_PASSPORT_AI_KNOWLEDGE_APPROVAL_ROOT"
+        )
+
+    New-Gate `
+        -Id "telemetry_incident_response" `
+        -Description "Production telemetry retention, incident logging, and incident response ownership are configured." `
+        -RequiredEnvironment @(
+            "ARCHREALMS_PASSPORT_TELEMETRY_DESTINATION",
+            "ARCHREALMS_PASSPORT_TELEMETRY_RETENTION_POLICY_URI",
+            "ARCHREALMS_PASSPORT_INCIDENT_RESPONSE_RUNBOOK_URI",
+            "ARCHREALMS_PASSPORT_INCIDENT_RESPONSE_OWNER"
+        )
+
+    New-Gate `
+        -Id "production_release_approvals" `
+        -Description "Production MVP release has product, engineering, security/privacy, and Crown monetary authority signoff references." `
+        -RequiredEnvironment @(
+            "ARCHREALMS_PASSPORT_PRODUCTION_RELEASE_APPROVAL_ID",
+            "ARCHREALMS_PASSPORT_ENGINEERING_SIGNOFF_ID",
+            "ARCHREALMS_PASSPORT_SECURITY_PRIVACY_SIGNOFF_ID",
+            "ARCHREALMS_PASSPORT_CROWN_MONETARY_AUTHORITY_SIGNOFF_ID"
+        )
+)
+
+$failed = @($gates | Where-Object { -not $_.passed })
+$report = [pscustomobject][ordered]@{
+    schema = "archrealms.passport.production_mvp_readiness.v1"
+    created_utc = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
+    repo_root = $repoRoot
+    lane = "production-mvp"
+    ready = ($failed.Count -eq 0)
+    failed_gate_count = $failed.Count
+    gates = $gates
+}
+
+$json = $report | ConvertTo-Json -Depth 8
+if ($OutputPath) {
+    $resolvedOutput = [System.IO.Path]::GetFullPath($OutputPath)
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $resolvedOutput) | Out-Null
+    Set-Content -LiteralPath $resolvedOutput -Value $json -Encoding UTF8
+}
+
+$json
+if ($failed.Count -gt 0 -and -not $NoFail) {
+    throw "ProductionMvp readiness failed. Missing gates: " + (($failed | ForEach-Object { $_.id }) -join ", ")
+}
