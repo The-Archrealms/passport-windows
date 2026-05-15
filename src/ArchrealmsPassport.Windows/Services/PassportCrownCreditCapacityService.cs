@@ -52,6 +52,16 @@ namespace ArchrealmsPassport.Windows.Services
                     return Failed("Max issuance cannot be negative.");
                 }
 
+                if (thinMarketIssuanceZero && maxIssuanceBaseUnits != 0)
+                {
+                    return Failed("Thin-market capacity reports must set max issuance to zero.");
+                }
+
+                if (!independentVolumeQualified && maxIssuanceBaseUnits != 0)
+                {
+                    return Failed("Unqualified independent volume must set max issuance to zero.");
+                }
+
                 if (capacityHaircutBasisPoints < 0 || capacityHaircutBasisPoints > 10_000)
                 {
                     return Failed("Capacity haircut must be between 0 and 10000 basis points.");
@@ -92,7 +102,7 @@ namespace ArchrealmsPassport.Windows.Services
                     ["concentration_haircut"] = 0.0,
                     ["churn_haircut"] = 0.0,
                     ["audit_confidence_haircut"] = 0.0,
-                    ["capacity_evidence_refs"] = Array.Empty<string>(),
+                    ["capacity_evidence_refs"] = new[] { "local_capacity_report:" + timestamp + ":" + normalizedServiceClass },
                     ["summary"] = "Conservative Crown Credit issuance-capacity report for Passport monetary ledger validation."
                 };
                 File.WriteAllText(reportPath, JsonSerializer.Serialize(report, JsonOptions), Encoding.UTF8);
@@ -161,11 +171,6 @@ namespace ArchrealmsPassport.Windows.Services
                 }
 
                 var maxIssuance = ReadInt64(root, "max_issuance_base_units");
-                if (maxIssuance < issuanceAmountBaseUnits)
-                {
-                    return Failed("CC issuance exceeds the conservative capacity report limit.");
-                }
-
                 if (ReadBool(root, "thin_market_issuance_zero"))
                 {
                     return Failed("The CC capacity report applies a thin-market zero-issuance fallback.");
@@ -174,6 +179,11 @@ namespace ArchrealmsPassport.Windows.Services
                 if (!ReadBool(root, "independent_volume_qualified"))
                 {
                     return Failed("The CC capacity report lacks qualified independent volume.");
+                }
+
+                if (maxIssuance < issuanceAmountBaseUnits)
+                {
+                    return Failed("CC issuance exceeds the conservative capacity report limit.");
                 }
 
                 if (!ReadBool(root, "continuity_reserve_excluded") || !ReadBool(root, "operational_reserve_excluded"))

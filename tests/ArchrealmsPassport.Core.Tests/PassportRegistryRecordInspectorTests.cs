@@ -219,6 +219,158 @@ public sealed class PassportRegistryRecordInspectorTests
     }
 
     [Fact]
+    public void ReportsConversionExecutionPolicyFailures()
+    {
+        var json = """
+        {
+          "schema_version": 1,
+          "record_type": "passport_arch_cc_conversion_execution",
+          "execution_id": "execution-1",
+          "created_utc": "2026-05-15T00:00:00Z",
+          "release_lane": "production-mvp",
+          "ledger_namespace": "archrealms-passport-production-mvp",
+          "policy_version": "passport-release-lanes-v1",
+          "account_id": "account-1",
+          "archrealms_identity_id": "identity-1",
+          "wallet_key_id": "wallet-1",
+          "quote_id": "quote-1",
+          "quote_record_path": "records/quote.json",
+          "quote_record_sha256": "not-a-hash",
+          "source_asset_code": "ARCH",
+          "destination_asset_code": "ARCH",
+          "source_amount_base_units": 0,
+          "destination_amount_base_units": 0,
+          "source_ledger_event_path": "records/event.json",
+          "source_ledger_event_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "destination_ledger_event_path": "records/event.json",
+          "destination_ledger_event_sha256": "not-a-hash",
+          "status": "pending",
+          "guaranteed_conversion": true,
+          "fixed_parity": true,
+          "stable_value_claim": true,
+          "summary": "Invalid execution."
+        }
+        """;
+
+        var inspection = PassportRegistryRecordInspector.Inspect(Encoding.UTF8.GetBytes(json));
+
+        Assert.True(inspection.IsRecord);
+        Assert.False(inspection.IsEnvelopeValid);
+        Assert.Contains("conversion_execution_policy:quote_record_sha256_invalid", inspection.ValidationFailures);
+        Assert.Contains("conversion_execution_policy:destination_ledger_event_sha256_invalid", inspection.ValidationFailures);
+        Assert.Contains("conversion_execution_policy:status_invalid", inspection.ValidationFailures);
+        Assert.Contains("conversion_execution_policy:source_destination_events_must_differ", inspection.ValidationFailures);
+        Assert.Contains("conversion_execution_policy:source_destination_must_differ", inspection.ValidationFailures);
+        Assert.Contains("conversion_execution_policy:positive_amounts_required", inspection.ValidationFailures);
+        Assert.Contains("conversion_execution_policy:guaranteed_conversion_forbidden", inspection.ValidationFailures);
+        Assert.Contains("conversion_execution_policy:fixed_parity_forbidden", inspection.ValidationFailures);
+        Assert.Contains("conversion_execution_policy:stable_value_claim_forbidden", inspection.ValidationFailures);
+    }
+
+    [Fact]
+    public void ReportsCcCapacityReportPolicyFailures()
+    {
+        var json = """
+        {
+          "schema_version": 1,
+          "record_type": "passport_cc_capacity_report",
+          "record_id": "capacity-1",
+          "created_utc": "2026-05-15T00:00:00Z",
+          "release_lane": "production-mvp",
+          "ledger_namespace": "archrealms-passport-production-mvp",
+          "policy_version": "passport-release-lanes-v1",
+          "service_class": "mvp_storage",
+          "reporting_period_start_utc": "2026-05-15T00:00:00Z",
+          "reporting_period_end_utc": "2026-05-14T00:00:00Z",
+          "conservative_service_liability_capacity_base_units": 0,
+          "outstanding_cc_before_base_units": -1,
+          "max_issuance_base_units": 10,
+          "capacity_haircut_basis_points": 10001,
+          "independent_volume_qualified": false,
+          "thin_market_issuance_zero": true,
+          "continuity_reserve_excluded": false,
+          "operational_reserve_excluded": false,
+          "affiliate_trade_exclusion_applied": false,
+          "proof_history_haircut": 1.5,
+          "uptime_haircut": 0.0,
+          "retrieval_haircut": 0.0,
+          "repair_haircut": 0.0,
+          "concentration_haircut": 0.0,
+          "churn_haircut": 0.0,
+          "audit_confidence_haircut": 0.0,
+          "capacity_evidence_refs": [],
+          "summary": "Invalid capacity report."
+        }
+        """;
+
+        var inspection = PassportRegistryRecordInspector.Inspect(Encoding.UTF8.GetBytes(json));
+
+        Assert.True(inspection.IsRecord);
+        Assert.False(inspection.IsEnvelopeValid);
+        Assert.Contains("cc_capacity_policy:reporting_period_invalid", inspection.ValidationFailures);
+        Assert.Contains("cc_capacity_policy:capacity_amounts_invalid", inspection.ValidationFailures);
+        Assert.Contains("cc_capacity_policy:capacity_haircut_basis_points_invalid", inspection.ValidationFailures);
+        Assert.Contains("cc_capacity_policy:haircut_out_of_range:proof_history_haircut", inspection.ValidationFailures);
+        Assert.Contains("cc_capacity_policy:continuity_reserve_must_be_excluded", inspection.ValidationFailures);
+        Assert.Contains("cc_capacity_policy:operational_reserve_must_be_excluded", inspection.ValidationFailures);
+        Assert.Contains("cc_capacity_policy:affiliate_trade_exclusion_required", inspection.ValidationFailures);
+        Assert.Contains("cc_capacity_policy:thin_market_requires_zero_issuance", inspection.ValidationFailures);
+        Assert.Contains("cc_capacity_policy:unqualified_volume_requires_zero_issuance", inspection.ValidationFailures);
+        Assert.Contains("cc_capacity_policy:capacity_evidence_refs_required", inspection.ValidationFailures);
+    }
+
+    [Fact]
+    public void ReportsStorageRedemptionPolicyFailures()
+    {
+        var json = """
+        {
+          "schema_version": 1,
+          "record_type": "passport_storage_redemption_epoch_burn",
+          "record_id": "burn-1",
+          "record_stage": "refund",
+          "redemption_id": "redemption-1",
+          "created_utc": "2026-05-15T00:00:00Z",
+          "release_lane": "production-mvp",
+          "ledger_namespace": "archrealms-passport-production-mvp",
+          "policy_version": "passport-release-lanes-v1",
+          "account_id": "account-1",
+          "archrealms_identity_id": "identity-1",
+          "wallet_key_id": "wallet-1",
+          "quote_id": "quote-1",
+          "service_class": "mvp_storage",
+          "storage_gb": 10,
+          "epoch_count": 2,
+          "cc_rate_per_gb_epoch_base_units": 3,
+          "total_cc_base_units": 50,
+          "accepted_redemption_id": "redemption-1",
+          "escrow_ledger_event_path": "records/escrow.json",
+          "escrow_ledger_event_sha256": "not-a-hash",
+          "proof_record_path": "records/proof.json",
+          "proof_record_sha256": "also-not-a-hash",
+          "verified_gb_days": 0,
+          "burn_cc_base_units": 60,
+          "failure_remedy": "cash_out",
+          "quote_expires_utc": "not-a-date",
+          "wallet_signature": {},
+          "summary": "Invalid storage burn."
+        }
+        """;
+
+        var inspection = PassportRegistryRecordInspector.Inspect(Encoding.UTF8.GetBytes(json));
+
+        Assert.True(inspection.IsRecord);
+        Assert.False(inspection.IsEnvelopeValid);
+        Assert.Contains("storage_redemption_policy:record_stage_invalid", inspection.ValidationFailures);
+        Assert.Contains("storage_redemption_policy:total_cc_must_match_quote_terms", inspection.ValidationFailures);
+        Assert.Contains("storage_redemption_policy:failure_remedy_invalid", inspection.ValidationFailures);
+        Assert.Contains("storage_redemption_policy:quote_expires_utc_invalid", inspection.ValidationFailures);
+        Assert.Contains("storage_redemption_policy:escrow_ledger_event_sha256_invalid", inspection.ValidationFailures);
+        Assert.Contains("storage_redemption_policy:proof_record_sha256_invalid", inspection.ValidationFailures);
+        Assert.Contains("storage_redemption_policy:positive_burn_required", inspection.ValidationFailures);
+        Assert.Contains("storage_redemption_policy:burn_exceeds_total", inspection.ValidationFailures);
+    }
+
+    [Fact]
     public void ValidatesHostedOperationalRecordPolicies()
     {
         var backup = """

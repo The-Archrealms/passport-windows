@@ -298,6 +298,21 @@ public static class PassportRegistryRecordInspector
             ValidateConversionQuoteRecord(root, validationFailures);
         }
 
+        if (string.Equals(recordType, "passport_arch_cc_conversion_execution", StringComparison.Ordinal))
+        {
+            ValidateConversionExecutionRecord(root, validationFailures);
+        }
+
+        if (string.Equals(recordType, PassportRecordTypes.CcCapacityReport, StringComparison.Ordinal))
+        {
+            ValidateCcCapacityReportRecord(root, validationFailures);
+        }
+
+        if (recordType.StartsWith("passport_storage_redemption", StringComparison.Ordinal))
+        {
+            ValidateStorageRedemptionRecord(root, recordType, validationFailures);
+        }
+
         if (string.Equals(recordType, PassportRecordTypes.RecoveryControlValidation, StringComparison.Ordinal))
         {
             ValidateRecoveryControlValidationRecord(root, validationFailures);
@@ -367,6 +382,241 @@ public static class PassportRegistryRecordInspector
         AddIfTrue(root, "stable_value_claim", "conversion_quote_policy:stable_value_claim_forbidden", validationFailures);
         AddIfTrue(root, "legal_tender_claim", "conversion_quote_policy:legal_tender_claim_forbidden", validationFailures);
         AddIfTrue(root, "unlimited_convertibility", "conversion_quote_policy:unlimited_convertibility_forbidden", validationFailures);
+    }
+
+    private static void ValidateConversionExecutionRecord(JsonElement root, List<string> validationFailures)
+    {
+        if (!LooksLikeSha256(ReadString(root, "quote_record_sha256")))
+        {
+            validationFailures.Add("conversion_execution_policy:quote_record_sha256_invalid");
+        }
+
+        if (!LooksLikeSha256(ReadString(root, "source_ledger_event_sha256")))
+        {
+            validationFailures.Add("conversion_execution_policy:source_ledger_event_sha256_invalid");
+        }
+
+        if (!LooksLikeSha256(ReadString(root, "destination_ledger_event_sha256")))
+        {
+            validationFailures.Add("conversion_execution_policy:destination_ledger_event_sha256_invalid");
+        }
+
+        var status = ReadString(root, "status", "execution_status");
+        if (status is not "executed")
+        {
+            validationFailures.Add("conversion_execution_policy:status_invalid");
+        }
+
+        var sourceLedgerEventPath = ReadString(root, "source_ledger_event_path");
+        var destinationLedgerEventPath = ReadString(root, "destination_ledger_event_path");
+        if (!string.IsNullOrWhiteSpace(sourceLedgerEventPath)
+            && string.Equals(sourceLedgerEventPath, destinationLedgerEventPath, StringComparison.OrdinalIgnoreCase))
+        {
+            validationFailures.Add("conversion_execution_policy:source_destination_events_must_differ");
+        }
+
+        var sourceAsset = ReadString(root, "source_asset_code");
+        var destinationAsset = ReadString(root, "destination_asset_code");
+        if (!string.IsNullOrWhiteSpace(sourceAsset) || !string.IsNullOrWhiteSpace(destinationAsset))
+        {
+            if (!IsArchOrCc(sourceAsset) || !IsArchOrCc(destinationAsset))
+            {
+                validationFailures.Add("conversion_execution_policy:asset_pair_must_be_arch_cc");
+            }
+
+            if (string.Equals(sourceAsset, destinationAsset, StringComparison.OrdinalIgnoreCase))
+            {
+                validationFailures.Add("conversion_execution_policy:source_destination_must_differ");
+            }
+        }
+
+        if ((root.TryGetProperty("source_amount_base_units", out _) && ReadInt64(root, "source_amount_base_units") <= 0)
+            || (root.TryGetProperty("destination_amount_base_units", out _) && ReadInt64(root, "destination_amount_base_units") <= 0))
+        {
+            validationFailures.Add("conversion_execution_policy:positive_amounts_required");
+        }
+
+        AddIfTrue(root, "guaranteed_conversion", "conversion_execution_policy:guaranteed_conversion_forbidden", validationFailures);
+        AddIfTrue(root, "fixed_parity", "conversion_execution_policy:fixed_parity_forbidden", validationFailures);
+        AddIfTrue(root, "stable_value_claim", "conversion_execution_policy:stable_value_claim_forbidden", validationFailures);
+    }
+
+    private static void ValidateCcCapacityReportRecord(JsonElement root, List<string> validationFailures)
+    {
+        if (!TryReadUtc(root, "reporting_period_start_utc", out var startUtc)
+            || !TryReadUtc(root, "reporting_period_end_utc", out var endUtc)
+            || endUtc <= startUtc)
+        {
+            validationFailures.Add("cc_capacity_policy:reporting_period_invalid");
+        }
+
+        var conservativeCapacity = ReadInt64(root, "conservative_service_liability_capacity_base_units");
+        var outstanding = ReadInt64(root, "outstanding_cc_before_base_units");
+        var maxIssuance = ReadInt64(root, "max_issuance_base_units");
+        if (conservativeCapacity <= 0 || outstanding < 0 || maxIssuance < 0)
+        {
+            validationFailures.Add("cc_capacity_policy:capacity_amounts_invalid");
+        }
+
+        var haircutBasisPoints = ReadInt(root, "capacity_haircut_basis_points");
+        if (haircutBasisPoints < 0 || haircutBasisPoints > 10_000)
+        {
+            validationFailures.Add("cc_capacity_policy:capacity_haircut_basis_points_invalid");
+        }
+
+        foreach (var haircutField in new[]
+        {
+            "proof_history_haircut",
+            "uptime_haircut",
+            "retrieval_haircut",
+            "repair_haircut",
+            "concentration_haircut",
+            "churn_haircut",
+            "audit_confidence_haircut"
+        })
+        {
+            var haircut = ReadDouble(root, haircutField);
+            if (haircut < 0.0 || haircut > 1.0)
+            {
+                validationFailures.Add("cc_capacity_policy:haircut_out_of_range:" + haircutField);
+            }
+        }
+
+        if (!ReadBool(root, "continuity_reserve_excluded"))
+        {
+            validationFailures.Add("cc_capacity_policy:continuity_reserve_must_be_excluded");
+        }
+
+        if (!ReadBool(root, "operational_reserve_excluded"))
+        {
+            validationFailures.Add("cc_capacity_policy:operational_reserve_must_be_excluded");
+        }
+
+        if (!ReadBool(root, "affiliate_trade_exclusion_applied"))
+        {
+            validationFailures.Add("cc_capacity_policy:affiliate_trade_exclusion_required");
+        }
+
+        if (ReadBool(root, "thin_market_issuance_zero") && maxIssuance != 0)
+        {
+            validationFailures.Add("cc_capacity_policy:thin_market_requires_zero_issuance");
+        }
+
+        if (!ReadBool(root, "independent_volume_qualified") && maxIssuance != 0)
+        {
+            validationFailures.Add("cc_capacity_policy:unqualified_volume_requires_zero_issuance");
+        }
+
+        if (ReadStringArray(root, "capacity_evidence_refs").Length == 0)
+        {
+            validationFailures.Add("cc_capacity_policy:capacity_evidence_refs_required");
+        }
+    }
+
+    private static void ValidateStorageRedemptionRecord(JsonElement root, string recordType, List<string> validationFailures)
+    {
+        var recordStage = ReadString(root, "record_stage");
+        var expectedStage = recordType switch
+        {
+            "passport_storage_redemption_quote" => "quote",
+            "passport_storage_redemption_accepted" => "accepted",
+            "passport_storage_redemption_epoch_burn" => "epoch_burn",
+            "passport_storage_redemption_refund" => "refund",
+            _ => string.Empty
+        };
+
+        if (!string.IsNullOrWhiteSpace(expectedStage)
+            && !string.Equals(recordStage, expectedStage, StringComparison.Ordinal))
+        {
+            validationFailures.Add("storage_redemption_policy:record_stage_invalid");
+        }
+
+        if (recordType == "passport_storage_redemption"
+            && recordStage is not "quote" and not "accepted" and not "epoch_burn" and not "refund" and not "recredit" and not "service_extension" and not "admin_escrow_release" and not "admin_burn_override")
+        {
+            validationFailures.Add("storage_redemption_policy:record_stage_invalid");
+        }
+
+        var storageGb = ReadInt64(root, "storage_gb");
+        var epochCount = ReadInt64(root, "epoch_count");
+        var rate = ReadInt64(root, "cc_rate_per_gb_epoch_base_units");
+        var total = ReadInt64(root, "total_cc_base_units");
+        if (storageGb <= 0 || epochCount <= 0 || rate <= 0 || total <= 0)
+        {
+            validationFailures.Add("storage_redemption_policy:positive_quote_terms_required");
+        }
+        else if (!TryMultiply(storageGb, epochCount, rate, out var expectedTotal) || total != expectedTotal)
+        {
+            validationFailures.Add("storage_redemption_policy:total_cc_must_match_quote_terms");
+        }
+
+        var failureRemedy = ReadString(root, "failure_remedy");
+        if (failureRemedy is not "refund_or_service_extension_if_service_fails"
+            and not "automatic_cc_recredit_or_service_extension"
+            and not "refund"
+            and not "recredit"
+            and not "service_extension"
+            and not "refund_or_extension"
+            and not "recredit_or_extension")
+        {
+            validationFailures.Add("storage_redemption_policy:failure_remedy_invalid");
+        }
+
+        if (!TryReadUtc(root, "quote_expires_utc", out _))
+        {
+            validationFailures.Add("storage_redemption_policy:quote_expires_utc_invalid");
+        }
+
+        if (recordType is "passport_storage_redemption_accepted" or "passport_storage_redemption_epoch_burn" or "passport_storage_redemption_refund")
+        {
+            if (string.IsNullOrWhiteSpace(ReadString(root, "accepted_redemption_id")))
+            {
+                validationFailures.Add("storage_redemption_policy:accepted_redemption_id_required");
+            }
+
+            if (!LooksLikeSha256(ReadString(root, "escrow_ledger_event_sha256")))
+            {
+                validationFailures.Add("storage_redemption_policy:escrow_ledger_event_sha256_invalid");
+            }
+        }
+
+        if (recordType == "passport_storage_redemption_accepted" && !LooksLikeSha256(ReadString(root, "quote_sha256")))
+        {
+            validationFailures.Add("storage_redemption_policy:quote_sha256_invalid");
+        }
+
+        if (recordType == "passport_storage_redemption_epoch_burn")
+        {
+            var burn = ReadInt64(root, "burn_cc_base_units");
+            if (!LooksLikeSha256(ReadString(root, "proof_record_sha256")))
+            {
+                validationFailures.Add("storage_redemption_policy:proof_record_sha256_invalid");
+            }
+
+            if (ReadInt64(root, "verified_gb_days") <= 0 || burn <= 0)
+            {
+                validationFailures.Add("storage_redemption_policy:positive_burn_required");
+            }
+
+            if (burn > total)
+            {
+                validationFailures.Add("storage_redemption_policy:burn_exceeds_total");
+            }
+        }
+
+        if (recordType == "passport_storage_redemption_refund")
+        {
+            var refund = ReadInt64(root, "refund_cc_base_units");
+            if (refund <= 0)
+            {
+                validationFailures.Add("storage_redemption_policy:positive_refund_required");
+            }
+
+            if (refund > total)
+            {
+                validationFailures.Add("storage_redemption_policy:refund_exceeds_total");
+            }
+        }
     }
 
     private static void ValidateRecoveryControlValidationRecord(JsonElement root, List<string> validationFailures)
@@ -450,6 +700,21 @@ public static class PassportRegistryRecordInspector
         return 0;
     }
 
+    private static double ReadDouble(JsonElement root, string propertyName)
+    {
+        if (!root.TryGetProperty(propertyName, out var element))
+        {
+            return 0.0;
+        }
+
+        if (element.ValueKind == JsonValueKind.Number && element.TryGetDouble(out var value))
+        {
+            return value;
+        }
+
+        return 0.0;
+    }
+
     private static long ReadInt64(JsonElement root, string propertyName)
     {
         if (!root.TryGetProperty(propertyName, out var element))
@@ -476,6 +741,32 @@ public static class PassportRegistryRecordInspector
     {
         var normalized = (value ?? string.Empty).Trim();
         return normalized.Length == 64 && normalized.All(Uri.IsHexDigit);
+    }
+
+    private static bool TryReadUtc(JsonElement root, string propertyName, out DateTimeOffset value)
+    {
+        if (DateTimeOffset.TryParse(ReadString(root, propertyName), out var parsed))
+        {
+            value = parsed.ToUniversalTime();
+            return true;
+        }
+
+        value = default;
+        return false;
+    }
+
+    private static bool TryMultiply(long left, long middle, long right, out long result)
+    {
+        try
+        {
+            result = checked(left * middle * right);
+            return true;
+        }
+        catch (OverflowException)
+        {
+            result = 0;
+            return false;
+        }
     }
 
     private static string[] ReadStringArray(JsonElement root, string propertyName)

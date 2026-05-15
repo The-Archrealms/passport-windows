@@ -55,7 +55,7 @@ public sealed class PassportCrownCreditCapacityServiceTests
             "storage",
             conservativeServiceLiabilityCapacityBaseUnits: 1_000,
             outstandingCrownCreditBeforeBaseUnits: 100,
-            maxIssuanceBaseUnits: 250,
+            maxIssuanceBaseUnits: 0,
             capacityHaircutBasisPoints: 6500,
             independentVolumeQualified: true,
             thinMarketIssuanceZero: true,
