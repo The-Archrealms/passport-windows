@@ -272,6 +272,13 @@ $checks += Invoke-ValidationScript `
     -Arguments (@("-CanaryReadinessPath", $CanaryReadinessPath) + $placeholderArgs) `
     -ReportRelativePath (Join-Path $childReportRoot "canary-readiness-provisioning-validation-report.json")
 
+$checks += Invoke-ValidationScript `
+    -Id "canary_readiness_evidence_packet" `
+    -Description "Canary MVP readiness evidence packet schemas, prohibited policy flags, cross-references, and approval hashes validate before canary values are loaded." `
+    -ScriptRelativePath "tools\release\Test-PassportCanaryMvpReadinessEvidencePacket.ps1" `
+    -Arguments (@("-PacketRoot", $CanaryReadinessPath) + $placeholderArgs) `
+    -ReportRelativePath (Join-Path $childReportRoot "canary-mvp-readiness-evidence-packet-validation-report.json")
+
 $hostedServicesArgs = @(
     "-DockerfilePath", $HostedServicesDockerfilePath,
     "-ComposePath", $HostedServicesComposePath,

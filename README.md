@@ -710,7 +710,7 @@ Use `-RequireNoPlaceholders` against filled, controlled copies of the provisioni
   -RequireNoPlaceholders
 ```
 
-The packet validator runs the package-signing, release-endpoint, managed-storage, managed-signing-custody, canary-readiness, hosted-services, managed-signing, open-weight AI runtime, production-ops, and production-monetary validators and writes child reports under `artifacts\release\production-provisioning-packet\`.
+The packet validator runs the package-signing, release-endpoint, managed-storage, managed-signing-custody, canary-readiness provisioning, canary-readiness evidence packet, hosted-services, managed-signing, open-weight AI runtime, production-ops, and production-monetary validators and writes child reports under `artifacts\release\production-provisioning-packet\`.
 
 Generate a redacted release-evidence packet for product, engineering, security/privacy, and Crown monetary authority review after the pre-MVP report, staging readiness report, canary MVP readiness report, production readiness report, and provisioning packet report have been refreshed:
 
