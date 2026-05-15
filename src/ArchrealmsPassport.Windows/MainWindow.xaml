@@ -173,6 +173,13 @@
                                              Text="{Binding CitizenName, UpdateSourceTrigger=PropertyChanged}" />
                                 </StackPanel>
 
+                                <CheckBox AutomationProperties.AutomationId="HomeStorageOptInCheckBox"
+                                          Margin="0,16,0,0"
+                                          FontSize="13"
+                                          Foreground="#34413C"
+                                          IsChecked="{Binding ParticipateInPublicRegistry}"
+                                          Content="{Binding HomeStorageOptInLabel}" />
+
                                 <Button AutomationProperties.AutomationId="PrimaryActionButton"
                                         Margin="0,22,0,12"
                                         HorizontalAlignment="Stretch"

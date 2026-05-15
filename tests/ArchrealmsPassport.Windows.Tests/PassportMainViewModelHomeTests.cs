@@ -60,6 +60,12 @@ public sealed class PassportMainViewModelHomeTests
     }
 
     [Fact]
+    public void HomeStorageOptInLabelShowsDefaultStorageLimit()
+    {
+        Assert.Equal("Contribute 1 GB storage", PassportMainViewModel.BuildHomeStorageOptInLabel("1 GB"));
+    }
+
+    [Fact]
     public void PrimaryActionOnlyHidesAfterRegistrationWhenStorageIsRunning()
     {
         Assert.Equal(Visibility.Visible, PassportMainViewModel.BuildPrimaryActionVisibility(false, true, true, true, true));

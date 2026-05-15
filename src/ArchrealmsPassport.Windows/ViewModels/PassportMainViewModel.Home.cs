@@ -210,6 +210,11 @@ namespace ArchrealmsPassport.Windows.ViewModels
                 : "Not enabled";
         }
 
+        internal static string BuildHomeStorageOptInLabel(string storageAllocationLabel)
+        {
+            return "Contribute " + storageAllocationLabel + " storage";
+        }
+
         internal static string BuildLocalNodeSummaryText(bool participatesInPublicRegistry, bool storageNodePrepared, bool storageNodeRunning)
         {
             if (storageNodeRunning)
@@ -289,6 +294,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
             OnPropertyChanged(nameof(LocalNodeSummaryText));
             OnPropertyChanged(nameof(RegistryPackageSummaryText));
             OnPropertyChanged(nameof(HomePassportNameInputVisibility));
+            OnPropertyChanged(nameof(HomeStorageOptInLabel));
             OnPropertyChanged(nameof(PrimaryActionLabel));
             OnPropertyChanged(nameof(PrimaryActionVisibility));
             _primaryActionCommand.RaiseCanExecuteChanged();

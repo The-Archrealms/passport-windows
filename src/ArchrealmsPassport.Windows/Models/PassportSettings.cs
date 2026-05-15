@@ -21,9 +21,9 @@ namespace ArchrealmsPassport.Windows.Models
         public string IpfsRepoPath { get; set; } = string.Empty;
         public string IpfsCliPathOverride { get; set; } = string.Empty;
         public int StorageAllocationGb { get; set; } = 1;
-        public string NodeParticipationMode { get; set; } = "Public archive contributor";
+        public string NodeParticipationMode { get; set; } = "Read-only cache";
         public string NodeCachePolicy { get; set; } = "Balanced pinned archive";
-        public bool ParticipateInPublicRegistry { get; set; } = true;
+        public bool ParticipateInPublicRegistry { get; set; }
         public bool PreferWindowsHelloCredentials { get; set; }
         public bool PublishCarExports { get; set; } = true;
         public bool PreferWifiOnly { get; set; }

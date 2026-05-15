@@ -252,12 +252,14 @@ namespace ArchrealmsPassport.Windows.ViewModels
                 if (SetField(ref _storageAllocationGb, value))
                 {
                     OnPropertyChanged(nameof(StorageAllocationLabel));
+                    OnPropertyChanged(nameof(HomeStorageOptInLabel));
                     RaiseNodeProfilePropertiesChanged();
                 }
             }
         }
 
         public string StorageAllocationLabel { get { return string.Format("{0:0} GB", Math.Round(StorageAllocationGb)); } }
+        public string HomeStorageOptInLabel { get { return BuildHomeStorageOptInLabel(StorageAllocationLabel); } }
         public string NodeParticipationMode
         {
             get { return _nodeParticipationMode; }
@@ -302,6 +304,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
 
                     RaiseNodeProfilePropertiesChanged();
                     RaiseHomePropertiesChanged();
+                    OnPropertyChanged(nameof(HomeStorageOptInLabel));
                 }
             }
         }
