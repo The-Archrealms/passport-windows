@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using ArchrealmsPassport.Core.Protocol;
 using ArchrealmsPassport.HostedServices.Contracts;
 
 namespace ArchrealmsPassport.HostedServices;
@@ -19,7 +20,7 @@ public static class PassportHostedPolicy
         try
         {
             var record = request.RequestRecord;
-            if (!Matches(record, "record_type", "passport_ai_session_request"))
+            if (!Matches(record, "record_type", PassportRecordTypes.AiSessionRequest))
             {
                 return FailedAiSession("AI session authorization requires a passport_ai_session_request record.");
             }
@@ -46,7 +47,7 @@ public static class PassportHostedPolicy
             }
 
             if (!record.TryGetProperty("authority_boundaries", out var authority)
-                || !AuthorityBoundaryIsNonAuthoritative(authority))
+                || !PassportAiAuthorityPolicy.IsNonAuthoritative(authority))
             {
                 return FailedAiSession("AI session request must mark AI as non-authoritative.");
             }
@@ -66,7 +67,7 @@ public static class PassportHostedPolicy
             var session = new Dictionary<string, object?>
             {
                 ["schema_version"] = 1,
-                ["record_type"] = "passport_ai_session_record",
+                ["record_type"] = PassportRecordTypes.AiSessionRecord,
                 ["record_id"] = sessionId,
                 ["session_id"] = sessionId,
                 ["created_utc"] = DateTimeOffset.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
@@ -90,7 +91,7 @@ public static class PassportHostedPolicy
                     ["tokens_used"] = 0
                 },
                 ["privacy"] = CopyObject(record, "privacy"),
-                ["authority_boundaries"] = CreateAuthorityBoundaries(),
+                ["authority_boundaries"] = PassportAiAuthorityPolicy.CreateNonAuthorityBoundaries(),
                 ["summary"] = "Hosted Passport AI session. The bearer token is returned to the caller and not stored in this record."
             };
 
@@ -144,7 +145,7 @@ public static class PassportHostedPolicy
             return FailedChat("AI chat requires a message.");
         }
 
-        if (ContainsSecretMaterial(request.Message))
+        if (PassportAiAuthorityPolicy.ContainsSecretMaterial(request.Message))
         {
             return FailedChat("AI chat rejected private key, seed, or recovery-secret material.");
         }
@@ -208,7 +209,7 @@ public static class PassportHostedPolicy
         var record = new Dictionary<string, object?>
         {
             ["schema_version"] = 1,
-            ["record_type"] = "passport_cc_capacity_report",
+            ["record_type"] = PassportRecordTypes.CcCapacityReport,
             ["record_id"] = recordId,
             ["created_utc"] = DateTimeOffset.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
             ["contract_version"] = ContractVersion,
@@ -269,7 +270,7 @@ public static class PassportHostedPolicy
         var record = new Dictionary<string, object?>
         {
             ["schema_version"] = 1,
-            ["record_type"] = "passport_arch_genesis_manifest",
+            ["record_type"] = PassportRecordTypes.ArchGenesisManifest,
             ["record_id"] = recordId,
             ["created_utc"] = DateTimeOffset.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
             ["contract_version"] = ContractVersion,
@@ -299,7 +300,7 @@ public static class PassportHostedPolicy
 
     public static PassportHostedRecordResponse ValidateAdminAuthority(PassportAdminAuthorityValidationRequest request)
     {
-        if (!Matches(request.AdminAuthorityRecord, "record_type", "passport_admin_dual_control_action"))
+        if (!Matches(request.AdminAuthorityRecord, "record_type", PassportRecordTypes.AdminDualControlAction))
         {
             return FailedRecord("Admin authority validation requires a dual-control authority record.");
         }
@@ -348,7 +349,7 @@ public static class PassportHostedPolicy
     public static PassportHostedRecordResponse AcceptStorageDeliveryRequest(PassportStorageDeliveryRequest request)
     {
         var source = request.ServiceDeliveryRequestRecord;
-        if (!Matches(source, "record_type", "passport_storage_service_delivery_request"))
+        if (!Matches(source, "record_type", PassportRecordTypes.StorageServiceDeliveryRequest))
         {
             return FailedRecord("Storage delivery requires a passport_storage_service_delivery_request record.");
         }
@@ -369,7 +370,7 @@ public static class PassportHostedPolicy
         var record = new Dictionary<string, object?>
         {
             ["schema_version"] = 1,
-            ["record_type"] = "passport_storage_delivery_acceptance",
+            ["record_type"] = PassportRecordTypes.StorageDeliveryAcceptance,
             ["record_id"] = recordId,
             ["created_utc"] = DateTimeOffset.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
             ["contract_version"] = ContractVersion,
@@ -467,40 +468,6 @@ public static class PassportHostedPolicy
         };
     }
 
-    private static Dictionary<string, object?> CreateAuthorityBoundaries()
-    {
-        return new Dictionary<string, object?>
-        {
-            ["can_approve_recovery"] = false,
-            ["can_issue_credits"] = false,
-            ["can_release_escrow"] = false,
-            ["can_mark_service_delivered"] = false,
-            ["can_burn_credits"] = false,
-            ["can_change_registry_authority"] = false,
-            ["can_execute_wallet_operations"] = false,
-            ["can_override_identity_status"] = false,
-            ["can_approve_admin_authority"] = false
-        };
-    }
-
-    private static bool AuthorityBoundaryIsNonAuthoritative(JsonElement authority)
-    {
-        var forbidden = new[]
-        {
-            "can_approve_recovery",
-            "can_issue_credits",
-            "can_release_escrow",
-            "can_mark_service_delivered",
-            "can_burn_credits",
-            "can_change_registry_authority",
-            "can_execute_wallet_operations",
-            "can_override_identity_status",
-            "can_approve_admin_authority"
-        };
-
-        return forbidden.All(name => !ReadBoolean(authority, name));
-    }
-
     private static Dictionary<string, object?> CopyObject(JsonElement root, string propertyName)
     {
         if (!root.TryGetProperty(propertyName, out var property) || property.ValueKind != JsonValueKind.Object)
@@ -509,19 +476,6 @@ public static class PassportHostedPolicy
         }
 
         return JsonSerializer.Deserialize<Dictionary<string, object?>>(property.GetRawText()) ?? new Dictionary<string, object?>();
-    }
-
-    private static bool ContainsSecretMaterial(string value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return false;
-        }
-
-        return value.Contains("-----BEGIN", StringComparison.OrdinalIgnoreCase)
-            || value.Contains("PRIVATE KEY", StringComparison.OrdinalIgnoreCase)
-            || value.Contains("recovery secret", StringComparison.OrdinalIgnoreCase)
-            || value.Contains("seed phrase", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool Matches(JsonElement root, string propertyName, string expected)

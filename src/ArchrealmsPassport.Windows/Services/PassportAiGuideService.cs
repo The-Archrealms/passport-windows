@@ -10,6 +10,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using ArchrealmsPassport.Core.Protocol;
 using ArchrealmsPassport.Windows.Models;
 
 namespace ArchrealmsPassport.Windows.Services
@@ -131,7 +132,7 @@ namespace ArchrealmsPassport.Windows.Services
             PassportAiKnowledgePackRetrievalResult retrieval,
             CancellationToken cancellationToken)
         {
-            var endpoint = BuildGatewayEndpoint(gatewayUrl, "/ai/chat");
+            var endpoint = BuildGatewayEndpoint(gatewayUrl, PassportAiProtocolDefaults.ChatEndpoint);
             var payload = new Dictionary<string, object?>
             {
                 ["session_id"] = sessionId,
@@ -262,7 +263,7 @@ namespace ArchrealmsPassport.Windows.Services
 
             using var document = JsonDocument.Parse(File.ReadAllText(resolvedSessionPath));
             var root = document.RootElement;
-            if (!Matches(root, "record_type", "passport_ai_session_record"))
+            if (!Matches(root, "record_type", PassportRecordTypes.AiSessionRecord))
             {
                 return Failed("AI session record has an unsupported type.");
             }
@@ -313,7 +314,7 @@ namespace ArchrealmsPassport.Windows.Services
             var record = new Dictionary<string, object?>
             {
                 ["schema_version"] = 1,
-                ["record_type"] = "passport_ai_chat_record",
+                ["record_type"] = PassportRecordTypes.AiChatRecord,
                 ["record_id"] = chatId,
                 ["created_utc"] = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
                 ["mode"] = mode,
@@ -340,7 +341,7 @@ namespace ArchrealmsPassport.Windows.Services
                 ["runtime_contract"] = new Dictionary<string, object?>
                 {
                     ["passport_calls_gateway_only"] = true,
-                    ["gateway_chat_endpoint"] = "/ai/chat",
+                    ["gateway_chat_endpoint"] = PassportAiProtocolDefaults.ChatEndpoint,
                     ["model_runtime"] = "gateway_managed_open_weight",
                     ["passport_calls_model_runtime_directly"] = false
                 },
@@ -408,9 +409,7 @@ namespace ArchrealmsPassport.Windows.Services
                 return false;
             }
 
-            return Regex.IsMatch(value, "-----BEGIN [A-Z ]*PRIVATE KEY-----", RegexOptions.IgnoreCase)
-                || Regex.IsMatch(value, "(wallet private key|device private key|recovery secret|seed phrase)\\s*[:=]\\s*\\S+", RegexOptions.IgnoreCase)
-                || Regex.IsMatch(value, "\\b(seed|mnemonic)\\s*[:=]\\s*([a-z]+\\s+){11,23}[a-z]+\\b", RegexOptions.IgnoreCase);
+            return PassportAiAuthorityPolicy.ContainsSecretMaterial(value);
         }
 
         private static bool ShouldUseHostedGateway(string gatewayUrl)
@@ -420,7 +419,7 @@ namespace ArchrealmsPassport.Windows.Services
                 return false;
             }
 
-            return !string.Equals(uri.Host, "ai.archrealms.local", StringComparison.OrdinalIgnoreCase);
+            return !string.Equals(uri.Host, new Uri(PassportAiProtocolDefaults.LocalGatewayUrl).Host, StringComparison.OrdinalIgnoreCase);
         }
 
         private static Uri BuildGatewayEndpoint(string gatewayUrl, string relativePath)

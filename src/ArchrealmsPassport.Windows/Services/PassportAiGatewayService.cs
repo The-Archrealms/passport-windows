@@ -8,6 +8,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using ArchrealmsPassport.Core.Protocol;
 using ArchrealmsPassport.Windows.Models;
 
 namespace ArchrealmsPassport.Windows.Services
@@ -66,8 +67,8 @@ namespace ArchrealmsPassport.Windows.Services
                 var signaturePath = Path.Combine(requestRoot, "ai-session-request.sig");
                 var recordPath = Path.Combine(requestRoot, "ai-session-request.json");
                 var nonce = CreateToken();
-                var normalizedGatewayUrl = string.IsNullOrWhiteSpace(gatewayUrl) ? "https://ai.archrealms.local" : gatewayUrl.Trim();
-                var normalizedKnowledgePackId = string.IsNullOrWhiteSpace(knowledgePackId) ? "archrealms-mvp-approved-knowledge" : knowledgePackId.Trim();
+                var normalizedGatewayUrl = string.IsNullOrWhiteSpace(gatewayUrl) ? PassportAiProtocolDefaults.LocalGatewayUrl : gatewayUrl.Trim();
+                var normalizedKnowledgePackId = string.IsNullOrWhiteSpace(knowledgePackId) ? PassportAiProtocolDefaults.ApprovedKnowledgePackId : knowledgePackId.Trim();
 
                 var record = new Dictionary<string, object?>
                 {
@@ -87,7 +88,7 @@ namespace ArchrealmsPassport.Windows.Services
                     ["challenge"] = new Dictionary<string, object?>
                     {
                         ["challenge_nonce"] = nonce,
-                        ["audience"] = "archrealms-ai-gateway",
+                        ["audience"] = PassportAiProtocolDefaults.GatewayAudience,
                         ["requested_scopes"] = new[] { "ai_guide" }
                     },
                     ["privacy"] = new Dictionary<string, object?>
@@ -366,7 +367,7 @@ namespace ArchrealmsPassport.Windows.Services
 
         private PassportAiSessionResult ValidateSessionRequest(string workspaceRoot, JsonElement request)
         {
-            if (!Matches(request, "record_type", "passport_ai_session_request"))
+            if (!Matches(request, "record_type", PassportRecordTypes.AiSessionRequest))
             {
                 return Failed("AI gateway session requires a Passport AI session request record.");
             }
@@ -416,7 +417,7 @@ namespace ArchrealmsPassport.Windows.Services
             }
 
             if (!request.TryGetProperty("authority_boundaries", out var authority)
-                || !AuthorityBoundaryIsNonAuthoritative(authority))
+                || !PassportAiAuthorityPolicy.IsNonAuthoritative(authority))
             {
                 return Failed("AI session request must mark AI as non-authoritative.");
             }
@@ -426,18 +427,7 @@ namespace ArchrealmsPassport.Windows.Services
 
         private static Dictionary<string, object?> CreateAuthorityBoundaries()
         {
-            return new Dictionary<string, object?>
-            {
-                ["can_approve_recovery"] = false,
-                ["can_issue_credits"] = false,
-                ["can_release_escrow"] = false,
-                ["can_mark_service_delivered"] = false,
-                ["can_burn_credits"] = false,
-                ["can_change_registry_authority"] = false,
-                ["can_execute_wallet_operations"] = false,
-                ["can_override_identity_status"] = false,
-                ["can_approve_admin_authority"] = false
-            };
+            return PassportAiAuthorityPolicy.CreateNonAuthorityBoundaries();
         }
 
         private static Dictionary<string, object?> ReadPrivacy(JsonElement request)
@@ -449,24 +439,6 @@ namespace ArchrealmsPassport.Windows.Services
 
             return JsonSerializer.Deserialize<Dictionary<string, object?>>(privacy.GetRawText(), JsonOptions)
                 ?? new Dictionary<string, object?>();
-        }
-
-        private static bool AuthorityBoundaryIsNonAuthoritative(JsonElement authority)
-        {
-            var forbidden = new[]
-            {
-                "can_approve_recovery",
-                "can_issue_credits",
-                "can_release_escrow",
-                "can_mark_service_delivered",
-                "can_burn_credits",
-                "can_change_registry_authority",
-                "can_execute_wallet_operations",
-                "can_override_identity_status",
-                "can_approve_admin_authority"
-            };
-
-            return forbidden.All(name => !ReadBoolean(authority, name));
         }
 
         private static string CreateToken()
@@ -563,7 +535,7 @@ namespace ArchrealmsPassport.Windows.Services
                 return false;
             }
 
-            return !string.Equals(uri.Host, "ai.archrealms.local", StringComparison.OrdinalIgnoreCase);
+            return !string.Equals(uri.Host, new Uri(PassportAiProtocolDefaults.LocalGatewayUrl).Host, StringComparison.OrdinalIgnoreCase);
         }
 
         private static Uri BuildGatewayEndpoint(string gatewayUrl, string relativePath)

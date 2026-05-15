@@ -6,4 +6,8 @@
     <RootNamespace>ArchrealmsPassport.HostedServices</RootNamespace>
     <AssemblyName>ArchrealmsPassport.HostedServices</AssemblyName>
   </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ArchrealmsPassport.Core\ArchrealmsPassport.Core.csproj" />
+  </ItemGroup>
 </Project>
