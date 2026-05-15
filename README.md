@@ -312,6 +312,20 @@ After a local or private signing endpoint is running, validate the endpoint cont
 
 The `ProductionMvp` readiness gate requires the signing endpoint response to include `signing_key_provider`, `signing_key_id`, `signing_key_custody`, and `local_validation_only=false` in addition to a verifiable RSA signature.
 
+Validate the production custody provisioning packet:
+
+```powershell
+.\tools\release\Test-PassportManagedSigningCustodyProvisioning.ps1
+```
+
+When production copies are filled in a controlled key-custody system, validate them with:
+
+```powershell
+.\tools\release\Test-PassportManagedSigningCustodyProvisioning.ps1 `
+  -ManagedSigningCustodyPath C:\secure\archrealms-passport-managed-signing-custody `
+  -RequireNoPlaceholders
+```
+
 ## Open-Weight AI Runtime Deployment
 
 The Passport hosted AI gateway expects a private OpenAI-compatible model runtime at `ARCHREALMS_PASSPORT_AI_INFERENCE_BASE_URL`. Deployment templates for vLLM and Hugging Face TGI live under `deploy/open-weight-ai-runtime/`; Passport clients still talk only to the hosted gateway, never directly to the model runtime.
