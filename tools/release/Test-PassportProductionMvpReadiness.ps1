@@ -263,6 +263,46 @@ function Test-HostedRuntimeStatusEndpoints {
     return $failures
 }
 
+function Test-ReleaseLaneEndpointUrls {
+    $endpoints = @(
+        [pscustomobject]@{
+            Name = "Production API"
+            Value = Get-FirstEnvironmentValue -Names @(
+                "PASSPORT_WINDOWS_PRODUCTION_MVP_API_BASE_URL",
+                "PASSPORT_WINDOWS_RELEASE_LANE_API_BASE_URL"
+            )
+        },
+        [pscustomobject]@{
+            Name = "Production AI gateway"
+            Value = Get-FirstEnvironmentValue -Names @(
+                "PASSPORT_WINDOWS_PRODUCTION_MVP_AI_GATEWAY_URL",
+                "PASSPORT_WINDOWS_RELEASE_LANE_AI_GATEWAY_URL"
+            )
+        }
+    )
+
+    $failures = @()
+    foreach ($endpoint in $endpoints) {
+        if ([string]::IsNullOrWhiteSpace($endpoint.Value)) {
+            continue
+        }
+
+        $uri = $null
+        if (-not [System.Uri]::TryCreate($endpoint.Value, [System.UriKind]::Absolute, [ref]$uri)) {
+            $failures += "$($endpoint.Name) endpoint must be an absolute URL"
+            continue
+        }
+
+        $isLoopback = $uri.IsLoopback
+        $isHttps = [string]::Equals($uri.Scheme, [System.Uri]::UriSchemeHttps, [System.StringComparison]::OrdinalIgnoreCase)
+        if (-not $isHttps -and -not $isLoopback) {
+            $failures += "$($endpoint.Name) endpoint must use HTTPS unless it is a loopback validation URL"
+        }
+    }
+
+    return $failures
+}
+
 function Test-Truthy {
     param(
         [string]$Value
@@ -285,7 +325,8 @@ $gates = @(
         -RequiredAnyEnvironment @(
             @("PASSPORT_WINDOWS_PRODUCTION_MVP_API_BASE_URL", "PASSPORT_WINDOWS_RELEASE_LANE_API_BASE_URL"),
             @("PASSPORT_WINDOWS_PRODUCTION_MVP_AI_GATEWAY_URL", "PASSPORT_WINDOWS_RELEASE_LANE_AI_GATEWAY_URL")
-        )
+        ) `
+        -ExtraCheck ${function:Test-ReleaseLaneEndpointUrls}
 
     New-Gate `
         -Id "hosted_runtime_status" `
