@@ -313,6 +313,13 @@ namespace ArchrealmsPassport.Windows.ViewModels
         public string WalletSummaryText { get { return _walletSummaryText; } private set { SetField(ref _walletSummaryText, value); } }
         public string MonetaryLedgerSummaryText { get { return _monetaryLedgerSummaryText; } private set { SetField(ref _monetaryLedgerSummaryText, value); } }
         public string MonetaryExportText { get { return _monetaryExportText; } private set { SetField(ref _monetaryExportText, value); } }
+        public string AiGatewayUrl { get { return _aiGatewayUrl; } set { SetField(ref _aiGatewayUrl, value); } }
+        public string AiKnowledgePackId { get { return _aiKnowledgePackId; } set { SetField(ref _aiKnowledgePackId, value); } }
+        public bool AiDiagnosticsUploadOptIn { get { return _aiDiagnosticsUploadOptIn; } set { SetField(ref _aiDiagnosticsUploadOptIn, value); } }
+        public string AiSessionStatusText { get { return _aiSessionStatusText; } private set { SetField(ref _aiSessionStatusText, value); } }
+        public string AiQuotaSummaryText { get { return _aiQuotaSummaryText; } private set { SetField(ref _aiQuotaSummaryText, value); } }
+        public string LatestAiSessionRequestText { get { return _latestAiSessionRequestText; } private set { SetField(ref _latestAiSessionRequestText, value); } }
+        public string LatestAiSessionRecordText { get { return _latestAiSessionRecordText; } private set { SetField(ref _latestAiSessionRecordText, value); } }
         public string ActivityLog { get { return _activityLog; } private set { SetField(ref _activityLog, value); } }
 
         public string ReleaseLaneSummaryText

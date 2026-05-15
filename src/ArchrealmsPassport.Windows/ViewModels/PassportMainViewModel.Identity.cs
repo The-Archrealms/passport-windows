@@ -45,6 +45,9 @@ namespace ArchrealmsPassport.Windows.ViewModels
             ReadOnlyIpfsFetchedPathText = string.IsNullOrWhiteSpace(settings.ReadOnlyIpfsFetchedPath)
                 ? "No read-only copy yet"
                 : settings.ReadOnlyIpfsFetchedPath;
+            AiGatewayUrl = string.IsNullOrWhiteSpace(settings.AiGatewayUrl) ? "https://ai.archrealms.local" : settings.AiGatewayUrl;
+            AiKnowledgePackId = string.IsNullOrWhiteSpace(settings.AiKnowledgePackId) ? "archrealms-mvp-approved-knowledge" : settings.AiKnowledgePackId;
+            AiDiagnosticsUploadOptIn = settings.AiDiagnosticsUploadOptIn;
             UpdateMonetaryStatus();
         }
 

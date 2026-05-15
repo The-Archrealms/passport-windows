@@ -618,7 +618,10 @@ namespace ArchrealmsPassport.Windows.ViewModels
                 ReadOnlyIpfsRelativePath = ReadOnlyIpfsRelativePath,
                 ReadOnlyIpfsFetchedPath = string.Equals(ReadOnlyIpfsFetchedPathText, "No read-only copy yet", System.StringComparison.Ordinal)
                     ? string.Empty
-                    : ReadOnlyIpfsFetchedPathText
+                    : ReadOnlyIpfsFetchedPathText,
+                AiGatewayUrl = AiGatewayUrl,
+                AiKnowledgePackId = AiKnowledgePackId,
+                AiDiagnosticsUploadOptIn = AiDiagnosticsUploadOptIn
             };
         }
 
@@ -678,6 +681,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
             _previewReadOnlyIpfsFileCommand.RaiseCanExecuteChanged();
             _fetchReadOnlyIpfsFileCommand.RaiseCanExecuteChanged();
             _exportCarCommand.RaiseCanExecuteChanged();
+            _createAiSessionCommand.RaiseCanExecuteChanged();
             _primaryActionCommand.RaiseCanExecuteChanged();
         }
     }

@@ -42,6 +42,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
         private readonly AsyncRelayCommand _previewReadOnlyIpfsFileCommand;
         private readonly AsyncRelayCommand _fetchReadOnlyIpfsFileCommand;
         private readonly AsyncRelayCommand _exportCarCommand;
+        private readonly AsyncRelayCommand _createAiSessionCommand;
         private readonly AsyncRelayCommand _primaryActionCommand;
 
         private string _citizenName = string.Empty;
@@ -107,6 +108,13 @@ namespace ArchrealmsPassport.Windows.ViewModels
         private string _walletSummaryText = "No wallet key bound.";
         private string _monetaryLedgerSummaryText = "No ARCH/CC records loaded.";
         private string _monetaryExportText = "No account export yet.";
+        private string _aiGatewayUrl = "https://ai.archrealms.local";
+        private string _aiKnowledgePackId = "archrealms-mvp-approved-knowledge";
+        private bool _aiDiagnosticsUploadOptIn;
+        private string _aiSessionStatusText = "No AI session yet.";
+        private string _aiQuotaSummaryText = "No AI quota loaded.";
+        private string _latestAiSessionRequestText = "No AI session request yet.";
+        private string _latestAiSessionRecordText = "No AI session yet.";
         private string _activityLog = string.Empty;
         private bool _storageNetworkStopInProgress;
 
@@ -154,6 +162,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
             _previewReadOnlyIpfsFileCommand = new AsyncRelayCommand(PreviewReadOnlyIpfsFileAsync, CanReadOnlyAccessIpfsFile);
             _fetchReadOnlyIpfsFileCommand = new AsyncRelayCommand(FetchReadOnlyIpfsFileAsync, CanReadOnlyAccessIpfsFile);
             _exportCarCommand = new AsyncRelayCommand(ExportCarAsync, CanReadOnlyAccessIpfsFile);
+            _createAiSessionCommand = new AsyncRelayCommand(CreateAiSessionAsync, CanCreateAiSession);
             _primaryActionCommand = new AsyncRelayCommand(ExecutePrimaryActionAsync, CanExecutePrimaryAction);
 
             SaveSettingsCommand = _saveSettingsCommand;
@@ -183,6 +192,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
             PreviewReadOnlyIpfsFileCommand = _previewReadOnlyIpfsFileCommand;
             FetchReadOnlyIpfsFileCommand = _fetchReadOnlyIpfsFileCommand;
             ExportCarCommand = _exportCarCommand;
+            CreateAiSessionCommand = _createAiSessionCommand;
             PrimaryActionCommand = _primaryActionCommand;
 
             LoadSettings();
@@ -219,6 +229,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
         public ICommand PreviewReadOnlyIpfsFileCommand { get; private set; }
         public ICommand FetchReadOnlyIpfsFileCommand { get; private set; }
         public ICommand ExportCarCommand { get; private set; }
+        public ICommand CreateAiSessionCommand { get; private set; }
         public ICommand PrimaryActionCommand { get; private set; }
     }
 }
