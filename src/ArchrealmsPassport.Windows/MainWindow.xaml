@@ -664,6 +664,54 @@
                                 <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Status" />
                                 <TextBlock AutomationProperties.AutomationId="RegistryBrowserSummaryText" Style="{StaticResource StatusValueStyle}" Text="{Binding RegistryBrowserSummaryText}" />
 
+                                <TextBlock Margin="0,22,0,0" Style="{StaticResource SectionTitleStyle}" Text="Registry Cache" />
+
+                                <Grid Margin="0,12,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource FieldLabelStyle}" Text="CID" />
+                                    <TextBox Grid.Row="1"
+                                             Grid.Column="0"
+                                             Margin="0,0,8,0"
+                                             Style="{StaticResource CodeTextBoxStyle}"
+                                             Text="{Binding ReadOnlyIpfsCid, UpdateSourceTrigger=PropertyChanged}" />
+
+                                    <TextBlock Grid.Row="0" Grid.Column="1" Style="{StaticResource FieldLabelStyle}" Text="Path" />
+                                    <TextBox Grid.Row="1"
+                                             Grid.Column="1"
+                                             Margin="8,0,0,0"
+                                             Style="{StaticResource CodeTextBoxStyle}"
+                                             Text="{Binding ReadOnlyIpfsRelativePath, UpdateSourceTrigger=PropertyChanged}" />
+                                </Grid>
+
+                                <WrapPanel Margin="0,16,0,0">
+                                    <Button AutomationProperties.AutomationId="RegistryPreviewIpfsButton" Style="{StaticResource SecondaryButtonStyle}" Command="{Binding PreviewReadOnlyIpfsFileCommand}" Content="Preview" />
+                                    <Button AutomationProperties.AutomationId="RegistryFetchIpfsButton" Style="{StaticResource SecondaryButtonStyle}" Command="{Binding FetchReadOnlyIpfsFileCommand}" Content="Fetch" />
+                                    <Button AutomationProperties.AutomationId="RegistryExportCarButton" Style="{StaticResource SecondaryButtonStyle}" Command="{Binding ExportCarCommand}" Content="Export CAR" />
+                                </WrapPanel>
+
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Fetched Copy" />
+                                <TextBox Style="{StaticResource CodeTextBoxStyle}" IsReadOnly="True" Text="{Binding ReadOnlyIpfsFetchedPathText, Mode=OneWay}" />
+
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="CAR Export" />
+                                <TextBox Style="{StaticResource CodeTextBoxStyle}" IsReadOnly="True" Text="{Binding LatestCarExportText, Mode=OneWay}" />
+
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Preview" />
+                                <TextBox AutomationProperties.AutomationId="RegistryIpfsPreviewTextBox"
+                                         Height="120"
+                                         Style="{StaticResource CodeTextBoxStyle}"
+                                         IsReadOnly="True"
+                                         Text="{Binding ReadOnlyIpfsPreviewText, Mode=OneWay}"
+                                         AcceptsReturn="True"
+                                         VerticalScrollBarVisibility="Auto" />
+
                                 <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Records" />
                                 <TextBox AutomationProperties.AutomationId="RegistryRecordListTextBox"
                                          Height="430"
