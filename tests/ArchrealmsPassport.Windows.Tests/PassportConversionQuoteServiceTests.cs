@@ -222,6 +222,9 @@ public sealed class PassportConversionQuoteServiceTests
         Assert.Equal("passport_arch_cc_conversion_execution", PassportTestWorkspace.GetString(record, "record_type"));
         Assert.Equal("executed", PassportTestWorkspace.GetString(record, "execution_status"));
         Assert.True(record.TryGetProperty("wallet_signature", out _));
+
+        var inspection = PassportRegistryRecordInspector.Inspect(File.ReadAllBytes(execution.ExecutionRecordPath), execution.ExecutionRecordPath);
+        Assert.True(inspection.IsEnvelopeValid, string.Join("; ", inspection.ValidationFailures));
     }
 
     [Fact]
