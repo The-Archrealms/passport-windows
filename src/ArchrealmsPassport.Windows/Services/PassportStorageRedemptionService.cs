@@ -330,6 +330,344 @@ namespace ArchrealmsPassport.Windows.Services
             }
         }
 
+        public PassportStorageRedemptionResult ReleaseEscrowByAdmin(
+            string workspaceRoot,
+            string acceptedRedemptionPath,
+            long releaseCcBaseUnits,
+            string reasonCode,
+            IDictionary<string, string> adminAuthorityEvidence)
+        {
+            try
+            {
+                var resolvedWorkspaceRoot = PassportEnvironment.ResolveWorkspaceRoot(workspaceRoot);
+                if (releaseCcBaseUnits <= 0)
+                {
+                    return Failed("Admin escrow release requires a positive CC amount.");
+                }
+
+                var acceptedPath = ResolveWorkspaceRelativePath(resolvedWorkspaceRoot, acceptedRedemptionPath);
+                if (!File.Exists(acceptedPath))
+                {
+                    return Failed("Accepted storage redemption record could not be found.");
+                }
+
+                using var document = JsonDocument.Parse(File.ReadAllText(acceptedPath));
+                var accepted = document.RootElement;
+                if (!Matches(accepted, "record_type", "passport_storage_redemption_accepted"))
+                {
+                    return Failed("Admin escrow release requires an accepted redemption record.");
+                }
+
+                var acceptedHash = ComputeSha256(File.ReadAllBytes(acceptedPath));
+                var intentHash = ComputeEscrowReleaseIntentHash(
+                    releaseLane,
+                    ReadString(accepted, "account_id"),
+                    ReadString(accepted, "archrealms_identity_id"),
+                    ReadString(accepted, "wallet_key_id"),
+                    releaseCcBaseUnits,
+                    reasonCode,
+                    acceptedHash);
+                var authority = new PassportAdminAuthorityService(releaseLane).ValidateDualControlActionEvidence(
+                    resolvedWorkspaceRoot,
+                    adminAuthorityEvidence,
+                    "escrow_release",
+                    acceptedHash,
+                    intentHash);
+                if (!authority.Succeeded)
+                {
+                    return Failed(authority.Message);
+                }
+
+                var redemptionId = ReadString(accepted, "redemption_id");
+                var burnedSoFar = SumRecords(resolvedWorkspaceRoot, redemptionId, "passport_storage_redemption_epoch_burn", "burn_cc_base_units")
+                    + SumRecords(resolvedWorkspaceRoot, redemptionId, "passport_storage_redemption_admin_burn_override", "burn_cc_base_units");
+                var refundedSoFar = SumRecords(resolvedWorkspaceRoot, redemptionId, "passport_storage_redemption_refund", "refund_cc_base_units")
+                    + SumRecords(resolvedWorkspaceRoot, redemptionId, "passport_storage_redemption_admin_escrow_release", "release_cc_base_units");
+                var escrowTotal = ReadInt64(accepted, "escrow_cc_base_units");
+                if (burnedSoFar + refundedSoFar + releaseCcBaseUnits > escrowTotal)
+                {
+                    return Failed("Admin escrow release exceeds remaining escrow.");
+                }
+
+                var releaseId = DateTime.UtcNow.ToString("yyyyMMddTHHmmssZ") + "-escrow-release-" + Guid.NewGuid().ToString("N")[..10];
+                var evidence = new Dictionary<string, string>(adminAuthorityEvidence, StringComparer.Ordinal)
+                {
+                    ["storage_redemption_id"] = redemptionId,
+                    ["storage_accepted_redemption_path"] = acceptedPath,
+                    ["storage_accepted_redemption_sha256"] = acceptedHash,
+                    ["storage_admin_release_id"] = releaseId,
+                    ["storage_admin_release_reason_code"] = NormalizeReasonCode(reasonCode),
+                    ["admin_authority_action_type"] = "escrow_release",
+                    ["admin_authority_target_record_sha256"] = acceptedHash,
+                    ["admin_authority_requested_payload_sha256"] = intentHash
+                };
+                var refund = new PassportMonetaryLedgerService(releaseLane).AppendEvent(
+                    resolvedWorkspaceRoot,
+                    ReadString(accepted, "account_id"),
+                    ReadString(accepted, "archrealms_identity_id"),
+                    ReadString(accepted, "wallet_key_id"),
+                    PassportMonetaryLedgerService.EventCrownCreditRefund,
+                    PassportMonetaryLedgerService.AssetCrownCredit,
+                    releaseCcBaseUnits,
+                    evidence);
+                if (!refund.Succeeded)
+                {
+                    return Failed("Admin escrow release ledger event failed: " + refund.Message);
+                }
+
+                var recordPath = WriteAdminRecord(
+                    resolvedWorkspaceRoot,
+                    "admin-escrow-release",
+                    releaseId,
+                    "passport_storage_redemption_admin_escrow_release",
+                    accepted,
+                    authority,
+                    refund,
+                    new Dictionary<string, object?>
+                    {
+                        ["release_cc_base_units"] = releaseCcBaseUnits,
+                        ["reason_code"] = NormalizeReasonCode(reasonCode),
+                        ["accepted_redemption_sha256"] = acceptedHash,
+                        ["requested_payload_sha256"] = intentHash
+                    });
+                return Success("Admin escrow release recorded.", releaseId, recordPath, refund.EventPath, refund.EventHashSha256);
+            }
+            catch (Exception ex)
+            {
+                return Failed("Admin escrow release failed: " + ex.Message);
+            }
+        }
+
+        public PassportStorageRedemptionResult OverrideBurnByAdmin(
+            string workspaceRoot,
+            string acceptedRedemptionPath,
+            long burnCcBaseUnits,
+            long verifiedGbDays,
+            string reasonCode,
+            string proofRecordPath,
+            string proofRecordSha256,
+            IDictionary<string, string> adminAuthorityEvidence)
+        {
+            try
+            {
+                var resolvedWorkspaceRoot = PassportEnvironment.ResolveWorkspaceRoot(workspaceRoot);
+                if (burnCcBaseUnits <= 0 || verifiedGbDays <= 0)
+                {
+                    return Failed("Admin burn override requires positive CC burn and verified GB-days.");
+                }
+
+                var acceptedPath = ResolveWorkspaceRelativePath(resolvedWorkspaceRoot, acceptedRedemptionPath);
+                if (!File.Exists(acceptedPath))
+                {
+                    return Failed("Accepted storage redemption record could not be found.");
+                }
+
+                var proofPath = ResolveWorkspaceRelativePath(resolvedWorkspaceRoot, proofRecordPath);
+                if (!File.Exists(proofPath))
+                {
+                    return Failed("Storage proof record could not be found.");
+                }
+
+                var actualProofHash = ComputeSha256(File.ReadAllBytes(proofPath));
+                if (!string.Equals(actualProofHash, proofRecordSha256, StringComparison.OrdinalIgnoreCase))
+                {
+                    return Failed("Storage proof hash does not match burn override evidence.");
+                }
+
+                using var document = JsonDocument.Parse(File.ReadAllText(acceptedPath));
+                var accepted = document.RootElement;
+                if (!Matches(accepted, "record_type", "passport_storage_redemption_accepted"))
+                {
+                    return Failed("Admin burn override requires an accepted redemption record.");
+                }
+
+                var acceptedHash = ComputeSha256(File.ReadAllBytes(acceptedPath));
+                var intentHash = ComputeBurnOverrideIntentHash(
+                    releaseLane,
+                    ReadString(accepted, "account_id"),
+                    ReadString(accepted, "archrealms_identity_id"),
+                    ReadString(accepted, "wallet_key_id"),
+                    burnCcBaseUnits,
+                    verifiedGbDays,
+                    reasonCode,
+                    acceptedHash,
+                    actualProofHash);
+                var authority = new PassportAdminAuthorityService(releaseLane).ValidateDualControlActionEvidence(
+                    resolvedWorkspaceRoot,
+                    adminAuthorityEvidence,
+                    "burn_override",
+                    acceptedHash,
+                    intentHash);
+                if (!authority.Succeeded)
+                {
+                    return Failed(authority.Message);
+                }
+
+                var redemptionId = ReadString(accepted, "redemption_id");
+                var burnedSoFar = SumRecords(resolvedWorkspaceRoot, redemptionId, "passport_storage_redemption_epoch_burn", "burn_cc_base_units")
+                    + SumRecords(resolvedWorkspaceRoot, redemptionId, "passport_storage_redemption_admin_burn_override", "burn_cc_base_units");
+                var refundedSoFar = SumRecords(resolvedWorkspaceRoot, redemptionId, "passport_storage_redemption_refund", "refund_cc_base_units")
+                    + SumRecords(resolvedWorkspaceRoot, redemptionId, "passport_storage_redemption_admin_escrow_release", "release_cc_base_units");
+                var escrowTotal = ReadInt64(accepted, "escrow_cc_base_units");
+                if (burnedSoFar + refundedSoFar + burnCcBaseUnits > escrowTotal)
+                {
+                    return Failed("Admin burn override exceeds remaining escrow.");
+                }
+
+                var burnId = DateTime.UtcNow.ToString("yyyyMMddTHHmmssZ") + "-burn-override-" + Guid.NewGuid().ToString("N")[..10];
+                var evidence = new Dictionary<string, string>(adminAuthorityEvidence, StringComparer.Ordinal)
+                {
+                    ["storage_redemption_id"] = redemptionId,
+                    ["storage_accepted_redemption_path"] = acceptedPath,
+                    ["storage_accepted_redemption_sha256"] = acceptedHash,
+                    ["storage_proof_record_path"] = proofPath,
+                    ["storage_proof_record_sha256"] = actualProofHash,
+                    ["storage_admin_burn_override_id"] = burnId,
+                    ["storage_admin_burn_override_reason_code"] = NormalizeReasonCode(reasonCode),
+                    ["admin_authority_action_type"] = "burn_override",
+                    ["admin_authority_target_record_sha256"] = acceptedHash,
+                    ["admin_authority_requested_payload_sha256"] = intentHash
+                };
+                var burn = new PassportMonetaryLedgerService(releaseLane).AppendEvent(
+                    resolvedWorkspaceRoot,
+                    ReadString(accepted, "account_id"),
+                    ReadString(accepted, "archrealms_identity_id"),
+                    ReadString(accepted, "wallet_key_id"),
+                    PassportMonetaryLedgerService.EventCrownCreditBurn,
+                    PassportMonetaryLedgerService.AssetCrownCredit,
+                    burnCcBaseUnits,
+                    evidence);
+                if (!burn.Succeeded)
+                {
+                    return Failed("Admin burn override ledger event failed: " + burn.Message);
+                }
+
+                var recordPath = WriteAdminRecord(
+                    resolvedWorkspaceRoot,
+                    "admin-burn-override",
+                    burnId,
+                    "passport_storage_redemption_admin_burn_override",
+                    accepted,
+                    authority,
+                    burn,
+                    new Dictionary<string, object?>
+                    {
+                        ["burn_cc_base_units"] = burnCcBaseUnits,
+                        ["verified_gb_days"] = verifiedGbDays,
+                        ["reason_code"] = NormalizeReasonCode(reasonCode),
+                        ["accepted_redemption_sha256"] = acceptedHash,
+                        ["proof_record_path"] = ToWorkspaceRelativePath(resolvedWorkspaceRoot, proofPath),
+                        ["proof_record_sha256"] = actualProofHash,
+                        ["requested_payload_sha256"] = intentHash
+                    });
+                return Success("Admin burn override recorded.", burnId, recordPath, burn.EventPath, burn.EventHashSha256);
+            }
+            catch (Exception ex)
+            {
+                return Failed("Admin burn override failed: " + ex.Message);
+            }
+        }
+
+        public static string ComputeEscrowReleaseIntentHash(
+            PassportReleaseLane releaseLane,
+            string accountId,
+            string identityId,
+            string walletKeyId,
+            long releaseCcBaseUnits,
+            string reasonCode,
+            string acceptedRedemptionSha256)
+        {
+            var intent = new SortedDictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["release_lane"] = releaseLane.Lane,
+                ["ledger_namespace"] = releaseLane.LedgerNamespace,
+                ["action_type"] = "escrow_release",
+                ["account_id"] = (accountId ?? string.Empty).Trim(),
+                ["archrealms_identity_id"] = (identityId ?? string.Empty).Trim(),
+                ["wallet_key_id"] = (walletKeyId ?? string.Empty).Trim(),
+                ["release_cc_base_units"] = releaseCcBaseUnits,
+                ["reason_code"] = NormalizeReasonCode(reasonCode),
+                ["accepted_redemption_sha256"] = (acceptedRedemptionSha256 ?? string.Empty).Trim().ToLowerInvariant()
+            };
+            return ComputeSha256(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(intent, JsonOptions)));
+        }
+
+        public static string ComputeBurnOverrideIntentHash(
+            PassportReleaseLane releaseLane,
+            string accountId,
+            string identityId,
+            string walletKeyId,
+            long burnCcBaseUnits,
+            long verifiedGbDays,
+            string reasonCode,
+            string acceptedRedemptionSha256,
+            string proofRecordSha256)
+        {
+            var intent = new SortedDictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["release_lane"] = releaseLane.Lane,
+                ["ledger_namespace"] = releaseLane.LedgerNamespace,
+                ["action_type"] = "burn_override",
+                ["account_id"] = (accountId ?? string.Empty).Trim(),
+                ["archrealms_identity_id"] = (identityId ?? string.Empty).Trim(),
+                ["wallet_key_id"] = (walletKeyId ?? string.Empty).Trim(),
+                ["burn_cc_base_units"] = burnCcBaseUnits,
+                ["verified_gb_days"] = verifiedGbDays,
+                ["reason_code"] = NormalizeReasonCode(reasonCode),
+                ["accepted_redemption_sha256"] = (acceptedRedemptionSha256 ?? string.Empty).Trim().ToLowerInvariant(),
+                ["proof_record_sha256"] = (proofRecordSha256 ?? string.Empty).Trim().ToLowerInvariant()
+            };
+            return ComputeSha256(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(intent, JsonOptions)));
+        }
+
+        private string WriteAdminRecord(
+            string workspaceRoot,
+            string kind,
+            string recordId,
+            string recordType,
+            JsonElement sourceRecord,
+            PassportAdminAuthorityResult authority,
+            PassportMonetaryLedgerAppendResult ledgerEvent,
+            Dictionary<string, object?> extra)
+        {
+            var root = Path.Combine(workspaceRoot, "records", "passport", "monetary", "storage-redemptions", kind);
+            Directory.CreateDirectory(root);
+            var path = Path.Combine(root, recordId + ".json");
+            var record = new Dictionary<string, object?>
+            {
+                ["schema_version"] = 1,
+                ["record_type"] = recordType,
+                ["record_id"] = recordId,
+                ["redemption_id"] = ReadString(sourceRecord, "redemption_id"),
+                ["created_utc"] = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+                ["release_lane"] = releaseLane.Lane,
+                ["ledger_namespace"] = releaseLane.LedgerNamespace,
+                ["policy_version"] = releaseLane.PolicyVersion,
+                ["account_id"] = ReadString(sourceRecord, "account_id"),
+                ["archrealms_identity_id"] = ReadString(sourceRecord, "archrealms_identity_id"),
+                ["wallet_key_id"] = ReadString(sourceRecord, "wallet_key_id"),
+                ["quote_id"] = ReadString(sourceRecord, "quote_id"),
+                ["quote_path"] = ReadString(sourceRecord, "quote_path"),
+                ["quote_sha256"] = ReadString(sourceRecord, "quote_sha256"),
+                ["admin_authority_record_path"] = ToWorkspaceRelativePath(workspaceRoot, authority.RecordPath),
+                ["admin_authority_requester_signature_path"] = ToWorkspaceRelativePath(workspaceRoot, authority.RequesterSignaturePath),
+                ["admin_authority_approver_signature_path"] = ToWorkspaceRelativePath(workspaceRoot, authority.ApproverSignaturePath),
+                ["ledger_event_id"] = ledgerEvent.EventId,
+                ["ledger_event_path"] = ToWorkspaceRelativePath(workspaceRoot, ledgerEvent.EventPath),
+                ["ledger_event_hash_sha256"] = ledgerEvent.EventHashSha256,
+                ["requires_dual_control"] = true,
+                ["ai_approved"] = false,
+                ["summary"] = "Dual-control admin storage redemption operation linked to a CC ledger event. AI is not an approval authority."
+            };
+            foreach (var item in extra)
+            {
+                record[item.Key] = item.Value;
+            }
+
+            File.WriteAllText(path, JsonSerializer.Serialize(record, JsonOptions), Encoding.UTF8);
+            return path;
+        }
+
         private string WriteSignedRecord(
             string workspaceRoot,
             string kind,

@@ -107,9 +107,29 @@ namespace ArchrealmsPassport.Windows.Services
                     SignatureStatus = "unsigned-local-ledger-foundation"
                 };
 
-                if (releaseLane.ProductionLedger && string.IsNullOrWhiteSpace(walletKeyReferencePath))
+                var adminAuthorityGate = ValidateAdminAuthorityGateIfPresent(resolvedWorkspaceRoot, ledgerEvent);
+                if (!adminAuthorityGate.Succeeded)
                 {
-                    return FailedAppend("Production monetary ledger events require a wallet signature.");
+                    return FailedAppend(adminAuthorityGate.Message);
+                }
+
+                var recovery = new PassportRecoveryService(releaseLane);
+                var hasAdminAuthority = IsAdminAuthorityStatus(ledgerEvent.SignatureStatus) || HasAdminAuthorityEvidence(ledgerEvent);
+                if (recovery.IsWalletOperationsFrozen(resolvedWorkspaceRoot, normalizedIdentityId) && !hasAdminAuthority)
+                {
+                    return FailedAppend("Passport wallet operations are frozen for this identity.");
+                }
+
+                if (recovery.IsPendingEscrowFrozen(resolvedWorkspaceRoot, normalizedIdentityId)
+                    && IsPendingEscrowMutation(ledgerEvent)
+                    && !hasAdminAuthority)
+                {
+                    return FailedAppend("Passport pending escrow operations are frozen for this identity.");
+                }
+
+                if (releaseLane.ProductionLedger && string.IsNullOrWhiteSpace(walletKeyReferencePath) && !hasAdminAuthority)
+                {
+                    return FailedAppend("Production monetary ledger events require a wallet signature or valid dual-control admin authority evidence.");
                 }
 
                 if (!string.IsNullOrWhiteSpace(walletKeyReferencePath))
@@ -138,6 +158,11 @@ namespace ArchrealmsPassport.Windows.Services
                     ledgerEvent.WalletSignatureBase64 = Convert.ToBase64String(signatureBytes);
                     ledgerEvent.SignedEventHashSha256 = signedPayloadHash;
                     ledgerEvent.WalletPublicKeyPath = ToWorkspaceRelativePath(resolvedWorkspaceRoot, resolvedWalletPublicKeyPath);
+                }
+                else if (hasAdminAuthority)
+                {
+                    ledgerEvent.SignatureStatus = "dual_control_admin_authorized";
+                    ledgerEvent.SignedEventHashSha256 = ComputeUnsignedEventPayloadHash(ledgerEvent);
                 }
 
                 if (releaseLane.ProductionLedger
@@ -752,12 +777,105 @@ namespace ArchrealmsPassport.Windows.Services
             };
         }
 
+        private PassportMonetaryLedgerAppendResult ValidateAdminAuthorityGateIfPresent(
+            string workspaceRoot,
+            PassportMonetaryLedgerEvent ledgerEvent)
+        {
+            if (!HasAdminAuthorityEvidence(ledgerEvent))
+            {
+                return new PassportMonetaryLedgerAppendResult
+                {
+                    Succeeded = true,
+                    Message = "No admin authority evidence present."
+                };
+            }
+
+            var expectedActionType = ReadEvidence(ledgerEvent, "admin_authority_action_type");
+            var expectedTargetRecordSha256 = ReadEvidence(ledgerEvent, "admin_authority_target_record_sha256");
+            var expectedRequestedPayloadSha256 = ReadEvidence(ledgerEvent, "admin_authority_requested_payload_sha256");
+            if (string.IsNullOrWhiteSpace(expectedActionType)
+                || string.IsNullOrWhiteSpace(expectedTargetRecordSha256)
+                || string.IsNullOrWhiteSpace(expectedRequestedPayloadSha256))
+            {
+                return FailedAppend("Admin-authorized ledger events require admin_authority_action_type, admin_authority_target_record_sha256, and admin_authority_requested_payload_sha256 evidence.");
+            }
+
+            if (!IsAdminActionAllowedForLedgerEvent(expectedActionType, ledgerEvent.EventType, ledgerEvent.AssetCode))
+            {
+                return FailedAppend("Admin action " + expectedActionType + " is not allowed for ledger event " + ledgerEvent.EventType + ".");
+            }
+
+            var validation = new PassportAdminAuthorityService(releaseLane).ValidateDualControlActionEvidence(
+                workspaceRoot,
+                ledgerEvent.EvidenceReferences,
+                expectedActionType,
+                expectedTargetRecordSha256,
+                expectedRequestedPayloadSha256);
+            if (!validation.Succeeded)
+            {
+                return FailedAppend(validation.Message);
+            }
+
+            return new PassportMonetaryLedgerAppendResult
+            {
+                Succeeded = true,
+                Message = "Admin-authorized ledger event authority is valid."
+            };
+        }
+
+        private static bool HasAdminAuthorityEvidence(PassportMonetaryLedgerEvent ledgerEvent)
+        {
+            return ledgerEvent.EvidenceReferences.ContainsKey("admin_authority_action_type");
+        }
+
+        private static bool IsAdminAuthorityStatus(string signatureStatus)
+        {
+            return string.Equals(signatureStatus, "dual_control_admin_authorized", StringComparison.Ordinal);
+        }
+
+        private static bool IsPendingEscrowMutation(PassportMonetaryLedgerEvent ledgerEvent)
+        {
+            return string.Equals(ledgerEvent.AssetCode, AssetCrownCredit, StringComparison.Ordinal)
+                && (string.Equals(ledgerEvent.EventType, EventCrownCreditBurn, StringComparison.Ordinal)
+                    || string.Equals(ledgerEvent.EventType, EventCrownCreditRefund, StringComparison.Ordinal));
+        }
+
+        private static bool IsAdminActionAllowedForLedgerEvent(string actionType, string eventType, string assetCode)
+        {
+            var normalized = (actionType ?? string.Empty).Trim().ToLowerInvariant();
+            if (!string.Equals(assetCode, AssetCrownCredit, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            return (normalized == "escrow_release" && eventType == EventCrownCreditRefund)
+                || (normalized == "burn_override" && eventType == EventCrownCreditBurn)
+                || (normalized == "recovery_override" && eventType == EventCrownCreditRecredit);
+        }
+
+        private static string ReadEvidence(PassportMonetaryLedgerEvent ledgerEvent, string key)
+        {
+            return ledgerEvent.EvidenceReferences.TryGetValue(key, out var value) ? value.Trim() : string.Empty;
+        }
+
         private void ValidateEventSignature(string workspaceRoot, PassportMonetaryLedgerEvent ledgerEvent, List<string> failures)
         {
             if (releaseLane.ProductionLedger
-                && !string.Equals(ledgerEvent.SignatureStatus, "wallet_signed", StringComparison.Ordinal))
+                && !string.Equals(ledgerEvent.SignatureStatus, "wallet_signed", StringComparison.Ordinal)
+                && !IsAdminAuthorityStatus(ledgerEvent.SignatureStatus))
             {
                 failures.Add("Production monetary ledger event " + ledgerEvent.EventId + " is not wallet-signed.");
+            }
+
+            if (IsAdminAuthorityStatus(ledgerEvent.SignatureStatus))
+            {
+                var adminGate = ValidateAdminAuthorityGateIfPresent(workspaceRoot, ledgerEvent);
+                if (!adminGate.Succeeded)
+                {
+                    failures.Add("Admin-authorized ledger event " + ledgerEvent.EventId + " failed authority validation: " + adminGate.Message);
+                }
+
+                return;
             }
 
             if (!string.Equals(ledgerEvent.SignatureStatus, "wallet_signed", StringComparison.Ordinal))

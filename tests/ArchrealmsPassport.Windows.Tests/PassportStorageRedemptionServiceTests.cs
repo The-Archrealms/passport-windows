@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Security.Cryptography;
+using System.Text.Json;
+using ArchrealmsPassport.Windows.Models;
 using ArchrealmsPassport.Windows.Services;
 using ArchrealmsPassport.Windows.Tests.Infrastructure;
 using Xunit;
@@ -153,5 +156,251 @@ public sealed class PassportStorageRedemptionServiceTests
 
         Assert.False(burn.Succeeded);
         Assert.Contains("exceeds remaining escrow", burn.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void AdminEscrowReleaseWorksUnderSecurityFreezeWithDualControlAuthority()
+    {
+        using var workspace = PassportTestWorkspace.Create();
+        var releaseLane = PassportReleaseLane.CreateDefault("production-mvp");
+        var wallet = new PassportWalletKeyService(releaseLane).CreateAndBindWalletKey(
+            workspace.Root,
+            workspace.IdentityId,
+            workspace.DeviceId,
+            workspace.KeyReferencePath);
+        Assert.True(wallet.Succeeded, wallet.Message);
+        var accepted = CreateAcceptedRedemption(workspace, releaseLane, wallet, 200, 100);
+        var acceptedHash = PassportTestWorkspace.ComputeFileSha256(accepted.RecordPath);
+        var intentHash = PassportStorageRedemptionService.ComputeEscrowReleaseIntentHash(
+            releaseLane,
+            "account-test",
+            workspace.IdentityId,
+            wallet.WalletKeyId,
+            40,
+            "service_failure",
+            acceptedHash);
+        var adminEvidence = CreateAdminAuthorityEvidence(
+            workspace,
+            releaseLane,
+            "escrow_release",
+            "storage_redemption_admin_release",
+            "service_failure",
+            accepted.RecordId,
+            acceptedHash,
+            intentHash);
+
+        var freeze = new PassportRecoveryService(releaseLane).CreateAccountSecurityFreeze(
+            workspace.Root,
+            workspace.IdentityId,
+            workspace.DeviceId,
+            workspace.KeyReferencePath,
+            "escrow_freeze",
+            freezeWalletOperations: true,
+            freezePendingEscrow: true,
+            revokeAiSessions: true,
+            pauseStorageNodeOperations: true);
+        Assert.True(freeze.Succeeded, freeze.Message);
+
+        var release = new PassportStorageRedemptionService(releaseLane).ReleaseEscrowByAdmin(
+            workspace.Root,
+            accepted.RecordPath,
+            40,
+            "service_failure",
+            adminEvidence);
+
+        Assert.True(release.Succeeded, release.Message);
+        var record = PassportTestWorkspace.ReadJson(release.RecordPath);
+        Assert.Equal("passport_storage_redemption_admin_escrow_release", PassportTestWorkspace.GetString(record, "record_type"));
+        Assert.True(record.GetProperty("requires_dual_control").GetBoolean());
+        Assert.False(record.GetProperty("ai_approved").GetBoolean());
+
+        var ledgerEvent = PassportTestWorkspace.ReadJson(release.LedgerEventPath);
+        Assert.Equal("dual_control_admin_authorized", PassportTestWorkspace.GetString(ledgerEvent, "signature_status"));
+
+        var replay = new PassportMonetaryLedgerService(releaseLane).Replay(workspace.Root);
+        Assert.True(replay.Succeeded, string.Join("; ", replay.Failures));
+        Assert.Contains(replay.Balances, balance =>
+            balance.AssetCode == PassportMonetaryLedgerService.AssetCrownCredit
+            && balance.AvailableBaseUnits == 140
+            && balance.EscrowedBaseUnits == 60);
+    }
+
+    [Fact]
+    public void AdminBurnOverrideRequiresDualControlAuthority()
+    {
+        using var workspace = PassportTestWorkspace.Create();
+        var releaseLane = PassportReleaseLane.CreateDefault("production-mvp");
+        var wallet = new PassportWalletKeyService(releaseLane).CreateAndBindWalletKey(
+            workspace.Root,
+            workspace.IdentityId,
+            workspace.DeviceId,
+            workspace.KeyReferencePath);
+        Assert.True(wallet.Succeeded, wallet.Message);
+        var accepted = CreateAcceptedRedemption(workspace, releaseLane, wallet, 200, 100);
+        var acceptedHash = PassportTestWorkspace.ComputeFileSha256(accepted.RecordPath);
+        var proofPath = workspace.WriteProofSource("admin-burn-proof.json", "{\"proof\":\"ok\"}");
+        var proofHash = PassportTestWorkspace.ComputeFileSha256(proofPath);
+        var intentHash = PassportStorageRedemptionService.ComputeBurnOverrideIntentHash(
+            releaseLane,
+            "account-test",
+            workspace.IdentityId,
+            wallet.WalletKeyId,
+            30,
+            30,
+            "verified_service_delivery",
+            acceptedHash,
+            proofHash);
+        var adminEvidence = CreateAdminAuthorityEvidence(
+            workspace,
+            releaseLane,
+            "burn_override",
+            "storage_redemption_admin_burn",
+            "verified_service_delivery",
+            accepted.RecordId,
+            acceptedHash,
+            intentHash);
+
+        var burn = new PassportStorageRedemptionService(releaseLane).OverrideBurnByAdmin(
+            workspace.Root,
+            accepted.RecordPath,
+            30,
+            30,
+            "verified_service_delivery",
+            proofPath,
+            proofHash,
+            adminEvidence);
+
+        Assert.True(burn.Succeeded, burn.Message);
+        var record = PassportTestWorkspace.ReadJson(burn.RecordPath);
+        Assert.Equal("passport_storage_redemption_admin_burn_override", PassportTestWorkspace.GetString(record, "record_type"));
+
+        var ledgerEvent = PassportTestWorkspace.ReadJson(burn.LedgerEventPath);
+        Assert.Equal("dual_control_admin_authorized", PassportTestWorkspace.GetString(ledgerEvent, "signature_status"));
+
+        var replay = new PassportMonetaryLedgerService(releaseLane).Replay(workspace.Root);
+        Assert.True(replay.Succeeded, string.Join("; ", replay.Failures));
+        Assert.Contains(replay.Balances, balance =>
+            balance.AssetCode == PassportMonetaryLedgerService.AssetCrownCredit
+            && balance.AvailableBaseUnits == 100
+            && balance.EscrowedBaseUnits == 70
+            && balance.BurnedBaseUnits == 30);
+    }
+
+    private static PassportStorageRedemptionResult CreateAcceptedRedemption(
+        PassportTestWorkspace workspace,
+        PassportReleaseLane releaseLane,
+        ArchrealmsPassport.Windows.Models.PassportWalletKeyBindingResult wallet,
+        long fundingCcBaseUnits,
+        long escrowCcBaseUnits)
+    {
+        var ledger = new PassportMonetaryLedgerService(releaseLane);
+        var funding = ledger.AppendEvent(
+            workspace.Root,
+            "account-test",
+            workspace.IdentityId,
+            wallet.WalletKeyId,
+            PassportMonetaryLedgerService.EventCrownCreditTransferIn,
+            PassportMonetaryLedgerService.AssetCrownCredit,
+            fundingCcBaseUnits,
+            new Dictionary<string, string> { ["funding_source"] = "test-existing-cc" },
+            walletKeyReferencePath: wallet.WalletKeyReferencePath,
+            walletPublicKeyPath: wallet.WalletPublicKeyPath);
+        Assert.True(funding.Succeeded, funding.Message);
+
+        var service = new PassportStorageRedemptionService(releaseLane);
+        var quote = service.CreateQuote(
+            workspace.Root,
+            "account-test",
+            workspace.IdentityId,
+            wallet.WalletKeyId,
+            storageGb: escrowCcBaseUnits,
+            serviceEpochCount: 1,
+            ccPerGbEpochBaseUnits: 1,
+            expiresUtc: DateTime.UtcNow.AddMinutes(5),
+            serviceClass: "mvp_storage",
+            quoteSource: "admin_set_mvp_storage_quote");
+        Assert.True(quote.Succeeded, quote.Message);
+
+        var accepted = service.AcceptQuote(
+            workspace.Root,
+            quote.RecordPath,
+            quote.RecordSha256,
+            wallet.WalletKeyReferencePath,
+            wallet.WalletPublicKeyPath);
+        Assert.True(accepted.Succeeded, accepted.Message);
+        return accepted;
+    }
+
+    private static Dictionary<string, string> CreateAdminAuthorityEvidence(
+        PassportTestWorkspace workspace,
+        PassportReleaseLane releaseLane,
+        string actionType,
+        string authorityScope,
+        string reasonCode,
+        string targetRecordId,
+        string targetHash,
+        string intentHash)
+    {
+        var secondDeviceId = AddSecondActiveDevice(workspace);
+        var admin = new PassportAdminAuthorityService(releaseLane).CreateDualControlAction(
+            workspace.Root,
+            workspace.IdentityId,
+            workspace.DeviceId,
+            workspace.KeyReferencePath,
+            secondDeviceId,
+            workspace.KeyReferencePath,
+            actionType,
+            authorityScope,
+            reasonCode,
+            targetRecordId,
+            targetHash,
+            intentHash);
+        Assert.True(admin.Succeeded, admin.Message);
+        return new Dictionary<string, string>
+        {
+            ["admin_authority_record_path"] = admin.RecordPath,
+            ["admin_authority_record_sha256"] = PassportAdminAuthorityService.ComputeFileSha256(admin.RecordPath),
+            ["admin_authority_requester_signature_path"] = admin.RequesterSignaturePath,
+            ["admin_authority_approver_signature_path"] = admin.ApproverSignaturePath
+        };
+    }
+
+    private static string AddSecondActiveDevice(PassportTestWorkspace workspace)
+    {
+        var secondDeviceId = workspace.DeviceId + "-second-" + Guid.NewGuid().ToString("N")[..6];
+        var timestamp = DateTime.UtcNow.ToString("yyyyMMddTHHmmssZ");
+        var createdUtc = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
+        var secondPublicKeyPath = Path.Combine(workspace.Root, "records", "registry", "public-keys", secondDeviceId + ".spki.der");
+        File.Copy(workspace.PublicKeyPath, secondPublicKeyPath, true);
+        var recordPath = Path.Combine(workspace.Root, "records", "registry", "device-credentials", timestamp + "-" + secondDeviceId + ".json");
+        var record = new Dictionary<string, object?>
+        {
+            ["schema_version"] = 1,
+            ["record_type"] = "device_credential_record",
+            ["record_id"] = timestamp + "-" + secondDeviceId,
+            ["created_utc"] = createdUtc,
+            ["effective_utc"] = createdUtc,
+            ["status"] = "active",
+            ["archrealms_identity_id"] = workspace.IdentityId,
+            ["device_id"] = secondDeviceId,
+            ["device_label"] = "Second Test Device",
+            ["device_class"] = "desktop",
+            ["client_platform"] = "windows",
+            ["credential_origin"] = "test-fixture",
+            ["public_key_algorithm"] = "RSA",
+            ["public_key_format"] = "SPKI_DER",
+            ["public_key_path"] = "records/registry/public-keys/" + secondDeviceId + ".spki.der",
+            ["public_key_sha256"] = Convert.ToHexString(SHA256.HashData(workspace.PublicKeyBytes)).ToLowerInvariant(),
+            ["authorized_scopes"] = new[] { "authenticate", "submit_registry_record", "publish_archive" },
+            ["authorization_mode"] = "test-fixture",
+            ["authorization_package_path"] = string.Empty,
+            ["authorization_record_path"] = string.Empty,
+            ["authorizer_device_id"] = workspace.DeviceId,
+            ["expires_utc"] = string.Empty,
+            ["revocation_record_id"] = string.Empty,
+            ["attestation_refs"] = Array.Empty<string>()
+        };
+        File.WriteAllText(recordPath, JsonSerializer.Serialize(record, new JsonSerializerOptions { WriteIndented = true }));
+        return secondDeviceId;
     }
 }

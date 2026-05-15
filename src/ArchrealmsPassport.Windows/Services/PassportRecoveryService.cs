@@ -179,6 +179,138 @@ namespace ArchrealmsPassport.Windows.Services
             }
         }
 
+        public PassportRecoveryRecordResult CreateRecoveryGuidanceExport(
+            string workspaceRoot,
+            string identityId)
+        {
+            try
+            {
+                var resolvedWorkspaceRoot = PassportEnvironment.ResolveWorkspaceRoot(workspaceRoot);
+                var normalizedIdentityId = NormalizeRequired(identityId, "identity ID");
+                var timestamp = DateTime.UtcNow.ToString("yyyyMMddTHHmmssZ");
+                var createdUtc = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
+                var root = Path.Combine(resolvedWorkspaceRoot, "records", "passport", "recovery", "guidance");
+                Directory.CreateDirectory(root);
+                var recordPath = Path.Combine(root, timestamp + "-" + normalizedIdentityId + ".json");
+                var record = new Dictionary<string, object?>
+                {
+                    ["schema_version"] = 1,
+                    ["record_type"] = "passport_recovery_guidance_export",
+                    ["record_id"] = timestamp + "-" + normalizedIdentityId,
+                    ["created_utc"] = createdUtc,
+                    ["release_lane"] = releaseLane.Lane,
+                    ["ledger_namespace"] = releaseLane.LedgerNamespace,
+                    ["policy_version"] = releaseLane.PolicyVersion,
+                    ["archrealms_identity_id"] = normalizedIdentityId,
+                    ["identity_key_purpose"] = "authenticate_identity_bind_or_revoke_wallet_keys_and_devices",
+                    ["wallet_key_purpose"] = "sign_arch_cc_conversion_escrow_redemption_and_correction_operations_only",
+                    ["backup_expectations"] = new[]
+                    {
+                        "Export account history after meaningful wallet or ledger activity.",
+                        "Preserve device authorization packages and wallet public-key history.",
+                        "Do not export or share protected wallet private key files.",
+                        "Keep at least two active authorized devices before relying on support-mediated recovery."
+                    },
+                    ["recovery_lanes"] = new[]
+                    {
+                        "self_service_wallet_rotation_from_active_device",
+                        "device_deauthorization_from_active_device",
+                        "account_security_freeze_from_active_device",
+                        "support_mediated_dual_control_recovery_override"
+                    },
+                    ["ai_authority"] = "AI can explain recovery steps but cannot approve recovery, revoke devices, rotate wallets, release escrow, or override burns.",
+                    ["citizenship_asset_boundary"] = "Passport identity, citizenship status, wallet keys, ARCH ownership, and CC balances are separate records and authorities.",
+                    ["summary"] = "User-facing recovery and backup guidance export for Passport custody operations."
+                };
+                File.WriteAllText(recordPath, JsonSerializer.Serialize(record, JsonOptions), Encoding.UTF8);
+                return new PassportRecoveryRecordResult
+                {
+                    Succeeded = true,
+                    Message = "Recovery guidance export created.",
+                    RecordType = "passport_recovery_guidance_export",
+                    RecordPath = recordPath
+                };
+            }
+            catch (Exception ex)
+            {
+                return Failed("Recovery guidance export failed: " + ex.Message, "passport_recovery_guidance_export");
+            }
+        }
+
+        public PassportRecoveryRecordResult CreateSupportMediatedRecoveryOverride(
+            string workspaceRoot,
+            string authorityIdentityId,
+            string targetIdentityId,
+            string targetAccountId,
+            string reasonCode,
+            string targetRecordId,
+            string targetRecordSha256,
+            string requestedPayloadSha256,
+            IDictionary<string, string> adminAuthorityEvidence)
+        {
+            try
+            {
+                var resolvedWorkspaceRoot = PassportEnvironment.ResolveWorkspaceRoot(workspaceRoot);
+                var normalizedAuthorityIdentityId = NormalizeRequired(authorityIdentityId, "authority identity ID");
+                var normalizedTargetIdentityId = NormalizeRequired(targetIdentityId, "target identity ID");
+                var normalizedTargetAccountId = NormalizeRequired(targetAccountId, "target account ID");
+                var normalizedReasonCode = NormalizeReasonCode(reasonCode);
+                var normalizedTargetRecordSha256 = NormalizeRequired(targetRecordSha256, "target record hash").ToLowerInvariant();
+                var normalizedRequestedPayloadSha256 = NormalizeRequired(requestedPayloadSha256, "requested payload hash").ToLowerInvariant();
+                var authority = new PassportAdminAuthorityService(releaseLane).ValidateDualControlActionEvidence(
+                    resolvedWorkspaceRoot,
+                    adminAuthorityEvidence,
+                    "recovery_override",
+                    normalizedTargetRecordSha256,
+                    normalizedRequestedPayloadSha256);
+                if (!authority.Succeeded)
+                {
+                    return Failed(authority.Message, "passport_support_mediated_recovery_override");
+                }
+
+                var timestamp = DateTime.UtcNow.ToString("yyyyMMddTHHmmssZ");
+                var createdUtc = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
+                var root = Path.Combine(resolvedWorkspaceRoot, "records", "passport", "recovery", "support-overrides");
+                Directory.CreateDirectory(root);
+                var recordPath = Path.Combine(root, timestamp + "-" + normalizedTargetIdentityId + ".json");
+                var record = new Dictionary<string, object?>
+                {
+                    ["schema_version"] = 1,
+                    ["record_type"] = "passport_support_mediated_recovery_override",
+                    ["record_id"] = timestamp + "-" + normalizedTargetIdentityId,
+                    ["created_utc"] = createdUtc,
+                    ["release_lane"] = releaseLane.Lane,
+                    ["ledger_namespace"] = releaseLane.LedgerNamespace,
+                    ["policy_version"] = releaseLane.PolicyVersion,
+                    ["authority_identity_id"] = normalizedAuthorityIdentityId,
+                    ["target_identity_id"] = normalizedTargetIdentityId,
+                    ["target_account_id"] = normalizedTargetAccountId,
+                    ["reason_code"] = normalizedReasonCode,
+                    ["target_record_id"] = (targetRecordId ?? string.Empty).Trim(),
+                    ["target_record_sha256"] = normalizedTargetRecordSha256,
+                    ["requested_payload_sha256"] = normalizedRequestedPayloadSha256,
+                    ["admin_authority_record_path"] = ToWorkspaceRelativePath(resolvedWorkspaceRoot, authority.RecordPath),
+                    ["admin_authority_requester_signature_path"] = ToWorkspaceRelativePath(resolvedWorkspaceRoot, authority.RequesterSignaturePath),
+                    ["admin_authority_approver_signature_path"] = ToWorkspaceRelativePath(resolvedWorkspaceRoot, authority.ApproverSignaturePath),
+                    ["requires_dual_control"] = true,
+                    ["ai_approved"] = false,
+                    ["summary"] = "Support-mediated Passport recovery override approved by dual-control admin authority. AI is not an approval authority."
+                };
+                File.WriteAllText(recordPath, JsonSerializer.Serialize(record, JsonOptions), Encoding.UTF8);
+                return new PassportRecoveryRecordResult
+                {
+                    Succeeded = true,
+                    Message = "Support-mediated recovery override recorded.",
+                    RecordType = "passport_support_mediated_recovery_override",
+                    RecordPath = recordPath
+                };
+            }
+            catch (Exception ex)
+            {
+                return Failed("Support-mediated recovery override failed: " + ex.Message, "passport_support_mediated_recovery_override");
+            }
+        }
+
         public bool IsDeviceDeauthorized(string workspaceRoot, string identityId, string deviceId)
         {
             try
@@ -202,6 +334,56 @@ namespace ArchrealmsPassport.Windows.Services
                         && Matches(root, "ledger_namespace", releaseLane.LedgerNamespace)
                         && Matches(root, "archrealms_identity_id", identityId)
                         && Matches(root, "target_device_id", deviceId));
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        public bool IsWalletOperationsFrozen(string workspaceRoot, string identityId)
+        {
+            return HasActiveSecurityFreezeFlag(workspaceRoot, identityId, "freeze_wallet_operations");
+        }
+
+        public bool IsPendingEscrowFrozen(string workspaceRoot, string identityId)
+        {
+            return HasActiveSecurityFreezeFlag(workspaceRoot, identityId, "freeze_pending_escrow");
+        }
+
+        public bool AreAiSessionsRevoked(string workspaceRoot, string identityId)
+        {
+            return HasActiveSecurityFreezeFlag(workspaceRoot, identityId, "revoke_ai_sessions");
+        }
+
+        public bool AreStorageNodeOperationsPaused(string workspaceRoot, string identityId)
+        {
+            return HasActiveSecurityFreezeFlag(workspaceRoot, identityId, "pause_storage_node_operations");
+        }
+
+        private bool HasActiveSecurityFreezeFlag(string workspaceRoot, string identityId, string flagName)
+        {
+            try
+            {
+                var resolvedWorkspaceRoot = PassportEnvironment.ResolveWorkspaceRoot(workspaceRoot);
+                var recordsRoot = Path.Combine(resolvedWorkspaceRoot, "records", "passport", "recovery", "security-freezes");
+                if (!Directory.Exists(recordsRoot))
+                {
+                    return false;
+                }
+
+                return Directory.GetFiles(recordsRoot, "*.json")
+                    .Where(file => !file.EndsWith(".signature.json", StringComparison.OrdinalIgnoreCase))
+                    .Select(file =>
+                    {
+                        using var document = JsonDocument.Parse(File.ReadAllText(file));
+                        return document.RootElement.Clone();
+                    })
+                    .Any(root => Matches(root, "record_type", "passport_account_security_freeze")
+                        && Matches(root, "release_lane", releaseLane.Lane)
+                        && Matches(root, "ledger_namespace", releaseLane.LedgerNamespace)
+                        && Matches(root, "archrealms_identity_id", identityId)
+                        && ReadBool(root, flagName));
             }
             catch
             {
@@ -310,6 +492,11 @@ namespace ArchrealmsPassport.Windows.Services
         {
             return TryGetString(root, propertyName, out var actual)
                 && string.Equals(actual, expected, StringComparison.Ordinal);
+        }
+
+        private static bool ReadBool(JsonElement root, string propertyName)
+        {
+            return root.TryGetProperty(propertyName, out var property) && property.ValueKind == JsonValueKind.True;
         }
 
         private static bool TryGetString(JsonElement root, string propertyName, out string value)
