@@ -43,6 +43,10 @@ namespace ArchrealmsPassport.Windows.ViewModels
         private readonly AsyncRelayCommand _fetchReadOnlyIpfsFileCommand;
         private readonly AsyncRelayCommand _exportCarCommand;
         private readonly AsyncRelayCommand _createAiSessionCommand;
+        private readonly AsyncRelayCommand _createStorageRedemptionQuoteCommand;
+        private readonly AsyncRelayCommand _acceptStorageRedemptionQuoteCommand;
+        private readonly AsyncRelayCommand _burnStorageRedemptionEpochCommand;
+        private readonly AsyncRelayCommand _refundStorageRedemptionCommand;
         private readonly AsyncRelayCommand _primaryActionCommand;
 
         private string _citizenName = string.Empty;
@@ -115,6 +119,18 @@ namespace ArchrealmsPassport.Windows.ViewModels
         private string _aiQuotaSummaryText = "No AI quota loaded.";
         private string _latestAiSessionRequestText = "No AI session request yet.";
         private string _latestAiSessionRecordText = "No AI session yet.";
+        private double _storageRedemptionGb = 1;
+        private int _storageRedemptionEpochCount = 1;
+        private long _storageRedemptionCcPerGbEpoch = 1;
+        private string _storageRedemptionServiceClass = "mvp_storage";
+        private string _latestStorageRedemptionQuoteText = "No storage redemption quote yet.";
+        private string _latestStorageRedemptionQuoteSha256 = string.Empty;
+        private string _latestStorageRedemptionAcceptedText = "No accepted storage redemption yet.";
+        private long _storageRedemptionBurnCc = 1;
+        private long _storageRedemptionVerifiedGbDays = 1;
+        private string _storageRedemptionProofRecordPath = string.Empty;
+        private long _storageRedemptionRefundCc = 1;
+        private string _storageRedemptionStatusText = "No storage redemption yet.";
         private string _activityLog = string.Empty;
         private bool _storageNetworkStopInProgress;
 
@@ -163,6 +179,10 @@ namespace ArchrealmsPassport.Windows.ViewModels
             _fetchReadOnlyIpfsFileCommand = new AsyncRelayCommand(FetchReadOnlyIpfsFileAsync, CanReadOnlyAccessIpfsFile);
             _exportCarCommand = new AsyncRelayCommand(ExportCarAsync, CanReadOnlyAccessIpfsFile);
             _createAiSessionCommand = new AsyncRelayCommand(CreateAiSessionAsync, CanCreateAiSession);
+            _createStorageRedemptionQuoteCommand = new AsyncRelayCommand(CreateStorageRedemptionQuoteAsync, CanCreateStorageRedemptionQuote);
+            _acceptStorageRedemptionQuoteCommand = new AsyncRelayCommand(AcceptStorageRedemptionQuoteAsync, CanAcceptStorageRedemptionQuote);
+            _burnStorageRedemptionEpochCommand = new AsyncRelayCommand(BurnStorageRedemptionEpochAsync, CanBurnStorageRedemptionEpoch);
+            _refundStorageRedemptionCommand = new AsyncRelayCommand(RefundStorageRedemptionAsync, CanRefundStorageRedemption);
             _primaryActionCommand = new AsyncRelayCommand(ExecutePrimaryActionAsync, CanExecutePrimaryAction);
 
             SaveSettingsCommand = _saveSettingsCommand;
@@ -193,6 +213,10 @@ namespace ArchrealmsPassport.Windows.ViewModels
             FetchReadOnlyIpfsFileCommand = _fetchReadOnlyIpfsFileCommand;
             ExportCarCommand = _exportCarCommand;
             CreateAiSessionCommand = _createAiSessionCommand;
+            CreateStorageRedemptionQuoteCommand = _createStorageRedemptionQuoteCommand;
+            AcceptStorageRedemptionQuoteCommand = _acceptStorageRedemptionQuoteCommand;
+            BurnStorageRedemptionEpochCommand = _burnStorageRedemptionEpochCommand;
+            RefundStorageRedemptionCommand = _refundStorageRedemptionCommand;
             PrimaryActionCommand = _primaryActionCommand;
 
             LoadSettings();
@@ -230,6 +254,10 @@ namespace ArchrealmsPassport.Windows.ViewModels
         public ICommand FetchReadOnlyIpfsFileCommand { get; private set; }
         public ICommand ExportCarCommand { get; private set; }
         public ICommand CreateAiSessionCommand { get; private set; }
+        public ICommand CreateStorageRedemptionQuoteCommand { get; private set; }
+        public ICommand AcceptStorageRedemptionQuoteCommand { get; private set; }
+        public ICommand BurnStorageRedemptionEpochCommand { get; private set; }
+        public ICommand RefundStorageRedemptionCommand { get; private set; }
         public ICommand PrimaryActionCommand { get; private set; }
     }
 }

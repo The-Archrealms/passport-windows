@@ -320,6 +320,18 @@ namespace ArchrealmsPassport.Windows.ViewModels
         public string AiQuotaSummaryText { get { return _aiQuotaSummaryText; } private set { SetField(ref _aiQuotaSummaryText, value); } }
         public string LatestAiSessionRequestText { get { return _latestAiSessionRequestText; } private set { SetField(ref _latestAiSessionRequestText, value); } }
         public string LatestAiSessionRecordText { get { return _latestAiSessionRecordText; } private set { SetField(ref _latestAiSessionRecordText, value); } }
+        public double StorageRedemptionGb { get { return _storageRedemptionGb; } set { SetField(ref _storageRedemptionGb, value); } }
+        public int StorageRedemptionEpochCount { get { return _storageRedemptionEpochCount; } set { SetField(ref _storageRedemptionEpochCount, value); } }
+        public long StorageRedemptionCcPerGbEpoch { get { return _storageRedemptionCcPerGbEpoch; } set { SetField(ref _storageRedemptionCcPerGbEpoch, value); } }
+        public string StorageRedemptionServiceClass { get { return _storageRedemptionServiceClass; } set { SetField(ref _storageRedemptionServiceClass, value); } }
+        public string LatestStorageRedemptionQuoteText { get { return _latestStorageRedemptionQuoteText; } private set { SetField(ref _latestStorageRedemptionQuoteText, value); } }
+        public string LatestStorageRedemptionQuoteSha256 { get { return _latestStorageRedemptionQuoteSha256; } private set { SetField(ref _latestStorageRedemptionQuoteSha256, value); } }
+        public string LatestStorageRedemptionAcceptedText { get { return _latestStorageRedemptionAcceptedText; } private set { SetField(ref _latestStorageRedemptionAcceptedText, value); } }
+        public long StorageRedemptionBurnCc { get { return _storageRedemptionBurnCc; } set { SetField(ref _storageRedemptionBurnCc, value); } }
+        public long StorageRedemptionVerifiedGbDays { get { return _storageRedemptionVerifiedGbDays; } set { SetField(ref _storageRedemptionVerifiedGbDays, value); } }
+        public string StorageRedemptionProofRecordPath { get { return _storageRedemptionProofRecordPath; } set { SetField(ref _storageRedemptionProofRecordPath, value); } }
+        public long StorageRedemptionRefundCc { get { return _storageRedemptionRefundCc; } set { SetField(ref _storageRedemptionRefundCc, value); } }
+        public string StorageRedemptionStatusText { get { return _storageRedemptionStatusText; } private set { SetField(ref _storageRedemptionStatusText, value); } }
         public string ActivityLog { get { return _activityLog; } private set { SetField(ref _activityLog, value); } }
 
         public string ReleaseLaneSummaryText

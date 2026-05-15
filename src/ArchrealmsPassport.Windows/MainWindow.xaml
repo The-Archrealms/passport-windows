@@ -355,6 +355,76 @@
                                 <TextBlock AutomationProperties.AutomationId="StorageActionStatusText"
                                            Style="{StaticResource StatusValueStyle}"
                                            Text="{Binding StorageActionStatusText}" />
+
+                                <TextBlock Margin="0,24,0,0" Style="{StaticResource SectionTitleStyle}" Text="Storage Redemption" />
+
+                                <Grid Margin="0,16,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource FieldLabelStyle}" Text="GB" />
+                                    <TextBox Grid.Row="1" Grid.Column="0" Margin="0,0,8,0" Style="{StaticResource CodeTextBoxStyle}" Text="{Binding StorageRedemptionGb, UpdateSourceTrigger=PropertyChanged}" />
+
+                                    <TextBlock Grid.Row="0" Grid.Column="1" Style="{StaticResource FieldLabelStyle}" Text="Epochs" />
+                                    <TextBox Grid.Row="1" Grid.Column="1" Margin="8,0,0,0" Style="{StaticResource CodeTextBoxStyle}" Text="{Binding StorageRedemptionEpochCount, UpdateSourceTrigger=PropertyChanged}" />
+
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Style="{StaticResource FieldLabelStyle}" Text="CC Rate" />
+                                    <TextBox Grid.Row="3" Grid.Column="0" Margin="0,0,8,0" Style="{StaticResource CodeTextBoxStyle}" Text="{Binding StorageRedemptionCcPerGbEpoch, UpdateSourceTrigger=PropertyChanged}" />
+
+                                    <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource FieldLabelStyle}" Text="Service Class" />
+                                    <TextBox Grid.Row="3" Grid.Column="1" Margin="8,0,0,0" Style="{StaticResource CodeTextBoxStyle}" Text="{Binding StorageRedemptionServiceClass, UpdateSourceTrigger=PropertyChanged}" />
+                                </Grid>
+
+                                <WrapPanel Margin="0,16,0,0">
+                                    <Button AutomationProperties.AutomationId="CreateStorageRedemptionQuoteButton" Style="{StaticResource SecondaryButtonStyle}" Command="{Binding CreateStorageRedemptionQuoteCommand}" Content="Create Quote" />
+                                    <Button AutomationProperties.AutomationId="AcceptStorageRedemptionQuoteButton" Style="{StaticResource SecondaryButtonStyle}" Command="{Binding AcceptStorageRedemptionQuoteCommand}" Content="Accept Quote" />
+                                </WrapPanel>
+
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Quote" />
+                                <TextBox Style="{StaticResource CodeTextBoxStyle}" IsReadOnly="True" Text="{Binding LatestStorageRedemptionQuoteText, Mode=OneWay}" />
+
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Accepted Redemption" />
+                                <TextBox Style="{StaticResource CodeTextBoxStyle}" IsReadOnly="True" Text="{Binding LatestStorageRedemptionAcceptedText, Mode=OneWay}" />
+
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Proof Record Path" />
+                                <TextBox AutomationProperties.AutomationId="StorageRedemptionProofRecordPathTextBox" Style="{StaticResource CodeTextBoxStyle}" Text="{Binding StorageRedemptionProofRecordPath, UpdateSourceTrigger=PropertyChanged}" />
+
+                                <Grid Margin="0,8,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource FieldLabelStyle}" Text="Burn CC" />
+                                    <TextBox Grid.Row="1" Grid.Column="0" Margin="0,0,8,0" Style="{StaticResource CodeTextBoxStyle}" Text="{Binding StorageRedemptionBurnCc, UpdateSourceTrigger=PropertyChanged}" />
+
+                                    <TextBlock Grid.Row="0" Grid.Column="1" Style="{StaticResource FieldLabelStyle}" Text="Verified GB-Days" />
+                                    <TextBox Grid.Row="1" Grid.Column="1" Margin="8,0,8,0" Style="{StaticResource CodeTextBoxStyle}" Text="{Binding StorageRedemptionVerifiedGbDays, UpdateSourceTrigger=PropertyChanged}" />
+
+                                    <TextBlock Grid.Row="0" Grid.Column="2" Style="{StaticResource FieldLabelStyle}" Text="Refund CC" />
+                                    <TextBox Grid.Row="1" Grid.Column="2" Margin="8,0,0,0" Style="{StaticResource CodeTextBoxStyle}" Text="{Binding StorageRedemptionRefundCc, UpdateSourceTrigger=PropertyChanged}" />
+                                </Grid>
+
+                                <WrapPanel Margin="0,16,0,0">
+                                    <Button AutomationProperties.AutomationId="BurnStorageRedemptionEpochButton" Style="{StaticResource SecondaryButtonStyle}" Command="{Binding BurnStorageRedemptionEpochCommand}" Content="Burn Epoch" />
+                                    <Button AutomationProperties.AutomationId="RefundStorageRedemptionButton" Style="{StaticResource SecondaryButtonStyle}" Command="{Binding RefundStorageRedemptionCommand}" Content="Refund Escrow" />
+                                </WrapPanel>
+
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Redemption Status" />
+                                <TextBlock AutomationProperties.AutomationId="StorageRedemptionStatusText" Style="{StaticResource StatusValueStyle}" Text="{Binding StorageRedemptionStatusText}" />
                             </StackPanel>
                         </Border>
                     </Grid>
