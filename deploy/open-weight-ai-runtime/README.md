@@ -36,6 +36,16 @@ Required production readiness values:
 
 The hosted gateway reads the same values for `/ai/runtime/status` and `/ai/runtime/probe`.
 
+## Production Approval Packet
+
+Before loading production AI values into the readiness environment, fill and approve:
+
+- `model-approval-request.template.md`
+- `vector-store-provisioning.template.md`
+- `ai-runtime-readiness-evidence.template.md`
+
+These templates record the approved model artifact SHA-256, license approval ID, private inference endpoint, vector store provider and ID, knowledge approval root, and the readiness evidence proving `/ai/runtime/status` and `/ai/runtime/probe` pass through the hosted gateway.
+
 ## Local Validation
 
 Validate the deployment files without starting the model runtime:

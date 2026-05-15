@@ -7,6 +7,12 @@ param(
 
     [string]$ReadmePath = "deploy\open-weight-ai-runtime\README.md",
 
+    [string]$ModelApprovalPath = "deploy\open-weight-ai-runtime\model-approval-request.template.md",
+
+    [string]$VectorStoreProvisioningPath = "deploy\open-weight-ai-runtime\vector-store-provisioning.template.md",
+
+    [string]$RuntimeReadinessEvidencePath = "deploy\open-weight-ai-runtime\ai-runtime-readiness-evidence.template.md",
+
     [string]$OutputPath = "artifacts\release\open-weight-ai-runtime-deployment-validation-report.json",
 
     [switch]$ProbeRuntime,
@@ -142,12 +148,15 @@ $resolvedVllmCompose = Resolve-RepoPath $VllmComposePath
 $resolvedTgiCompose = Resolve-RepoPath $TgiComposePath
 $resolvedEnvTemplate = Resolve-RepoPath $EnvTemplatePath
 $resolvedReadme = Resolve-RepoPath $ReadmePath
+$resolvedModelApproval = Resolve-RepoPath $ModelApprovalPath
+$resolvedVectorStoreProvisioning = Resolve-RepoPath $VectorStoreProvisioningPath
+$resolvedRuntimeReadinessEvidence = Resolve-RepoPath $RuntimeReadinessEvidencePath
 $resolvedOutput = Resolve-RepoPath $OutputPath
 
 $checks = New-Object System.Collections.Generic.List[object]
 
 $missingFiles = @()
-foreach ($path in @($resolvedVllmCompose, $resolvedTgiCompose, $resolvedEnvTemplate, $resolvedReadme)) {
+foreach ($path in @($resolvedVllmCompose, $resolvedTgiCompose, $resolvedEnvTemplate, $resolvedReadme, $resolvedModelApproval, $resolvedVectorStoreProvisioning, $resolvedRuntimeReadinessEvidence)) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
         $missingFiles += $path
     }
@@ -158,6 +167,9 @@ $checks.Add((New-Check -Id "deployment_files_exist" -Passed ($missingFiles.Count
     tgi_compose = $resolvedTgiCompose
     env_template = $resolvedEnvTemplate
     readme = $resolvedReadme
+    model_approval = $resolvedModelApproval
+    vector_store_provisioning = $resolvedVectorStoreProvisioning
+    runtime_readiness_evidence = $resolvedRuntimeReadinessEvidence
 }))
 
 if ($missingFiles.Count -eq 0) {
@@ -232,6 +244,52 @@ if ($missingFiles.Count -eq 0) {
             "Test-PassportOpenWeightAiRuntimeDeployment.ps1"
         )
     $checks.Add((New-Check -Id "readme_operator_contract" -Passed ($readmeFailures.Count -eq 0) -Failures $readmeFailures -Evidence @{ path = $resolvedReadme }))
+
+    $modelApprovalText = Get-Content -LiteralPath $resolvedModelApproval -Raw
+    $modelApprovalFailures = Test-TextContains `
+        -Text $modelApprovalText `
+        -Required @(
+            "ARCHREALMS_PASSPORT_AI_MODEL_LICENSE_APPROVAL_ID",
+            "ARCHREALMS_PASSPORT_AI_MODEL_ID",
+            "ARCHREALMS_PASSPORT_AI_MODEL_ARTIFACT_SHA256",
+            "ARCHREALMS_PASSPORT_AI_INFERENCE_BASE_URL",
+            "open weight",
+            "/v1/chat/completions",
+            "non-authoritative",
+            "open-weight-ai-runtime-deployment-validation-report.json"
+        )
+    $checks.Add((New-Check -Id "model_approval_contract" -Passed ($modelApprovalFailures.Count -eq 0) -Failures $modelApprovalFailures -Evidence @{ path = $resolvedModelApproval }))
+
+    $vectorStoreText = Get-Content -LiteralPath $resolvedVectorStoreProvisioning -Raw
+    $vectorStoreFailures = Test-TextContains `
+        -Text $vectorStoreText `
+        -Required @(
+            "ARCHREALMS_PASSPORT_AI_VECTOR_STORE_PROVIDER",
+            "ARCHREALMS_PASSPORT_AI_VECTOR_STORE_ID",
+            "ARCHREALMS_PASSPORT_AI_KNOWLEDGE_APPROVAL_ROOT",
+            "Raw AI prompts",
+            "telemetry-retention policy",
+            "/ai/runtime/status",
+            "quota and non-authority policy"
+        )
+    $checks.Add((New-Check -Id "vector_store_provisioning_contract" -Passed ($vectorStoreFailures.Count -eq 0) -Failures $vectorStoreFailures -Evidence @{ path = $resolvedVectorStoreProvisioning }))
+
+    $runtimeEvidenceText = Get-Content -LiteralPath $resolvedRuntimeReadinessEvidence -Raw
+    $runtimeEvidenceFailures = Test-TextContains `
+        -Text $runtimeEvidenceText `
+        -Required @(
+            "ARCHREALMS_PASSPORT_AI_INFERENCE_BASE_URL",
+            "ARCHREALMS_PASSPORT_AI_MODEL_ID",
+            "ARCHREALMS_PASSPORT_AI_MODEL_ARTIFACT_SHA256",
+            "ARCHREALMS_PASSPORT_AI_MODEL_LICENSE_APPROVAL_ID",
+            "ARCHREALMS_PASSPORT_AI_VECTOR_STORE_PROVIDER",
+            "ARCHREALMS_PASSPORT_AI_VECTOR_STORE_ID",
+            "ARCHREALMS_PASSPORT_AI_KNOWLEDGE_APPROVAL_ROOT",
+            "open_weight_ai_runtime",
+            "hosted_ai_runtime_probe",
+            "runtime_answer_received=true"
+        )
+    $checks.Add((New-Check -Id "ai_runtime_readiness_evidence_contract" -Passed ($runtimeEvidenceFailures.Count -eq 0) -Failures $runtimeEvidenceFailures -Evidence @{ path = $resolvedRuntimeReadinessEvidence }))
 }
 
 if ($ProbeRuntime) {

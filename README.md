@@ -336,6 +336,8 @@ Validate the runtime deployment package:
 .\tools\release\Test-PassportOpenWeightAiRuntimeDeployment.ps1
 ```
 
+The validator also checks the production approval templates for model license/artifact evidence, vector store provisioning, knowledge approval root, and AI runtime readiness evidence under `deploy/open-weight-ai-runtime/`.
+
 After a local or private runtime is running, the same validator can send a non-mutating OpenAI-compatible chat probe:
 
 ```powershell
