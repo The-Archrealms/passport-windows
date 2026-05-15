@@ -1,0 +1,17 @@
+{
+  "release_lane": "production-mvp",
+  "ledger_namespace": "archrealms-passport-production-mvp",
+  "policy_version": "passport-release-lanes-v1",
+  "total_supply_base_units": 1000000000000000000,
+  "base_unit_precision": 18,
+  "genesis_authority_record_sha256": "<64-hex-genesis-authority-record-sha256>",
+  "allocations": [
+    {
+      "allocation_id": "<allocation-id-1>",
+      "account_id": "<account-id-1>",
+      "archrealms_identity_id": "<identity-id-1>",
+      "wallet_key_id": "<wallet-key-id-1>",
+      "amount_base_units": 1000000000000000000
+    }
+  ]
+}

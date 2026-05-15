@@ -223,6 +223,35 @@ When production copies are filled in a controlled document store, validate them 
   -RequireNoPlaceholders
 ```
 
+## Production Monetary Provisioning
+
+ProductionMvp readiness also requires monetary identifiers for the CC issuer, capacity-report issuer, ARCH genesis manifest, and production ledger namespace. The repo includes templates under `deploy/production-monetary/` for the hosted ARCH genesis and CC capacity records.
+
+Validate the monetary provisioning templates:
+
+```powershell
+.\tools\release\Test-PassportProductionMonetaryProvisioning.ps1
+```
+
+When production copies are filled and approved, validate them and optionally create the hosted records:
+
+```powershell
+.\tools\release\Test-PassportProductionMonetaryProvisioning.ps1 `
+  -ProductionMonetaryPath C:\secure\archrealms-passport-production-monetary `
+  -RequireNoPlaceholders
+```
+
+Create the hosted monetary records only after approvals are recorded:
+
+```powershell
+.\tools\release\Test-PassportProductionMonetaryProvisioning.ps1 `
+  -ProductionMonetaryPath C:\secure\archrealms-passport-production-monetary `
+  -RequireNoPlaceholders `
+  -CreateHostedRecords `
+  -HostedApiBaseUrl https://passport.archrealms.example `
+  -OperatorKey <operator-key>
+```
+
 ## Managed Signing Endpoint Deployment
 
 Hosted services use `ARCHREALMS_PASSPORT_HOSTED_SIGNING_ENDPOINT` for production service-record signatures. The repo includes a managed-signing endpoint baseline under `deploy/managed-signing/`; local validation signs with a generated PKCS#8 key and returns `local_validation_only=true`, while production must front KMS, HSM, managed-HSM, or cloud-KMS custody and return `local_validation_only=false`.

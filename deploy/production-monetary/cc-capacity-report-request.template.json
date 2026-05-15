@@ -1,0 +1,15 @@
+{
+  "release_lane": "production-mvp",
+  "ledger_namespace": "archrealms-passport-production-mvp",
+  "policy_version": "passport-release-lanes-v1",
+  "service_class": "storage_standard",
+  "conservative_service_liability_capacity_base_units": 1000000000,
+  "outstanding_cc_before_base_units": 0,
+  "max_issuance_base_units": 250000000,
+  "capacity_haircut_basis_points": 6500,
+  "independent_volume_qualified": true,
+  "thin_market_issuance_zero": false,
+  "continuity_reserve_excluded": true,
+  "operational_reserve_excluded": true,
+  "capacity_report_authority_record_sha256": "<64-hex-capacity-authority-record-sha256>"
+}
