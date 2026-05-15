@@ -1,0 +1,27 @@
+{
+  "schema": "archrealms.passport.pre_mvp_simulation_run.v1",
+  "created_utc": "<yyyy-mm-ddThh:mm:ssZ>",
+  "lane": "internal-verification",
+  "simulation_run_id": "<pre-mvp-simulation-run-id>",
+  "operator": "<simulation operator>",
+  "policy_version": "<internal verification policy version>",
+  "completed": true,
+  "synthetic_users_exercised": true,
+  "ledger_replay_exercised": true,
+  "key_recovery_attacks_exercised": true,
+  "storage_proof_attacks_exercised": true,
+  "storage_revocation_wipe_exercised": true,
+  "bandwidth_limit_exercised": true,
+  "escrow_burn_refund_recredit_exercised": true,
+  "market_manipulation_exercised": true,
+  "service_failure_exercised": true,
+  "wallet_compromise_exercised": true,
+  "identity_compromise_exercised": true,
+  "ai_privacy_retention_exercised": true,
+  "no_production_records_created": true,
+  "evidence_references": [
+    "<simulation-run-log-id-or-uri>",
+    "<adversarial-test-summary-id-or-uri>",
+    "<operator-signoff-id-or-uri>"
+  ]
+}

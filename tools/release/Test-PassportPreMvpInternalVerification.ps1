@@ -3,6 +3,10 @@ param(
     [string]$DotnetPath,
     [string]$Configuration = "Release",
     [string[]]$ManifestPath,
+    [string]$SimulationRunReportPath,
+    [string]$SimulationRunReportSha256,
+    [string]$StaffStewardPilotReportPath,
+    [string]$StaffStewardPilotReportSha256,
     [switch]$SkipDotnetTests,
     [switch]$SkipDeploymentValidation,
     [switch]$SkipArtifactValidation,
@@ -132,6 +136,267 @@ function Get-ManifestLane {
     }
 
     return ""
+}
+
+function Read-ObjectString {
+    param(
+        [object]$Object,
+        [string]$Name
+    )
+
+    if ($null -eq $Object -or -not $Object.PSObject.Properties[$Name]) {
+        return ""
+    }
+
+    return ([string]$Object.PSObject.Properties[$Name].Value).Trim()
+}
+
+function Read-ObjectBool {
+    param(
+        [object]$Object,
+        [string]$Name
+    )
+
+    if ($null -eq $Object -or -not $Object.PSObject.Properties[$Name]) {
+        return $false
+    }
+
+    return [bool]$Object.PSObject.Properties[$Name].Value
+}
+
+function Read-ObjectInt {
+    param(
+        [object]$Object,
+        [string]$Name
+    )
+
+    if ($null -eq $Object -or -not $Object.PSObject.Properties[$Name]) {
+        return 0
+    }
+
+    try {
+        return [int]$Object.PSObject.Properties[$Name].Value
+    }
+    catch {
+        return 0
+    }
+}
+
+function Test-NotPlaceholderValue {
+    param(
+        [string]$Name,
+        [string]$Value
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Value)) {
+        return "$Name is required"
+    }
+
+    $trimmed = $Value.Trim()
+    if ($trimmed -match '<[^>]+>' -or $trimmed -match '^\s*set value\s*$') {
+        return "$Name contains a placeholder value"
+    }
+
+    return ""
+}
+
+function Test-RequiredTrueField {
+    param(
+        [object]$Object,
+        [string]$Name,
+        [string]$Description
+    )
+
+    if (-not (Read-ObjectBool -Object $Object -Name $Name)) {
+        return "$Description must be true"
+    }
+
+    return ""
+}
+
+function Test-EvidenceFile {
+    param(
+        [string]$Path,
+        [string]$ExpectedSha256,
+        [string]$Name
+    )
+
+    $failures = @()
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        $failures += "$Name path is required"
+        return [pscustomobject][ordered]@{
+            failures = $failures
+            report = $null
+            actual_sha256 = ""
+        }
+    }
+
+    if ([string]::IsNullOrWhiteSpace($ExpectedSha256)) {
+        $failures += "$Name SHA-256 is required"
+    }
+    elseif ($ExpectedSha256 -notmatch '^[0-9a-fA-F]{64}$') {
+        $failures += "$Name SHA-256 must be a SHA-256 hex string"
+    }
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        $failures += "$Name file was not found: $Path"
+        return [pscustomobject][ordered]@{
+            failures = $failures
+            report = $null
+            actual_sha256 = ""
+        }
+    }
+
+    $actualHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $Path).Hash.ToLowerInvariant()
+    if (-not [string]::IsNullOrWhiteSpace($ExpectedSha256) -and
+        -not [string]::Equals($actualHash, $ExpectedSha256, [System.StringComparison]::OrdinalIgnoreCase)) {
+        $failures += "$Name SHA-256 does not match the file"
+    }
+
+    $report = $null
+    try {
+        $report = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
+    }
+    catch {
+        $failures += "$Name is not valid JSON: $($_.Exception.Message)"
+    }
+
+    return [pscustomobject][ordered]@{
+        failures = $failures
+        report = $report
+        actual_sha256 = $actualHash
+    }
+}
+
+function Test-PreMvpSimulationRunEvidence {
+    param(
+        [string]$Path,
+        [string]$ExpectedSha256
+    )
+
+    $result = Test-EvidenceFile -Path $Path -ExpectedSha256 $ExpectedSha256 -Name "Pre-MVP simulation run report"
+    $failures = @($result.failures)
+    $report = $result.report
+    if ($null -eq $report) {
+        return [pscustomobject][ordered]@{
+            passed = $false
+            failures = $failures
+            evidence = @{ path = $Path; expected_sha256 = $ExpectedSha256; actual_sha256 = $result.actual_sha256 }
+        }
+    }
+
+    if ((Read-ObjectString -Object $report -Name "schema") -ne "archrealms.passport.pre_mvp_simulation_run.v1") {
+        $failures += "Pre-MVP simulation run report has unexpected schema"
+    }
+
+    if ((Read-ObjectString -Object $report -Name "lane") -ne "internal-verification") {
+        $failures += "Pre-MVP simulation run report must be for the internal-verification lane"
+    }
+
+    foreach ($field in @("created_utc", "simulation_run_id", "operator", "policy_version")) {
+        $failure = Test-NotPlaceholderValue -Name $field -Value (Read-ObjectString -Object $report -Name $field)
+        if ($failure) {
+            $failures += $failure
+        }
+    }
+
+    foreach ($check in @(
+        @("completed", "simulation run completion"),
+        @("synthetic_users_exercised", "synthetic users"),
+        @("ledger_replay_exercised", "ledger replay"),
+        @("key_recovery_attacks_exercised", "key recovery attack"),
+        @("storage_proof_attacks_exercised", "storage proof attack"),
+        @("storage_revocation_wipe_exercised", "storage revocation and wipe"),
+        @("bandwidth_limit_exercised", "bandwidth limit"),
+        @("escrow_burn_refund_recredit_exercised", "escrow/burn/refund/re-credit"),
+        @("market_manipulation_exercised", "market manipulation"),
+        @("service_failure_exercised", "service failure"),
+        @("wallet_compromise_exercised", "wallet compromise"),
+        @("identity_compromise_exercised", "identity compromise"),
+        @("ai_privacy_retention_exercised", "AI privacy and retention"),
+        @("no_production_records_created", "no production records created")
+    )) {
+        $failure = Test-RequiredTrueField -Object $report -Name $check[0] -Description $check[1]
+        if ($failure) {
+            $failures += $failure
+        }
+    }
+
+    if (@($report.evidence_references).Count -lt 3) {
+        $failures += "Pre-MVP simulation run report must include at least three evidence references"
+    }
+
+    return [pscustomobject][ordered]@{
+        passed = ($failures.Count -eq 0)
+        failures = $failures
+        evidence = @{ path = $Path; expected_sha256 = $ExpectedSha256; actual_sha256 = $result.actual_sha256 }
+    }
+}
+
+function Test-PreMvpStaffStewardPilotEvidence {
+    param(
+        [string]$Path,
+        [string]$ExpectedSha256
+    )
+
+    $result = Test-EvidenceFile -Path $Path -ExpectedSha256 $ExpectedSha256 -Name "Pre-MVP staff/steward pilot report"
+    $failures = @($result.failures)
+    $report = $result.report
+    if ($null -eq $report) {
+        return [pscustomobject][ordered]@{
+            passed = $false
+            failures = $failures
+            evidence = @{ path = $Path; expected_sha256 = $ExpectedSha256; actual_sha256 = $result.actual_sha256 }
+        }
+    }
+
+    if ((Read-ObjectString -Object $report -Name "schema") -ne "archrealms.passport.pre_mvp_staff_steward_pilot.v1") {
+        $failures += "Pre-MVP staff/steward pilot report has unexpected schema"
+    }
+
+    if ((Read-ObjectString -Object $report -Name "lane") -ne "internal-verification") {
+        $failures += "Pre-MVP staff/steward pilot report must be for the internal-verification lane"
+    }
+
+    foreach ($field in @("created_utc", "staff_steward_pilot_id", "pilot_owner", "policy_version")) {
+        $failure = Test-NotPlaceholderValue -Name $field -Value (Read-ObjectString -Object $report -Name $field)
+        if ($failure) {
+            $failures += $failure
+        }
+    }
+
+    if ((Read-ObjectInt -Object $report -Name "pilot_participant_count") -lt 1) {
+        $failures += "Pre-MVP staff/steward pilot report must include at least one participant"
+    }
+
+    foreach ($check in @(
+        @("completed", "staff/steward pilot completion"),
+        @("staff_or_steward_participants_confirmed", "staff or steward participant confirmation"),
+        @("crown_owned_devices_used", "Crown-owned test devices"),
+        @("no_citizen_production_tokens_used", "no citizen production tokens"),
+        @("recovery_revocation_validated", "recovery and revocation validation"),
+        @("storage_contribution_validated", "storage contribution validation"),
+        @("ledger_export_validated", "ledger export validation"),
+        @("hosted_ai_privacy_validated", "hosted AI privacy validation"),
+        @("production_readiness_blockers_reviewed", "production readiness blocker review"),
+        @("pilot_signoff_signed", "pilot signoff"),
+        @("no_production_records_created", "no production records created")
+    )) {
+        $failure = Test-RequiredTrueField -Object $report -Name $check[0] -Description $check[1]
+        if ($failure) {
+            $failures += $failure
+        }
+    }
+
+    if (@($report.evidence_references).Count -lt 3) {
+        $failures += "Pre-MVP staff/steward pilot report must include at least three evidence references"
+    }
+
+    return [pscustomobject][ordered]@{
+        passed = ($failures.Count -eq 0)
+        failures = $failures
+        evidence = @{ path = $Path; expected_sha256 = $ExpectedSha256; actual_sha256 = $result.actual_sha256 }
+    }
 }
 
 function Find-InternalVerificationManifestPaths {
@@ -462,8 +727,42 @@ else {
     }
 }
 
+if ([string]::IsNullOrWhiteSpace($SimulationRunReportPath)) {
+    $SimulationRunReportPath = $env:ARCHREALMS_PASSPORT_PRE_MVP_SIMULATION_RUN_REPORT_PATH
+}
+
+if ([string]::IsNullOrWhiteSpace($SimulationRunReportSha256)) {
+    $SimulationRunReportSha256 = $env:ARCHREALMS_PASSPORT_PRE_MVP_SIMULATION_RUN_REPORT_SHA256
+}
+
+if ([string]::IsNullOrWhiteSpace($StaffStewardPilotReportPath)) {
+    $StaffStewardPilotReportPath = $env:ARCHREALMS_PASSPORT_PRE_MVP_STAFF_STEWARD_PILOT_REPORT_PATH
+}
+
+if ([string]::IsNullOrWhiteSpace($StaffStewardPilotReportSha256)) {
+    $StaffStewardPilotReportSha256 = $env:ARCHREALMS_PASSPORT_PRE_MVP_STAFF_STEWARD_PILOT_REPORT_SHA256
+}
+
+$simulationEvidence = Test-PreMvpSimulationRunEvidence -Path $SimulationRunReportPath -ExpectedSha256 $SimulationRunReportSha256
+$checks += New-Check `
+    -Id "simulation_run_evidence" `
+    -Description "Pre-MVP simulation run evidence proves the required adversarial, failure, recovery, storage, market, wallet, identity, and AI privacy simulations ran before citizen-facing token release." `
+    -Passed ([bool]$simulationEvidence.passed) `
+    -Failures @($simulationEvidence.failures) `
+    -Evidence $simulationEvidence.evidence
+
+$staffPilotEvidence = Test-PreMvpStaffStewardPilotEvidence -Path $StaffStewardPilotReportPath -ExpectedSha256 $StaffStewardPilotReportSha256
+$checks += New-Check `
+    -Id "staff_steward_pilot_evidence" `
+    -Description "Pre-MVP staff/steward pilot evidence proves non-citizen pilot operators exercised Passport with Crown-owned devices and no production token records before citizen-facing token release." `
+    -Passed ([bool]$staffPilotEvidence.passed) `
+    -Failures @($staffPilotEvidence.failures) `
+    -Evidence $staffPilotEvidence.evidence
+
 $requirements = @(
     New-Requirement -Id "synthetic_users" -Description "Synthetic users are exercised before citizen-facing token release." -CheckIds @("windows_tests") -Checks $checks -Evidence "Windows tests use isolated PassportTestWorkspace identities and records."
+    New-Requirement -Id "simulation_runs" -Description "Pre-MVP simulation runs are completed and evidence-backed before citizen-facing token release." -CheckIds @("simulation_run_evidence") -Checks $checks -Evidence "A signed or controlled simulation-run report must prove the required adversarial, failure, recovery, storage, market, wallet, identity, and AI privacy scenarios ran without production records."
+    New-Requirement -Id "staff_steward_pilots" -Description "Staff/steward pilots are completed and evidence-backed before citizen-facing token release." -CheckIds @("staff_steward_pilot_evidence") -Checks $checks -Evidence "A signed or controlled pilot report must prove staff/steward operators used Crown-owned devices, no production tokens, and validated recovery, storage, ledger export, and hosted AI privacy posture."
     New-Requirement -Id "crown_owned_test_devices" -Description "Crown-owned test devices and device authorization flows are exercised." -CheckIds @("windows_tests", "hosted_service_tests") -Checks $checks -Evidence "Device authorization, deauthorization, and hosted recovery validation tests use synthetic device keys."
     New-Requirement -Id "crown_owned_test_storage_nodes" -Description "Crown-owned storage-node paths are exercised before citizen payloads." -CheckIds @("windows_tests", "hosted_service_tests") -Checks $checks -Evidence "Storage contribution, storage readiness, and storage delivery tests run against isolated local/hosted test roots."
     New-Requirement -Id "synthetic_storage_payloads" -Description "Storage proof and delivery tests use synthetic payloads." -CheckIds @("windows_tests") -Checks $checks -Evidence "Storage redemption tests validate manifests, proof packages, delivery metering, and failed proof handling without citizen data."

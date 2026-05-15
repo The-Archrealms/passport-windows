@@ -1,0 +1,25 @@
+{
+  "schema": "archrealms.passport.pre_mvp_staff_steward_pilot.v1",
+  "created_utc": "<yyyy-mm-ddThh:mm:ssZ>",
+  "lane": "internal-verification",
+  "staff_steward_pilot_id": "<pre-mvp-staff-steward-pilot-id>",
+  "pilot_owner": "<pilot owner>",
+  "policy_version": "<internal verification policy version>",
+  "pilot_participant_count": 1,
+  "completed": true,
+  "staff_or_steward_participants_confirmed": true,
+  "crown_owned_devices_used": true,
+  "no_citizen_production_tokens_used": true,
+  "recovery_revocation_validated": true,
+  "storage_contribution_validated": true,
+  "ledger_export_validated": true,
+  "hosted_ai_privacy_validated": true,
+  "production_readiness_blockers_reviewed": true,
+  "pilot_signoff_signed": true,
+  "no_production_records_created": true,
+  "evidence_references": [
+    "<pilot-session-record-id-or-uri>",
+    "<participant-signoff-id-or-uri>",
+    "<pilot-issue-review-id-or-uri>"
+  ]
+}

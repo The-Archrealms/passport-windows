@@ -831,6 +831,8 @@ function Test-PreMvpInternalVerificationReport {
 
     $requiredIds = @(
         "synthetic_users",
+        "simulation_runs",
+        "staff_steward_pilots",
         "crown_owned_test_devices",
         "crown_owned_test_storage_nodes",
         "synthetic_storage_payloads",
