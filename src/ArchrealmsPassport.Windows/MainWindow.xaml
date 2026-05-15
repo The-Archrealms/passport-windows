@@ -595,6 +595,9 @@
                                 <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Accepted Redemption" />
                                 <TextBox Style="{StaticResource CodeTextBoxStyle}" IsReadOnly="True" Text="{Binding LatestStorageRedemptionAcceptedText, Mode=OneWay}" />
 
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Delivery Request" />
+                                <TextBox Style="{StaticResource CodeTextBoxStyle}" IsReadOnly="True" Text="{Binding LatestStorageDeliveryRequestText, Mode=OneWay}" />
+
                                 <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Proof Record Path" />
                                 <TextBox AutomationProperties.AutomationId="StorageRedemptionProofRecordPathTextBox" Style="{StaticResource CodeTextBoxStyle}" Text="{Binding StorageRedemptionProofRecordPath, UpdateSourceTrigger=PropertyChanged}" />
 

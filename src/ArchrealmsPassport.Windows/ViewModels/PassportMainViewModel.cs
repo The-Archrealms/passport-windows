@@ -142,6 +142,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
         private string _latestStorageRedemptionQuoteText = "No storage redemption quote yet.";
         private string _latestStorageRedemptionQuoteSha256 = string.Empty;
         private string _latestStorageRedemptionAcceptedText = "No accepted storage redemption yet.";
+        private string _latestStorageDeliveryRequestText = "No storage delivery request yet.";
         private long _storageRedemptionBurnCc = 1;
         private long _storageRedemptionVerifiedGbDays = 1;
         private string _storageRedemptionProofRecordPath = string.Empty;

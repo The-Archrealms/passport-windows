@@ -59,6 +59,15 @@ public sealed class PassportStorageRedemptionServiceTests
             wallet.WalletKeyReferencePath,
             wallet.WalletPublicKeyPath);
         Assert.True(accepted.Succeeded, accepted.Message);
+        Assert.True(File.Exists(accepted.ServiceDeliveryRecordPath), accepted.ServiceDeliveryRecordPath);
+
+        var deliveryRequest = PassportTestWorkspace.ReadJson(accepted.ServiceDeliveryRecordPath);
+        Assert.Equal("passport_storage_service_delivery_request", PassportTestWorkspace.GetString(deliveryRequest, "record_type"));
+        Assert.Equal(accepted.RecordId, PassportTestWorkspace.GetString(deliveryRequest, "redemption_id"));
+        Assert.Equal(PassportTestWorkspace.ComputeFileSha256(accepted.RecordPath), PassportTestWorkspace.GetString(deliveryRequest, "accepted_redemption_sha256"));
+        Assert.Equal("requested", PassportTestWorkspace.GetString(deliveryRequest, "delivery_status"));
+        Assert.True(deliveryRequest.GetProperty("delivery_integration").GetProperty("requires_epoch_proof_before_burn").GetBoolean());
+        Assert.True(deliveryRequest.TryGetProperty("wallet_signature", out _));
 
         var proof = CreateAcceptedStorageProof(workspace, "mvp_storage");
         var proofHash = PassportTestWorkspace.ComputeFileSha256(proof.RecordPath);
@@ -96,6 +105,7 @@ public sealed class PassportStorageRedemptionServiceTests
         Assert.Equal(1, PassportTestWorkspace.GetInt64(burnRecord, "verified_gb_days"));
         Assert.True(burnRecord.TryGetProperty("proof_acceptance", out var proofAcceptance));
         Assert.True(proofAcceptance.GetProperty("accepted").GetBoolean());
+        Assert.Equal(PassportTestWorkspace.ComputeFileSha256(accepted.ServiceDeliveryRecordPath), PassportTestWorkspace.GetString(burnRecord, "service_delivery_request_sha256"));
         Assert.True(burnRecord.TryGetProperty("wallet_signature", out _));
     }
 

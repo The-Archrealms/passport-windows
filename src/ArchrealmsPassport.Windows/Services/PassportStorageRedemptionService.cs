@@ -149,7 +149,20 @@ namespace ArchrealmsPassport.Windows.Services
                         ["escrow_cc_base_units"] = ReadInt64(root, "total_cc_base_units"),
                         ["failed_epoch_remedy"] = "automatic_cc_recredit_or_service_extension"
                     });
-                return Success("Storage redemption accepted and escrowed.", redemptionId, recordPath, escrow.EventPath, escrow.EventHashSha256);
+                var deliveryRequest = CreateServiceDeliveryRequestInternal(
+                    resolvedWorkspaceRoot,
+                    recordPath,
+                    walletKeyReferencePath,
+                    walletPublicKeyPath);
+                if (!deliveryRequest.Succeeded)
+                {
+                    return Failed("Storage delivery request failed: " + deliveryRequest.Message);
+                }
+
+                var accepted = Success("Storage redemption accepted, escrowed, and queued for service delivery.", redemptionId, recordPath, escrow.EventPath, escrow.EventHashSha256);
+                accepted.ServiceDeliveryRecordPath = deliveryRequest.RecordPath;
+                accepted.ServiceDeliveryRecordSha256 = deliveryRequest.RecordSha256;
+                return accepted;
             }
             catch (Exception ex)
             {
@@ -217,6 +230,12 @@ namespace ArchrealmsPassport.Windows.Services
                     return Failed("Storage proof package rejected: " + proofAcceptance.Message);
                 }
 
+                var deliveryRequest = FindServiceDeliveryRequest(resolvedWorkspaceRoot, ReadString(accepted, "redemption_id"));
+                if (string.IsNullOrWhiteSpace(deliveryRequest.RecordPath))
+                {
+                    return Failed("Storage burn requires a service delivery request record linked to the accepted redemption.");
+                }
+
                 var burnedSoFar = SumRecords(resolvedWorkspaceRoot, ReadString(accepted, "redemption_id"), "passport_storage_redemption_epoch_burn", "burn_cc_base_units");
                 var refundedSoFar = SumRecords(resolvedWorkspaceRoot, ReadString(accepted, "redemption_id"), "passport_storage_redemption_refund", "refund_cc_base_units");
                 var escrowTotal = ReadInt64(accepted, "escrow_cc_base_units");
@@ -242,7 +261,9 @@ namespace ArchrealmsPassport.Windows.Services
                     ["storage_burn_id"] = burnId,
                     ["storage_proof_acceptance_rule"] = "mvp_storage_epoch_burn_v1",
                     ["storage_verified_gb_days"] = verifiedGbDays.ToString(),
-                    ["storage_quote_rate_cc_per_gb_epoch_base_units"] = quoteTerms.CcPerGbEpochBaseUnits.ToString()
+                    ["storage_quote_rate_cc_per_gb_epoch_base_units"] = quoteTerms.CcPerGbEpochBaseUnits.ToString(),
+                    ["storage_service_delivery_request_path"] = deliveryRequest.RecordPath,
+                    ["storage_service_delivery_request_sha256"] = deliveryRequest.RecordSha256
                 };
                 var burn = new PassportMonetaryLedgerService(releaseLane).AppendEvent(
                     resolvedWorkspaceRoot,
@@ -277,6 +298,8 @@ namespace ArchrealmsPassport.Windows.Services
                         ["burn_formula"] = "burn_cc_base_units=verified_gb_days*cc_per_gb_epoch_base_units capped by remaining escrow",
                         ["proof_record_path"] = ToWorkspaceRelativePath(resolvedWorkspaceRoot, proofPath),
                         ["proof_record_sha256"] = actualProofHash,
+                        ["service_delivery_request_path"] = ToWorkspaceRelativePath(resolvedWorkspaceRoot, deliveryRequest.RecordPath),
+                        ["service_delivery_request_sha256"] = deliveryRequest.RecordSha256,
                         ["proof_acceptance"] = proofAcceptance.ToRecord()
                     });
                 return Success("Storage epoch burn recorded.", burnId, recordPath, burn.EventPath, burn.EventHashSha256);
@@ -1058,6 +1081,121 @@ namespace ArchrealmsPassport.Windows.Services
             return path;
         }
 
+        private PassportStorageRedemptionResult CreateServiceDeliveryRequestInternal(
+            string workspaceRoot,
+            string acceptedRedemptionPath,
+            string walletKeyReferencePath,
+            string walletPublicKeyPath)
+        {
+            var acceptedPath = ResolveWorkspaceRelativePath(workspaceRoot, acceptedRedemptionPath);
+            if (!File.Exists(acceptedPath))
+            {
+                return Failed("Accepted storage redemption record could not be found.");
+            }
+
+            using var document = JsonDocument.Parse(File.ReadAllText(acceptedPath));
+            var accepted = document.RootElement;
+            if (!Matches(accepted, "record_type", "passport_storage_redemption_accepted"))
+            {
+                return Failed("Service delivery request requires an accepted storage redemption record.");
+            }
+
+            var deliveryId = DateTime.UtcNow.ToString("yyyyMMddTHHmmssZ") + "-storage-delivery-" + Guid.NewGuid().ToString("N")[..10];
+            var root = Path.Combine(workspaceRoot, "records", "passport", "monetary", "storage-redemptions", "delivery-requests");
+            Directory.CreateDirectory(root);
+            var path = Path.Combine(root, deliveryId + ".json");
+            var acceptedHash = ComputeSha256(File.ReadAllBytes(acceptedPath));
+            var record = new Dictionary<string, object?>
+            {
+                ["schema_version"] = 1,
+                ["record_type"] = "passport_storage_service_delivery_request",
+                ["record_id"] = deliveryId,
+                ["delivery_request_id"] = deliveryId,
+                ["redemption_id"] = ReadString(accepted, "redemption_id"),
+                ["created_utc"] = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+                ["release_lane"] = releaseLane.Lane,
+                ["ledger_namespace"] = releaseLane.LedgerNamespace,
+                ["policy_version"] = releaseLane.PolicyVersion,
+                ["account_id"] = ReadString(accepted, "account_id"),
+                ["archrealms_identity_id"] = ReadString(accepted, "archrealms_identity_id"),
+                ["wallet_key_id"] = ReadString(accepted, "wallet_key_id"),
+                ["quote_id"] = ReadString(accepted, "quote_id"),
+                ["accepted_redemption_path"] = ToWorkspaceRelativePath(workspaceRoot, acceptedPath),
+                ["accepted_redemption_sha256"] = acceptedHash,
+                ["service_class"] = ReadString(accepted, "service_class"),
+                ["storage_gb"] = ReadInt64(accepted, "storage_gb"),
+                ["service_epoch_count"] = ReadInt64(accepted, "service_epoch_count"),
+                ["total_cc_base_units"] = ReadInt64(accepted, "total_cc_base_units"),
+                ["delivery_status"] = "requested",
+                ["delivery_integration"] = new Dictionary<string, object?>
+                {
+                    ["contract"] = "passport_storage_delivery_request_v1",
+                    ["crown_service_endpoint_base_url"] = releaseLane.ApiBaseUrl,
+                    ["requires_crown_storage_assignment"] = true,
+                    ["requires_epoch_proof_before_burn"] = true,
+                    ["required_proof_record_type"] = "storage_epoch_proof_record",
+                    ["content_manifest_required_before_first_epoch"] = true
+                },
+                ["ai_approved"] = false,
+                ["summary"] = "Storage service delivery request linked to accepted CC escrow. Delivery requires Crown storage assignment and proof-backed epoch records before burn."
+            };
+
+            var unsignedPayload = JsonSerializer.Serialize(record, JsonOptions);
+            var signature = new PassportWalletKeyService(releaseLane).SignWalletPayload(
+                walletKeyReferencePath,
+                walletPublicKeyPath,
+                Encoding.UTF8.GetBytes(unsignedPayload));
+            if (!signature.Succeeded)
+            {
+                return Failed(signature.Message);
+            }
+
+            record["wallet_signature"] = new Dictionary<string, object?>
+            {
+                ["signature_algorithm"] = "RSA_PKCS1_SHA256",
+                ["signature_base64"] = signature.SignatureBase64,
+                ["signed_payload_sha256"] = signature.PayloadSha256,
+                ["wallet_public_key_path"] = ToWorkspaceRelativePath(workspaceRoot, walletPublicKeyPath),
+                ["verified_with_wallet_key"] = signature.VerifiedWithWalletKey
+            };
+
+            File.WriteAllText(path, JsonSerializer.Serialize(record, JsonOptions), Encoding.UTF8);
+            return Success(
+                "Storage service delivery request created.",
+                deliveryId,
+                path,
+                string.Empty,
+                string.Empty,
+                ComputeSha256(File.ReadAllBytes(path)));
+        }
+
+        private static StorageDeliveryRequestReference FindServiceDeliveryRequest(string workspaceRoot, string redemptionId)
+        {
+            var root = Path.Combine(workspaceRoot, "records", "passport", "monetary", "storage-redemptions", "delivery-requests");
+            if (string.IsNullOrWhiteSpace(redemptionId) || !Directory.Exists(root))
+            {
+                return new StorageDeliveryRequestReference();
+            }
+
+            foreach (var path in Directory.EnumerateFiles(root, "*.json", SearchOption.TopDirectoryOnly).OrderByDescending(path => path, StringComparer.OrdinalIgnoreCase))
+            {
+                using var document = JsonDocument.Parse(File.ReadAllText(path));
+                var record = document.RootElement;
+                if (Matches(record, "record_type", "passport_storage_service_delivery_request")
+                    && Matches(record, "redemption_id", redemptionId)
+                    && HasVerifiedWalletSignature(record))
+                {
+                    return new StorageDeliveryRequestReference
+                    {
+                        RecordPath = path,
+                        RecordSha256 = ComputeSha256(File.ReadAllBytes(path))
+                    };
+                }
+            }
+
+            return new StorageDeliveryRequestReference();
+        }
+
         private string WriteSignedRecord(
             string workspaceRoot,
             string kind,
@@ -1588,6 +1726,13 @@ namespace ArchrealmsPassport.Windows.Services
                     Message = message
                 };
             }
+        }
+
+        private sealed class StorageDeliveryRequestReference
+        {
+            public string RecordPath { get; set; } = string.Empty;
+
+            public string RecordSha256 { get; set; } = string.Empty;
         }
 
         private sealed class StorageProofAcceptance

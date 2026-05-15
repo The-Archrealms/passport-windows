@@ -15,5 +15,9 @@ namespace ArchrealmsPassport.Windows.Models
         public string LedgerEventPath { get; set; } = string.Empty;
 
         public string LedgerEventHashSha256 { get; set; } = string.Empty;
+
+        public string ServiceDeliveryRecordPath { get; set; } = string.Empty;
+
+        public string ServiceDeliveryRecordSha256 { get; set; } = string.Empty;
     }
 }

@@ -353,6 +353,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
         public string LatestStorageRedemptionQuoteText { get { return _latestStorageRedemptionQuoteText; } private set { SetField(ref _latestStorageRedemptionQuoteText, value); } }
         public string LatestStorageRedemptionQuoteSha256 { get { return _latestStorageRedemptionQuoteSha256; } private set { SetField(ref _latestStorageRedemptionQuoteSha256, value); } }
         public string LatestStorageRedemptionAcceptedText { get { return _latestStorageRedemptionAcceptedText; } private set { SetField(ref _latestStorageRedemptionAcceptedText, value); } }
+        public string LatestStorageDeliveryRequestText { get { return _latestStorageDeliveryRequestText; } private set { SetField(ref _latestStorageDeliveryRequestText, value); } }
         public long StorageRedemptionBurnCc { get { return _storageRedemptionBurnCc; } set { SetField(ref _storageRedemptionBurnCc, value); } }
         public long StorageRedemptionVerifiedGbDays { get { return _storageRedemptionVerifiedGbDays; } set { SetField(ref _storageRedemptionVerifiedGbDays, value); } }
         public string StorageRedemptionProofRecordPath { get { return _storageRedemptionProofRecordPath; } set { SetField(ref _storageRedemptionProofRecordPath, value); } }

@@ -52,9 +52,16 @@ namespace ArchrealmsPassport.Windows.ViewModels
             }
 
             LatestStorageRedemptionAcceptedText = accepted.RecordPath;
-            StorageRedemptionStatusText = "Storage redemption escrowed.";
+            LatestStorageDeliveryRequestText = string.IsNullOrWhiteSpace(accepted.ServiceDeliveryRecordPath)
+                ? "No storage delivery request yet."
+                : accepted.ServiceDeliveryRecordPath;
+            StorageRedemptionStatusText = "Storage redemption escrowed and queued for delivery.";
             AppendLog(accepted.Message);
             AppendLog("Accepted storage redemption: " + accepted.RecordPath);
+            if (!string.IsNullOrWhiteSpace(accepted.ServiceDeliveryRecordPath))
+            {
+                AppendLog("Storage delivery request: " + accepted.ServiceDeliveryRecordPath);
+            }
             return Task.CompletedTask;
         }
 
