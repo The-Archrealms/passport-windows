@@ -1,5 +1,6 @@
 param(
     [string]$OutputPath,
+    [string]$EnvironmentFile,
     [string]$PackageSigningConfigured = "false",
     [string]$TimestampConfigured = "false",
     [switch]$NoFail
@@ -7,6 +8,47 @@ param(
 
 $ErrorActionPreference = "Stop"
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+
+function Import-EnvironmentFile {
+    param(
+        [string]$Path
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        return @()
+    }
+
+    $resolvedPath = (Resolve-Path -LiteralPath $Path).Path
+    $loaded = @()
+    foreach ($line in Get-Content -LiteralPath $resolvedPath) {
+        $trimmed = $line.Trim()
+        if ([string]::IsNullOrWhiteSpace($trimmed) -or $trimmed.StartsWith("#")) {
+            continue
+        }
+
+        $separator = $trimmed.IndexOf("=")
+        if ($separator -le 0) {
+            continue
+        }
+
+        $name = $trimmed.Substring(0, $separator).Trim()
+        $value = $trimmed.Substring($separator + 1).Trim()
+        if ([string]::IsNullOrWhiteSpace($name)) {
+            continue
+        }
+
+        if (($value.StartsWith('"') -and $value.EndsWith('"')) -or ($value.StartsWith("'") -and $value.EndsWith("'"))) {
+            $value = $value.Substring(1, $value.Length - 2)
+        }
+
+        [System.Environment]::SetEnvironmentVariable($name, $value, "Process")
+        $loaded += $name
+    }
+
+    return $loaded
+}
+
+$loadedEnvironmentVariables = Import-EnvironmentFile -Path $EnvironmentFile
 
 function Test-NonEmptyEnvironment {
     param(
@@ -216,6 +258,9 @@ $report = [pscustomobject][ordered]@{
     created_utc = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
     repo_root = $repoRoot
     lane = "production-mvp"
+    environment_file_loaded = -not [string]::IsNullOrWhiteSpace($EnvironmentFile)
+    environment_file_variable_count = $loadedEnvironmentVariables.Count
+    environment_file_variables = $loadedEnvironmentVariables
     ready = ($failed.Count -eq 0)
     failed_gate_count = $failed.Count
     gates = $gates
