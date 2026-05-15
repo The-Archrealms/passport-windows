@@ -72,6 +72,24 @@ namespace ArchrealmsPassport.Windows.Services
                 var walletPublicKeyPath = Path.Combine(walletPublicKeyRoot, walletKeyId + ".spki.der");
                 File.WriteAllBytes(walletKeyReferencePath, protectedPrivateKeyBytes);
                 File.WriteAllBytes(walletPublicKeyPath, publicKeyBytes);
+                var walletPublicKeySha256 = ComputeSha256(publicKeyBytes);
+
+                var bindingValidation = PassportWalletKeyBindingValidator.Validate(new PassportWalletKeyBindingDescriptor
+                {
+                    IdentityId = normalizedIdentityId,
+                    AuthorizingDeviceId = normalizedDeviceId,
+                    WalletKeyId = walletKeyId,
+                    WalletKeyAlgorithm = "RSA",
+                    WalletKeySizeBits = 3072,
+                    WalletPublicKeyPath = ToWorkspaceRelativePath(resolvedWorkspaceRoot, walletPublicKeyPath),
+                    WalletPublicKeySha256 = walletPublicKeySha256,
+                    AuthorizedScopes = PassportMonetaryProtocol.WalletAuthorizedScopes,
+                    ProhibitedScopes = PassportMonetaryProtocol.WalletProhibitedScopes
+                });
+                if (!bindingValidation.IsValid)
+                {
+                    return FailedBinding("Wallet key binding failed policy validation: " + string.Join("; ", bindingValidation.Failures));
+                }
 
                 var timestamp = DateTime.UtcNow.ToString("yyyyMMddTHHmmssZ");
                 var createdUtc = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
@@ -95,7 +113,7 @@ namespace ArchrealmsPassport.Windows.Services
                     ["wallet_key_algorithm"] = "RSA",
                     ["wallet_key_size_bits"] = 3072,
                     ["wallet_public_key_path"] = ToWorkspaceRelativePath(resolvedWorkspaceRoot, walletPublicKeyPath),
-                    ["wallet_public_key_sha256"] = ComputeSha256(publicKeyBytes),
+                    ["wallet_public_key_sha256"] = walletPublicKeySha256,
                     ["authorized_scopes"] = PassportMonetaryProtocol.WalletAuthorizedScopes,
                     ["prohibited_scopes"] = PassportMonetaryProtocol.WalletProhibitedScopes,
                     ["summary"] = "Passport identity/device authorization binding a separate wallet key for monetary operations only."
@@ -227,6 +245,12 @@ namespace ArchrealmsPassport.Windows.Services
                 if (!string.Equals(ReadString(binding.Value.RootElement, "status"), "active", StringComparison.Ordinal))
                 {
                     return FailedRevocation("The wallet key binding is not active.");
+                }
+
+                var bindingValidation = ValidateWalletBindingRecord(binding.Value.RootElement);
+                if (!bindingValidation.IsValid)
+                {
+                    return FailedRevocation("The wallet key binding failed policy validation: " + string.Join("; ", bindingValidation.Failures));
                 }
 
                 if (!IsWalletKeyActive(resolvedWorkspaceRoot, normalizedIdentityId, normalizedWalletKeyId))
@@ -362,6 +386,11 @@ namespace ArchrealmsPassport.Windows.Services
                     return false;
                 }
 
+                if (!ValidateWalletBindingRecord(binding.Value.RootElement).IsValid)
+                {
+                    return false;
+                }
+
                 var bindingCreatedUtc = ReadString(binding.Value.RootElement, "created_utc");
                 return !EnumerateWalletRevocations(resolvedWorkspaceRoot, normalizedIdentityId, normalizedWalletKeyId)
                     .Any(revocation => IsSameOrAfter(ReadString(revocation.RootElement, "created_utc"), bindingCreatedUtc));
@@ -381,6 +410,11 @@ namespace ArchrealmsPassport.Windows.Services
                 var normalizedWalletKeyId = NormalizeRequired(walletKeyId, "wallet key ID");
                 var binding = FindLatestWalletBinding(resolvedWorkspaceRoot, normalizedIdentityId, normalizedWalletKeyId);
                 if (binding == null || !MatchesCurrentReleaseLane(binding.Value.RootElement))
+                {
+                    return false;
+                }
+
+                if (!ValidateWalletBindingRecord(binding.Value.RootElement).IsValid)
                 {
                     return false;
                 }
@@ -529,6 +563,50 @@ namespace ArchrealmsPassport.Windows.Services
         private static string ReadString(JsonElement root, string propertyName)
         {
             return TryGetString(root, propertyName, out var value) ? value : string.Empty;
+        }
+
+        private static PassportWalletKeyBindingValidation ValidateWalletBindingRecord(JsonElement root)
+        {
+            return PassportWalletKeyBindingValidator.Validate(new PassportWalletKeyBindingDescriptor
+            {
+                IdentityId = ReadString(root, "archrealms_identity_id"),
+                AuthorizingDeviceId = ReadString(root, "authorizing_device_id"),
+                WalletKeyId = ReadString(root, "wallet_key_id"),
+                WalletKeyAlgorithm = ReadString(root, "wallet_key_algorithm"),
+                WalletKeySizeBits = ReadInt(root, "wallet_key_size_bits"),
+                WalletPublicKeyPath = ReadString(root, "wallet_public_key_path"),
+                WalletPublicKeySha256 = ReadString(root, "wallet_public_key_sha256"),
+                AuthorizedScopes = ReadStringArray(root, "authorized_scopes"),
+                ProhibitedScopes = ReadStringArray(root, "prohibited_scopes")
+            });
+        }
+
+        private static int ReadInt(JsonElement root, string propertyName)
+        {
+            if (!root.TryGetProperty(propertyName, out var element))
+            {
+                return 0;
+            }
+
+            if (element.ValueKind == JsonValueKind.Number && element.TryGetInt32(out var value))
+            {
+                return value;
+            }
+
+            return 0;
+        }
+
+        private static string[] ReadStringArray(JsonElement root, string propertyName)
+        {
+            if (!root.TryGetProperty(propertyName, out var element) || element.ValueKind != JsonValueKind.Array)
+            {
+                return Array.Empty<string>();
+            }
+
+            return element.EnumerateArray()
+                .Where(item => item.ValueKind == JsonValueKind.String)
+                .Select(item => item.GetString() ?? string.Empty)
+                .ToArray();
         }
 
         private static string NormalizeRequired(string value, string label)

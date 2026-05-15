@@ -97,6 +97,27 @@ public sealed class PassportWalletKeyServiceTests
     }
 
     [Fact]
+    public void WalletBindingPolicyFailurePreventsActiveWalletUse()
+    {
+        using var workspace = PassportTestWorkspace.Create();
+        var service = new PassportWalletKeyService(PassportReleaseLane.CreateDefault("staging"));
+        var binding = service.CreateAndBindWalletKey(
+            workspace.Root,
+            workspace.IdentityId,
+            workspace.DeviceId,
+            workspace.KeyReferencePath);
+        Assert.True(binding.Succeeded, binding.Message);
+
+        var bindingJson = File.ReadAllText(binding.BindingRecordPath);
+        File.WriteAllText(
+            binding.BindingRecordPath,
+            bindingJson.Replace("\"sign_cc_operations\"", "\"sign_cc_operations\", \"alter_identity\""),
+            Encoding.UTF8);
+
+        Assert.False(service.IsWalletKeyActive(workspace.Root, workspace.IdentityId, binding.WalletKeyId));
+    }
+
+    [Fact]
     public void RotateWalletKeyRevokesOldKeyAndBindsNewKey()
     {
         using var workspace = PassportTestWorkspace.Create();

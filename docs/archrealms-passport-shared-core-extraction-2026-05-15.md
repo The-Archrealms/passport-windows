@@ -21,6 +21,11 @@
   - supported ARCH and CC ledger event types;
   - shared monetary signature-status labels;
   - wallet-authorized and wallet-prohibited scope semantics.
+- Wallet-key binding validation:
+  - required monetary signing scopes;
+  - prohibited identity, citizenship, office, registry-authority, constitutional-status, and Crown-authority scopes;
+  - wallet-key separation from identity and device identifiers;
+  - production-strength RSA wallet-key parameter checks.
 - Monetary ledger replay semantics:
   - ARCH genesis, transfer-in, and transfer-out balance rules;
   - CC issue, escrow, burn, refund, re-credit, transfer-in, and transfer-out balance rules;
@@ -64,6 +69,5 @@
 
 ## Remaining Extraction
 
-- Continue moving wallet-key binding validation into Core while leaving OS key storage platform-specific.
 - Continue expanding nested registry semantics beyond top-level record-family fields as schemas stabilize.
 - Keep WPF, Windows tray behavior, MSIX packaging, DPAPI/Windows Hello, and Windows background process management outside Core.
