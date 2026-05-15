@@ -8,6 +8,7 @@ param(
     [string]$Platform = "x64",
     [string]$Configuration = "Release",
     [string]$OutputRoot,
+    [string]$EnvironmentFile,
     [string]$DotnetPath,
     [string]$IpfsCliPath,
     [string]$KuboVersion = "v0.41.0",
@@ -23,6 +24,7 @@ param(
     [string]$CertificatePfxPath,
     [string]$CertificatePassword,
     [string]$CertificatePfxBase64,
+    [int]$ProductionMvpReadinessEndpointTimeoutSeconds = 10,
     [bool]$SelfContained = $true,
     [switch]$SkipIpfsRuntimeBootstrap,
     [switch]$SkipSignatureVerification,
@@ -31,6 +33,47 @@ param(
 
 $ErrorActionPreference = "Stop"
 Import-Module (Join-Path $PSScriptRoot "PassportWindowsRelease.psm1") -Force -DisableNameChecking
+
+function Import-EnvironmentFile {
+    param(
+        [string]$Path
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        return @()
+    }
+
+    $resolvedPath = (Resolve-Path -LiteralPath $Path).Path
+    $loaded = @()
+    foreach ($line in Get-Content -LiteralPath $resolvedPath) {
+        $trimmed = $line.Trim()
+        if ([string]::IsNullOrWhiteSpace($trimmed) -or $trimmed.StartsWith("#")) {
+            continue
+        }
+
+        $separator = $trimmed.IndexOf("=")
+        if ($separator -le 0) {
+            continue
+        }
+
+        $name = $trimmed.Substring(0, $separator).Trim()
+        $value = $trimmed.Substring($separator + 1).Trim()
+        if ([string]::IsNullOrWhiteSpace($name)) {
+            continue
+        }
+
+        if (($value.StartsWith('"') -and $value.EndsWith('"')) -or ($value.StartsWith("'") -and $value.EndsWith("'"))) {
+            $value = $value.Substring(1, $value.Length - 2)
+        }
+
+        [System.Environment]::SetEnvironmentVariable($name, $value, "Process")
+        $loaded += $name
+    }
+
+    return $loaded
+}
+
+$loadedEnvironmentVariables = Import-EnvironmentFile -Path $EnvironmentFile
 
 function Resolve-DotnetPath {
     param(
@@ -451,8 +494,10 @@ if ([string]::Equals($laneSlug, "production-mvp", [System.StringComparison]::Ord
         $timestampConfiguredValue = if ($timestampConfigured) { "1" } else { "0" }
         & powershell -ExecutionPolicy Bypass -File $readinessScript `
             -OutputPath $readinessReportPath `
+            -EnvironmentFile $EnvironmentFile `
             -PackageSigningConfigured $packageSigningConfiguredValue `
-            -TimestampConfigured $timestampConfiguredValue
+            -TimestampConfigured $timestampConfiguredValue `
+            -EndpointTimeoutSeconds $ProductionMvpReadinessEndpointTimeoutSeconds
         if ($LASTEXITCODE -ne 0) {
             throw "ProductionMvp readiness gate failed. See $readinessReportPath."
         }
