@@ -1003,12 +1003,21 @@ $gates = @(
         -Id "hosted_runtime_status" `
         -Description "Configured production hosted API and AI gateway runtime status endpoints are reachable and ready." `
         -RequiredEnvironment @() `
+        -RequiredAnyEnvironment @(
+            @("PASSPORT_WINDOWS_PRODUCTION_MVP_API_BASE_URL", "PASSPORT_WINDOWS_RELEASE_LANE_API_BASE_URL"),
+            @("PASSPORT_WINDOWS_PRODUCTION_MVP_AI_GATEWAY_URL", "PASSPORT_WINDOWS_RELEASE_LANE_AI_GATEWAY_URL")
+        ) `
         -ExtraCheck ${function:Test-HostedRuntimeStatusEndpoints}
 
     New-Gate `
         -Id "hosted_ai_runtime_probe" `
         -Description "Configured hosted AI gateway can obtain a non-mutating answer from the approved model runtime." `
-        -RequiredEnvironment @() `
+        -RequiredEnvironment @(
+            "ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY"
+        ) `
+        -RequiredAnyEnvironment @(
+            ,@("PASSPORT_WINDOWS_PRODUCTION_MVP_AI_GATEWAY_URL", "PASSPORT_WINDOWS_RELEASE_LANE_AI_GATEWAY_URL")
+        ) `
         -ExtraCheck ${function:Test-HostedAiRuntimeProbeEndpoint}
 
     New-Gate `
@@ -1036,7 +1045,12 @@ $gates = @(
     New-Gate `
         -Id "hosted_operator_status" `
         -Description "Configured operator key authenticates against the hosted production API without mutating state." `
-        -RequiredEnvironment @() `
+        -RequiredEnvironment @(
+            "ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY"
+        ) `
+        -RequiredAnyEnvironment @(
+            ,@("PASSPORT_WINDOWS_PRODUCTION_MVP_API_BASE_URL", "PASSPORT_WINDOWS_RELEASE_LANE_API_BASE_URL")
+        ) `
         -ExtraCheck ${function:Test-HostedOperatorStatusEndpoint}
 
     New-Gate `
@@ -1052,7 +1066,12 @@ $gates = @(
     New-Gate `
         -Id "managed_storage_status" `
         -Description "Hosted managed storage is writable and backup-manifest enumeration is available." `
-        -RequiredEnvironment @() `
+        -RequiredEnvironment @(
+            "ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY"
+        ) `
+        -RequiredAnyEnvironment @(
+            ,@("PASSPORT_WINDOWS_PRODUCTION_MVP_API_BASE_URL", "PASSPORT_WINDOWS_RELEASE_LANE_API_BASE_URL")
+        ) `
         -ExtraCheck ${function:Test-HostedStorageStatusEndpoint}
 
     New-Gate `
@@ -1069,7 +1088,12 @@ $gates = @(
     New-Gate `
         -Id "managed_signing_endpoint_probe" `
         -Description "Managed hosted signing endpoint signs a non-mutating readiness probe with verifiable public-key evidence." `
-        -RequiredEnvironment @() `
+        -RequiredEnvironment @(
+            "ARCHREALMS_PASSPORT_HOSTED_SIGNING_KEY_PROVIDER",
+            "ARCHREALMS_PASSPORT_HOSTED_SIGNING_KEY_ID",
+            "ARCHREALMS_PASSPORT_HOSTED_SIGNING_KEY_CUSTODY",
+            "ARCHREALMS_PASSPORT_HOSTED_SIGNING_ENDPOINT"
+        ) `
         -ExtraCheck ${function:Test-ManagedSigningEndpointProbe}
 
     New-Gate `
