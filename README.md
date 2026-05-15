@@ -792,7 +792,7 @@ To produce a concise redacted list of remaining production work from the latest 
   -NoFail
 ```
 
-The report writes JSON and Markdown under `artifacts\release\`, groups failed readiness gates, provisioning packet checks, provisioning child-check failures, and release-evidence checks, and includes the next closeout command. It does not serialize secret values.
+The report writes JSON and Markdown under `artifacts\release\`, groups failed readiness gates, provisioning packet checks, provisioning child-check failures, release-evidence checks, and a redacted operator input matrix of required environment variables and evidence files. It includes the next closeout command and does not serialize secret values.
 
 Validate the package-signing provisioning packet before loading production signing secrets:
 

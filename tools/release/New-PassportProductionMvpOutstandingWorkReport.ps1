@@ -99,6 +99,21 @@ function ConvertTo-ReportText {
     return $text
 }
 
+function Get-EnvironmentVariableNames {
+    param([string]$Text)
+
+    if ([string]::IsNullOrWhiteSpace($Text)) {
+        return @()
+    }
+
+    $names = @()
+    foreach ($match in [regex]::Matches($Text, "\b[A-Z][A-Z0-9]+(?:_[A-Z0-9]+){2,}\b")) {
+        $names += [string]$match.Value
+    }
+
+    return @($names | Select-Object -Unique)
+}
+
 function New-FileRecord {
     param(
         [string]$Id,
@@ -283,7 +298,12 @@ if ($UseGeneratedFixture) {
                 id = "package_signing"
                 description = "Production MVP package signing uses a stable certificate and timestamping, not a generated test certificate."
                 passed = $false
-                missing = @("production package signing certificate is not configured")
+                missing = @(
+                    "production package signing certificate is not configured",
+                    "PASSPORT_WINDOWS_MSIX_PFX_BASE64 or PASSPORT_WINDOWS_MSIX_PFX_PATH",
+                    "PASSPORT_WINDOWS_MSIX_PFX_PASSWORD",
+                    "PASSPORT_WINDOWS_MSIX_TIMESTAMP_URL"
+                )
             },
             [pscustomobject][ordered]@{
                 id = "hosted_operator_gate"
@@ -472,6 +492,68 @@ if ($null -ne $releaseEvidence -and $releaseEvidence.PSObject.Properties["checks
     }
 }
 
+$environmentVariableMap = @{}
+$readinessEvidenceItems = @()
+foreach ($gate in $failedReadinessGates) {
+    foreach ($missing in @($gate.missing)) {
+        $envNames = @(Get-EnvironmentVariableNames -Text ([string]$missing))
+        foreach ($envName in $envNames) {
+            if (-not $environmentVariableMap.ContainsKey($envName)) {
+                $environmentVariableMap[$envName] = [pscustomobject][ordered]@{
+                    name = $envName
+                    readiness_gate_ids = @()
+                    missing_texts = @()
+                }
+            }
+
+            $record = $environmentVariableMap[$envName]
+            if (@($record.readiness_gate_ids) -notcontains [string]$gate.id) {
+                $record.readiness_gate_ids = @($record.readiness_gate_ids + [string]$gate.id)
+            }
+            if (@($record.missing_texts) -notcontains [string]$missing) {
+                $record.missing_texts = @($record.missing_texts + [string]$missing)
+            }
+        }
+
+        if ($envNames.Count -eq 0) {
+            $readinessEvidenceItems += [pscustomobject][ordered]@{
+                readiness_gate_id = [string]$gate.id
+                missing_text = [string]$missing
+                operator_action = $(if ($null -ne $gate.operator_action) { [string]$gate.operator_action.action } else { "" })
+            }
+        }
+    }
+}
+
+$requiredEnvironmentVariables = @($environmentVariableMap.Keys | Sort-Object | ForEach-Object { $environmentVariableMap[$_] })
+
+$requiredProvisioningEvidenceFiles = @()
+foreach ($check in $failedProvisioningChecks) {
+    foreach ($child in @($check.child_failed_checks)) {
+        if (-not [string]::IsNullOrWhiteSpace($child.evidence_path)) {
+            $requiredProvisioningEvidenceFiles += [pscustomobject][ordered]@{
+                provisioning_check_id = [string]$check.id
+                child_check_id = [string]$child.id
+                evidence_path = [string]$child.evidence_path
+                failures = @($child.failures)
+            }
+        }
+    }
+}
+
+$releaseEvidenceItems = @()
+foreach ($check in $failedReleaseEvidenceChecks) {
+    $releaseEvidenceItems += [pscustomobject][ordered]@{
+        id = [string]$check.id
+        failures = @($check.failures)
+    }
+}
+
+$failedProvisioningChildCheckCount = (@($failedProvisioningChecks | ForEach-Object { @($_.child_failed_checks).Count }) | Measure-Object -Sum).Sum
+if ($null -eq $failedProvisioningChildCheckCount) {
+    $failedProvisioningChildCheckCount = 0
+}
+
 $readyForProductionTesting = (
     $inputFailures.Count -eq 0 -and
     $null -ne $closeout -and
@@ -499,12 +581,23 @@ $report = [pscustomobject][ordered]@{
         closeout_failure_count = $closeoutFailures.Count
         failed_readiness_gate_count = $failedReadinessGates.Count
         failed_provisioning_check_count = $failedProvisioningChecks.Count
+        failed_provisioning_child_check_count = [int]$failedProvisioningChildCheckCount
         failed_release_evidence_check_count = $failedReleaseEvidenceChecks.Count
+        required_environment_variable_count = $requiredEnvironmentVariables.Count
+        required_readiness_evidence_item_count = $readinessEvidenceItems.Count
+        required_provisioning_evidence_file_count = $requiredProvisioningEvidenceFiles.Count
+        required_release_evidence_item_count = $releaseEvidenceItems.Count
     }
     closeout_failures = $closeoutFailures
     failed_readiness_gates = $failedReadinessGates
     failed_provisioning_checks = $failedProvisioningChecks
     failed_release_evidence_checks = $failedReleaseEvidenceChecks
+    operator_input_matrix = [pscustomobject][ordered]@{
+        environment_variables = $requiredEnvironmentVariables
+        readiness_evidence_items = $readinessEvidenceItems
+        provisioning_evidence_files = $requiredProvisioningEvidenceFiles
+        release_evidence_items = $releaseEvidenceItems
+    }
     next_closeout_command = "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Complete-PassportProductionMvpCloseout.ps1 -EnvironmentFile artifacts\release\production-mvp.env -ProductionProvisioningPacketRoot <controlled-production-packet-root> -OutputDirectory artifacts\release\production-mvp-closeout -Force"
 }
 
@@ -531,6 +624,7 @@ if (-not [string]::IsNullOrWhiteSpace($MarkdownOutputPath)) {
     $lines.Add("- Ready for production testing: $($report.ready_for_production_testing.ToString().ToLowerInvariant())")
     $lines.Add("- Failed readiness gates: $($failedReadinessGates.Count)")
     $lines.Add("- Failed provisioning checks: $($failedProvisioningChecks.Count)")
+    $lines.Add("- Failed provisioning child checks: $failedProvisioningChildCheckCount")
     $lines.Add("- Failed release-evidence checks: $($failedReleaseEvidenceChecks.Count)")
     $lines.Add("- Provisioning report source: $provisioningReportSource")
     $lines.Add("")
@@ -550,6 +644,41 @@ if (-not [string]::IsNullOrWhiteSpace($MarkdownOutputPath)) {
         foreach ($failure in $closeoutFailures) {
             $lines.Add("- $failure")
         }
+    }
+
+    $lines.Add("")
+    $lines.Add("## Operator Input Matrix")
+    $lines.Add("- Environment variables to configure: $($requiredEnvironmentVariables.Count)")
+    foreach ($variable in @($requiredEnvironmentVariables | Select-Object -First 25)) {
+        $lines.Add("  - ``$($variable.name)`` for ``$((@($variable.readiness_gate_ids) -join ', '))``")
+    }
+    if ($requiredEnvironmentVariables.Count -gt 25) {
+        $lines.Add("  - ...$($requiredEnvironmentVariables.Count - 25) more in the JSON report")
+    }
+
+    $lines.Add("- Readiness evidence items to complete: $($readinessEvidenceItems.Count)")
+    foreach ($item in @($readinessEvidenceItems | Select-Object -First 10)) {
+        $lines.Add("  - ``$($item.readiness_gate_id)``: $($item.missing_text)")
+    }
+    if ($readinessEvidenceItems.Count -gt 10) {
+        $lines.Add("  - ...$($readinessEvidenceItems.Count - 10) more in the JSON report")
+    }
+
+    $lines.Add("- Provisioning evidence files to fill: $($requiredProvisioningEvidenceFiles.Count)")
+    foreach ($file in @($requiredProvisioningEvidenceFiles | Select-Object -First 15)) {
+        $lines.Add("  - ``$($file.provisioning_check_id)/$($file.child_check_id)``: $($file.evidence_path)")
+    }
+    if ($requiredProvisioningEvidenceFiles.Count -gt 15) {
+        $lines.Add("  - ...$($requiredProvisioningEvidenceFiles.Count - 15) more in the JSON report")
+    }
+
+    $lines.Add("- Release evidence checks to satisfy: $($releaseEvidenceItems.Count)")
+    foreach ($item in @($releaseEvidenceItems | Select-Object -First 10)) {
+        $message = (@($item.failures) -join "; ")
+        $lines.Add("  - ``$($item.id)``: $message")
+    }
+    if ($releaseEvidenceItems.Count -gt 10) {
+        $lines.Add("  - ...$($releaseEvidenceItems.Count - 10) more in the JSON report")
     }
 
     $lines.Add("")
@@ -620,7 +749,12 @@ $result = [pscustomobject][ordered]@{
     markdown_output_sha256 = $(if ([string]::IsNullOrWhiteSpace($MarkdownOutputPath)) { "" } else { Get-Sha256Hex -Path (Resolve-RepoPath -Path $MarkdownOutputPath) })
     failed_readiness_gate_count = $failedReadinessGates.Count
     failed_provisioning_check_count = $failedProvisioningChecks.Count
+    failed_provisioning_child_check_count = [int]$failedProvisioningChildCheckCount
     failed_release_evidence_check_count = $failedReleaseEvidenceChecks.Count
+    required_environment_variable_count = $requiredEnvironmentVariables.Count
+    required_readiness_evidence_item_count = $readinessEvidenceItems.Count
+    required_provisioning_evidence_file_count = $requiredProvisioningEvidenceFiles.Count
+    required_release_evidence_item_count = $releaseEvidenceItems.Count
 }
 
 $result | ConvertTo-Json -Depth 4
