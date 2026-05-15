@@ -4,6 +4,7 @@ param(
     [string]$Configuration = "Release",
     [string[]]$ManifestPath,
     [switch]$SkipDotnetTests,
+    [switch]$SkipDeploymentValidation,
     [switch]$SkipArtifactValidation,
     [switch]$NoFail
 )
@@ -247,6 +248,56 @@ else {
         -Result (Invoke-Tool -FilePath $dotnet -Arguments @("build", "tools\ledger-verifier\Archrealms.LedgerVerifier.csproj", "-c", $Configuration, "--no-restore"))
 }
 
+if ($SkipDeploymentValidation) {
+    $checks += New-Check `
+        -Id "hosted_services_deployment_validation" `
+        -Description "Hosted services deployment package validates container posture and Release publish output." `
+        -Passed $false `
+        -Failures @("Hosted services deployment validation was skipped; pre-MVP verification cannot pass with skipped deployment validation.")
+    $checks += New-Check `
+        -Id "managed_signing_deployment_validation" `
+        -Description "Managed signing endpoint deployment package validates endpoint posture and Release publish output." `
+        -Passed $false `
+        -Failures @("Managed signing deployment validation was skipped; pre-MVP verification cannot pass with skipped deployment validation.")
+    $checks += New-Check `
+        -Id "open_weight_ai_runtime_deployment_validation" `
+        -Description "Open-weight AI runtime deployment package validates vLLM/TGI posture and runtime probe wiring." `
+        -Passed $false `
+        -Failures @("Open-weight AI runtime deployment validation was skipped; pre-MVP verification cannot pass with skipped deployment validation.")
+    $checks += New-Check `
+        -Id "production_ops_documents_validation" `
+        -Description "Production ops document templates validate backup, restore, telemetry, incident, and approval contracts." `
+        -Passed $false `
+        -Failures @("Production ops document validation was skipped; pre-MVP verification cannot pass with skipped deployment validation.")
+    $checks += New-Check `
+        -Id "production_monetary_provisioning_validation" `
+        -Description "Production monetary provisioning templates validate issuer, capacity, genesis, and ledger namespace contracts." `
+        -Passed $false `
+        -Failures @("Production monetary provisioning validation was skipped; pre-MVP verification cannot pass with skipped deployment validation.")
+}
+else {
+    $checks += New-ToolCheck `
+        -Id "hosted_services_deployment_validation" `
+        -Description "Hosted services deployment package validates container posture and Release publish output." `
+        -Result (Invoke-Tool -FilePath "powershell" -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "tools\release\Test-PassportHostedServicesDeployment.ps1"))
+    $checks += New-ToolCheck `
+        -Id "managed_signing_deployment_validation" `
+        -Description "Managed signing endpoint deployment package validates endpoint posture and Release publish output." `
+        -Result (Invoke-Tool -FilePath "powershell" -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "tools\release\Test-PassportManagedSigningDeployment.ps1"))
+    $checks += New-ToolCheck `
+        -Id "open_weight_ai_runtime_deployment_validation" `
+        -Description "Open-weight AI runtime deployment package validates vLLM/TGI posture and runtime probe wiring." `
+        -Result (Invoke-Tool -FilePath "powershell" -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "tools\release\Test-PassportOpenWeightAiRuntimeDeployment.ps1"))
+    $checks += New-ToolCheck `
+        -Id "production_ops_documents_validation" `
+        -Description "Production ops document templates validate backup, restore, telemetry, incident, and approval contracts." `
+        -Result (Invoke-Tool -FilePath "powershell" -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "tools\release\Test-PassportProductionOpsDocuments.ps1"))
+    $checks += New-ToolCheck `
+        -Id "production_monetary_provisioning_validation" `
+        -Description "Production monetary provisioning templates validate issuer, capacity, genesis, and ledger namespace contracts." `
+        -Result (Invoke-Tool -FilePath "powershell" -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "tools\release\Test-PassportProductionMonetaryProvisioning.ps1"))
+}
+
 if ($SkipArtifactValidation) {
     $checks += New-Check `
         -Id "internal_verification_artifact_lane" `
@@ -330,7 +381,11 @@ $requirements = @(
     New-Requirement -Id "wallet_compromise_simulations" -Description "Wallet compromise and revoked-wallet paths are exercised." -CheckIds @("windows_tests", "core_tests") -Checks $checks -Evidence "Wallet revocation and production ledger tests reject revoked wallet keys."
     New-Requirement -Id "identity_compromise_simulations" -Description "Identity compromise and device deauthorization paths are exercised." -CheckIds @("windows_tests", "hosted_service_tests") -Checks $checks -Evidence "Recovery tests cover identity_compromise freezes, device deauthorization, and hosted recovery validation."
     New-Requirement -Id "ai_privacy_and_retention_tests" -Description "AI privacy, retention, quota, and non-authority controls are exercised." -CheckIds @("core_tests", "windows_tests", "hosted_service_tests") -Checks $checks -Evidence "AI policy tests cover no-training defaults, raw-prompt retention metadata, token-hash-only records, quota enforcement, and non-authority boundaries."
-    New-Requirement -Id "managed_signing_endpoint_contract_tests" -Description "Managed signing endpoint contract, key metadata, local-validation marker, and API-key controls are exercised." -CheckIds @("managed_signing_tests") -Checks $checks -Evidence "Managed signing tests cover response signature verification, custody metadata, local-validation marker reporting, and API-key SHA-256 authorization."
+    New-Requirement -Id "managed_signing_endpoint_contract_tests" -Description "Managed signing endpoint contract, key metadata, local-validation marker, and API-key controls are exercised." -CheckIds @("managed_signing_tests", "managed_signing_deployment_validation") -Checks $checks -Evidence "Managed signing tests cover response signature verification, custody metadata, local-validation marker reporting, API-key SHA-256 authorization, and deployment package posture."
+    New-Requirement -Id "hosted_services_deployment_package" -Description "Hosted API and AI gateway deployment package is validated before ProductionMvp provisioning." -CheckIds @("hosted_services_deployment_validation") -Checks $checks -Evidence "Hosted services deployment validator checks Dockerfile posture, staging compose posture, env template variables, and Release publish output."
+    New-Requirement -Id "open_weight_ai_runtime_deployment_package" -Description "Open-weight AI runtime deployment package is validated before ProductionMvp provisioning." -CheckIds @("open_weight_ai_runtime_deployment_validation") -Checks $checks -Evidence "Open-weight AI runtime validator checks vLLM/TGI compose posture, env template variables, README contract, and optional probe wiring."
+    New-Requirement -Id "production_ops_documents_package" -Description "Production ops document templates are validated before their approved IDs are loaded into readiness." -CheckIds @("production_ops_documents_validation") -Checks $checks -Evidence "Production ops validator checks backup, restore, telemetry retention, incident response, and release approval templates."
+    New-Requirement -Id "production_monetary_provisioning_package" -Description "Production monetary provisioning templates are validated before issuer, capacity, genesis, and ledger namespace IDs are loaded into readiness." -CheckIds @("production_monetary_provisioning_validation") -Checks $checks -Evidence "Production monetary validator checks issuer/capacity/genesis provisioning, ARCH genesis request, CC capacity request, and approval-gated hosted record creation path."
     New-Requirement -Id "no_fake_record_migration" -Description "Pre-MVP fake/synthetic records cannot migrate into production ARCH, CC, Crown reserve, citizen account, or production service-liability records." -CheckIds @("core_tests", "windows_tests", "internal_verification_artifact_lane") -Checks $checks -Evidence "Release-lane artifact validation and ledger replay enforce non-production lane isolation."
 )
 
