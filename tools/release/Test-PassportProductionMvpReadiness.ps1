@@ -3,6 +3,7 @@ param(
     [string]$EnvironmentFile,
     [string]$PackageSigningConfigured = "false",
     [string]$TimestampConfigured = "false",
+    [int]$EndpointTimeoutSeconds = 10,
     [switch]$NoFail
 )
 
@@ -70,6 +71,21 @@ function Test-AnyEnvironment {
     }
 
     return $false
+}
+
+function Get-FirstEnvironmentValue {
+    param(
+        [string[]]$Names
+    )
+
+    foreach ($name in $Names) {
+        $value = [System.Environment]::GetEnvironmentVariable($name)
+        if (-not [string]::IsNullOrWhiteSpace($value)) {
+            return $value.Trim()
+        }
+    }
+
+    return ""
 }
 
 function New-Gate {
@@ -158,6 +174,95 @@ function Test-PackageSigning {
     return ""
 }
 
+function Join-EndpointPath {
+    param(
+        [string]$BaseUrl,
+        [string]$Path
+    )
+
+    if ([string]::IsNullOrWhiteSpace($BaseUrl)) {
+        return ""
+    }
+
+    return $BaseUrl.TrimEnd("/") + "/" + $Path.TrimStart("/")
+}
+
+function Test-JsonRuntimeStatusEndpoint {
+    param(
+        [string]$Name,
+        [string]$Url,
+        [string]$ExpectedSchema
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Url)) {
+        return ""
+    }
+
+    try {
+        $response = Invoke-RestMethod -Method Get -Uri $Url -TimeoutSec $EndpointTimeoutSeconds
+    }
+    catch {
+        return "$Name endpoint check failed for $Url`: $($_.Exception.Message)"
+    }
+
+    if ($null -eq $response) {
+        return "$Name endpoint check returned no JSON for $Url"
+    }
+
+    if ($response.schema -ne $ExpectedSchema) {
+        return "$Name endpoint returned unexpected schema for $Url"
+    }
+
+    if ($response.ready -ne $true) {
+        $missing = @()
+        if ($response.missing) {
+            $missing = @($response.missing)
+        }
+
+        if ($missing.Count -gt 0) {
+            return "$Name endpoint is not ready for $Url`: " + ($missing -join ", ")
+        }
+
+        return "$Name endpoint is not ready for $Url"
+    }
+
+    return ""
+}
+
+function Test-HostedRuntimeStatusEndpoints {
+    $apiBaseUrl = Get-FirstEnvironmentValue -Names @(
+        "PASSPORT_WINDOWS_PRODUCTION_MVP_API_BASE_URL",
+        "PASSPORT_WINDOWS_RELEASE_LANE_API_BASE_URL"
+    )
+    $aiGatewayUrl = Get-FirstEnvironmentValue -Names @(
+        "PASSPORT_WINDOWS_PRODUCTION_MVP_AI_GATEWAY_URL",
+        "PASSPORT_WINDOWS_RELEASE_LANE_AI_GATEWAY_URL"
+    )
+
+    $failures = @()
+    if (-not [string]::IsNullOrWhiteSpace($apiBaseUrl)) {
+        $opsStatus = Test-JsonRuntimeStatusEndpoint `
+            -Name "hosted operations runtime status" `
+            -Url (Join-EndpointPath -BaseUrl $apiBaseUrl -Path "/ops/runtime/status") `
+            -ExpectedSchema "archrealms.passport.hosted_operations_readiness.v1"
+        if ($opsStatus) {
+            $failures += $opsStatus
+        }
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($aiGatewayUrl)) {
+        $aiStatus = Test-JsonRuntimeStatusEndpoint `
+            -Name "hosted AI runtime status" `
+            -Url (Join-EndpointPath -BaseUrl $aiGatewayUrl -Path "/ai/runtime/status") `
+            -ExpectedSchema "archrealms.passport.hosted_ai_runtime_readiness.v1"
+        if ($aiStatus) {
+            $failures += $aiStatus
+        }
+    }
+
+    return $failures
+}
+
 function Test-Truthy {
     param(
         [string]$Value
@@ -181,6 +286,12 @@ $gates = @(
             @("PASSPORT_WINDOWS_PRODUCTION_MVP_API_BASE_URL", "PASSPORT_WINDOWS_RELEASE_LANE_API_BASE_URL"),
             @("PASSPORT_WINDOWS_PRODUCTION_MVP_AI_GATEWAY_URL", "PASSPORT_WINDOWS_RELEASE_LANE_AI_GATEWAY_URL")
         )
+
+    New-Gate `
+        -Id "hosted_runtime_status" `
+        -Description "Configured production hosted API and AI gateway runtime status endpoints are reachable and ready." `
+        -RequiredEnvironment @() `
+        -ExtraCheck ${function:Test-HostedRuntimeStatusEndpoints}
 
     New-Gate `
         -Id "hosted_operator_gate" `
@@ -261,6 +372,7 @@ $report = [pscustomobject][ordered]@{
     environment_file_loaded = -not [string]::IsNullOrWhiteSpace($EnvironmentFile)
     environment_file_variable_count = $loadedEnvironmentVariables.Count
     environment_file_variables = $loadedEnvironmentVariables
+    endpoint_timeout_seconds = $EndpointTimeoutSeconds
     ready = ($failed.Count -eq 0)
     failed_gate_count = $failed.Count
     gates = $gates

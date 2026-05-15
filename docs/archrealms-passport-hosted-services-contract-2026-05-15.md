@@ -68,6 +68,7 @@ The hosted services project provides the production-facing API boundary that Win
 ## Current Limits
 
 - Production MVP package publishing is guarded by `tools/release/Test-PassportProductionMvpReadiness.ps1`; the MSIX publisher runs it automatically for `-Lane ProductionMvp` unless explicitly skipped.
+- When production API and AI gateway URLs are configured, the readiness gate calls `/ops/runtime/status` and `/ai/runtime/status` and requires both endpoints to return the expected readiness schema with `ready=true`.
 - Production deployment still needs managed durable storage provider configuration, backup/restore runbook URIs, managed signing-key custody, telemetry destination/retention configuration, incident-response owner/runbook configuration, and managed release-lane deployment configuration.
 - Production still needs final model endpoint selection, model artifact/license approval, managed vector store deployment, and production knowledge-pack approval workflow.
 - The service does not make fiat, exchange, external wallet, staking, yield, governance, or public stable-value claims.

@@ -359,7 +359,7 @@ The packaging script accepts a stable signing certificate through either:
 
 If those are not provided, the script falls back to a generated self-signed test certificate. That fallback is suitable for preview and sideload testing, but a stable certificate should be configured before treating public sideload `MSIX` upgrades as production-grade.
 
-Production MVP packages are gated by `tools\release\Test-PassportProductionMvpReadiness.ps1`. `Publish-PassportWindowsMsix.ps1 -Lane ProductionMvp` runs this gate automatically unless `-SkipProductionMvpReadinessGate` is supplied. The gate emits `production-mvp-readiness-report.json` and fails until package signing, production endpoints, hosted operator controls, managed storage/backups, managed key custody, issuer/capacity/genesis authority IDs, open-weight AI runtime/vector store, telemetry/incident response, and release approvals are configured.
+Production MVP packages are gated by `tools\release\Test-PassportProductionMvpReadiness.ps1`. `Publish-PassportWindowsMsix.ps1 -Lane ProductionMvp` runs this gate automatically unless `-SkipProductionMvpReadinessGate` is supplied. The gate emits `production-mvp-readiness-report.json` and fails until package signing, production endpoints, hosted operator controls, managed storage/backups, managed key custody, issuer/capacity/genesis authority IDs, open-weight AI runtime/vector store, telemetry/incident response, and release approvals are configured. When production API and AI gateway URLs are present, the gate also calls `/ops/runtime/status` and `/ai/runtime/status` and requires both to return `ready=true`.
 
 Run the gate directly:
 
@@ -368,6 +368,7 @@ Run the gate directly:
   -EnvironmentFile .\artifacts\release\production-mvp.env `
   -PackageSigningConfigured 1 `
   -TimestampConfigured 1 `
+  -EndpointTimeoutSeconds 10 `
   -OutputPath .\artifacts\release\production-mvp-readiness-report.json
 ```
 
