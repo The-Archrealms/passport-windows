@@ -205,6 +205,24 @@ Build the local Docker image when the machine has Docker and enough disk availab
 
 See `deploy/hosted-services/README.md` for the staging compose flow and required environment variables.
 
+## Production Ops Documents
+
+ProductionMvp readiness references approved backup, restore, telemetry-retention, incident-response, and release-approval document IDs or URIs. The repo includes reviewable templates under `deploy/production-ops/` so those documents can be completed and validated before their IDs are loaded into the production environment.
+
+Validate the template package:
+
+```powershell
+.\tools\release\Test-PassportProductionOpsDocuments.ps1
+```
+
+When production copies are filled in a controlled document store, validate them with:
+
+```powershell
+.\tools\release\Test-PassportProductionOpsDocuments.ps1 `
+  -ProductionOpsPath C:\secure\archrealms-passport-production-ops `
+  -RequireNoPlaceholders
+```
+
 ## Managed Signing Endpoint Deployment
 
 Hosted services use `ARCHREALMS_PASSPORT_HOSTED_SIGNING_ENDPOINT` for production service-record signatures. The repo includes a managed-signing endpoint baseline under `deploy/managed-signing/`; local validation signs with a generated PKCS#8 key and returns `local_validation_only=true`, while production must front KMS, HSM, managed-HSM, or cloud-KMS custody and return `local_validation_only=false`.
