@@ -255,6 +255,11 @@ if ($SkipDeploymentValidation) {
         -Passed $false `
         -Failures @("Package-signing provisioning validation was skipped; pre-MVP verification cannot pass with skipped deployment validation.")
     $checks += New-Check `
+        -Id "release_lane_endpoint_provisioning_validation" `
+        -Description "Release-lane endpoint provisioning templates validate production API, AI gateway, DNS, TLS, routing, and readiness evidence contracts." `
+        -Passed $false `
+        -Failures @("Release-lane endpoint provisioning validation was skipped; pre-MVP verification cannot pass with skipped deployment validation.")
+    $checks += New-Check `
         -Id "hosted_services_deployment_validation" `
         -Description "Hosted services deployment package validates container posture and Release publish output." `
         -Passed $false `
@@ -285,6 +290,10 @@ else {
         -Id "package_signing_provisioning_validation" `
         -Description "Package-signing provisioning templates validate MSIX signing request, sideload trust, and Store signing contracts." `
         -Result (Invoke-Tool -FilePath "powershell" -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "tools\release\Test-PassportPackageSigningProvisioning.ps1"))
+    $checks += New-ToolCheck `
+        -Id "release_lane_endpoint_provisioning_validation" `
+        -Description "Release-lane endpoint provisioning templates validate production API, AI gateway, DNS, TLS, routing, and readiness evidence contracts." `
+        -Result (Invoke-Tool -FilePath "powershell" -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "tools\release\Test-PassportReleaseLaneEndpointProvisioning.ps1"))
     $checks += New-ToolCheck `
         -Id "hosted_services_deployment_validation" `
         -Description "Hosted services deployment package validates container posture and Release publish output." `
@@ -392,6 +401,7 @@ $requirements = @(
     New-Requirement -Id "ai_privacy_and_retention_tests" -Description "AI privacy, retention, quota, and non-authority controls are exercised." -CheckIds @("core_tests", "windows_tests", "hosted_service_tests") -Checks $checks -Evidence "AI policy tests cover no-training defaults, raw-prompt retention metadata, token-hash-only records, quota enforcement, and non-authority boundaries."
     New-Requirement -Id "managed_signing_endpoint_contract_tests" -Description "Managed signing endpoint contract, key metadata, local-validation marker, and API-key controls are exercised." -CheckIds @("managed_signing_tests", "managed_signing_deployment_validation") -Checks $checks -Evidence "Managed signing tests cover response signature verification, custody metadata, local-validation marker reporting, API-key SHA-256 authorization, and deployment package posture."
     New-Requirement -Id "package_signing_provisioning_package" -Description "Package-signing provisioning templates are validated before production signing secrets are loaded into readiness." -CheckIds @("package_signing_provisioning_validation") -Checks $checks -Evidence "Package-signing provisioning validator checks MSIX signing request, sideload trust, Store signing, timestamp, publisher, and Code Signing evidence contracts."
+    New-Requirement -Id "release_lane_endpoint_provisioning_package" -Description "Release-lane endpoint provisioning templates are validated before production API and AI gateway URLs are loaded into readiness." -CheckIds @("release_lane_endpoint_provisioning_validation") -Checks $checks -Evidence "Release-lane endpoint provisioning validator checks ProductionMvp API and AI gateway URLs, DNS, TLS, route exposure, operator-key protection, and readiness evidence contracts."
     New-Requirement -Id "hosted_services_deployment_package" -Description "Hosted API and AI gateway deployment package is validated before ProductionMvp provisioning." -CheckIds @("hosted_services_deployment_validation") -Checks $checks -Evidence "Hosted services deployment validator checks Dockerfile posture, staging compose posture, env template variables, and Release publish output."
     New-Requirement -Id "open_weight_ai_runtime_deployment_package" -Description "Open-weight AI runtime deployment package is validated before ProductionMvp provisioning." -CheckIds @("open_weight_ai_runtime_deployment_validation") -Checks $checks -Evidence "Open-weight AI runtime validator checks vLLM/TGI compose posture, env template variables, README contract, and optional probe wiring."
     New-Requirement -Id "production_ops_documents_package" -Description "Production ops document templates are validated before their approved IDs are loaded into readiness." -CheckIds @("production_ops_documents_validation") -Checks $checks -Evidence "Production ops validator checks backup, restore, telemetry retention, incident response, and release approval templates."

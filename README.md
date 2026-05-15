@@ -205,6 +205,24 @@ Build the local Docker image when the machine has Docker and enough disk availab
 
 See `deploy/hosted-services/README.md` for the staging compose flow and required environment variables.
 
+## Release-Lane Endpoints
+
+ProductionMvp readiness requires stable HTTPS URLs for the hosted API and hosted AI gateway. The repo includes provisioning templates under `deploy/release-lane-endpoints/` for DNS, TLS, routing, operator-key protection, and readiness evidence.
+
+Validate the endpoint provisioning packet:
+
+```powershell
+.\tools\release\Test-PassportReleaseLaneEndpointProvisioning.ps1
+```
+
+When production copies are filled in a controlled deployment system, validate them with:
+
+```powershell
+.\tools\release\Test-PassportReleaseLaneEndpointProvisioning.ps1 `
+  -EndpointProvisioningPath C:\secure\archrealms-passport-release-lane-endpoints `
+  -RequireNoPlaceholders
+```
+
 ## Production Ops Documents
 
 ProductionMvp readiness references approved backup, restore, telemetry-retention, incident-response, and release-approval document IDs or URIs. The repo includes reviewable templates under `deploy/production-ops/` so those documents can be completed and validated before their IDs are loaded into the production environment.
