@@ -1,0 +1,19 @@
+services:
+  passport-hosted-services:
+    build:
+      context: ../..
+      dockerfile: deploy/hosted-services/Dockerfile
+    image: archrealms/passport-hosted-services:staging
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    env_file:
+      - ./hosted-services.staging.env
+    environment:
+      ASPNETCORE_URLS: http://+:8080
+      ARCHREALMS_PASSPORT_HOSTED_DATA_ROOT: /var/lib/archrealms/passport-hosted
+    volumes:
+      - passport-hosted-services-data:/var/lib/archrealms/passport-hosted
+
+volumes:
+  passport-hosted-services-data:

@@ -1,0 +1,33 @@
+# Copy this file to hosted-services.staging.env and fill values in a secure
+# staging secret store or local operator shell. Do not commit populated env files.
+
+ARCHREALMS_PASSPORT_HOSTED_STORAGE_PROVIDER=staging-managed-volume
+ARCHREALMS_PASSPORT_HOSTED_STORAGE_BACKUP_POLICY_URI=staging://policy/passport-hosted-storage-backup
+ARCHREALMS_PASSPORT_HOSTED_STORAGE_RESTORE_RUNBOOK_URI=staging://runbook/passport-hosted-storage-restore
+
+# Configure only the hash in the hosted service. Keep the raw operator key in the
+# secure readiness/package environment used by Test-PassportProductionMvpReadiness.ps1.
+ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY_SHA256=<sha256 of operator key>
+
+ARCHREALMS_PASSPORT_HOSTED_SIGNING_KEY_PROVIDER=cloud-kms
+ARCHREALMS_PASSPORT_HOSTED_SIGNING_KEY_ID=<staging managed signing key id>
+ARCHREALMS_PASSPORT_HOSTED_SIGNING_KEY_CUSTODY=kms
+ARCHREALMS_PASSPORT_HOSTED_SIGNING_ENDPOINT=https://signing.staging.archrealms.example/sign
+ARCHREALMS_PASSPORT_HOSTED_SIGNING_ENDPOINT_API_KEY=<optional signing endpoint api key>
+ARCHREALMS_PASSPORT_HOSTED_SIGNING_TIMEOUT_SECONDS=10
+
+ARCHREALMS_PASSPORT_AI_INFERENCE_BASE_URL=https://model-runtime.staging.archrealms.example/v1
+ARCHREALMS_PASSPORT_AI_MODEL_ID=<approved staging model id>
+ARCHREALMS_PASSPORT_AI_MODEL_ARTIFACT_SHA256=<64 hex chars>
+ARCHREALMS_PASSPORT_AI_MODEL_LICENSE_APPROVAL_ID=<license approval id>
+ARCHREALMS_PASSPORT_AI_VECTOR_STORE_PROVIDER=managed-pgvector
+ARCHREALMS_PASSPORT_AI_VECTOR_STORE_ID=<staging vector store id>
+ARCHREALMS_PASSPORT_AI_KNOWLEDGE_APPROVAL_ROOT=<knowledge approval root>
+ARCHREALMS_PASSPORT_AI_INFERENCE_API_KEY=<optional private runtime api key>
+ARCHREALMS_PASSPORT_AI_MAX_OUTPUT_TOKENS=1024
+ARCHREALMS_PASSPORT_AI_TEMPERATURE=0.2
+
+ARCHREALMS_PASSPORT_TELEMETRY_DESTINATION=staging-managed-telemetry
+ARCHREALMS_PASSPORT_TELEMETRY_RETENTION_POLICY_URI=staging://policy/passport-telemetry-retention
+ARCHREALMS_PASSPORT_INCIDENT_RESPONSE_RUNBOOK_URI=staging://runbook/passport-incident-response
+ARCHREALMS_PASSPORT_INCIDENT_RESPONSE_OWNER=<staging incident owner>

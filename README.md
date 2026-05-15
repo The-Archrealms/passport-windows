@@ -24,6 +24,8 @@ Included today:
 
 - WPF desktop app under `src/ArchrealmsPassport.Windows`
 - Windows packaging project under `src/ArchrealmsPassport.Windows.Package`
+- hosted Passport API and AI gateway under `src/ArchrealmsPassport.HostedServices`
+- hosted-service container deployment baseline under `deploy/hosted-services/`
 - Passport record schema notes under `docs/`
 - local node MVP plan under `docs/archrealms-passport-local-node-mvp-plan-2026-04-19.md`
 - app-level `LocalNodeService` abstraction for node initialization, daemon lifecycle control, registry submission publication, read-only IPFS access, standalone CAR export, diagnostics, and local health probing
@@ -182,6 +184,24 @@ dotnet build .\tools\ledger-verifier\Archrealms.LedgerVerifier.csproj /m:1 /nr:f
 ```
 
 The project file copies the local `tools/` and `registry/templates/` folders into the app output so the desktop client can use the bundled scripts.
+
+## Hosted Services Deployment
+
+The Passport hosted API and AI gateway can be published as a container from `deploy/hosted-services/`. This packages the gateway only; the open-weight model runtime, vector store, managed signing endpoint, managed storage, telemetry destination, and production approvals remain external ProductionMvp provisioning inputs.
+
+Validate the deployment files and Release publish output:
+
+```powershell
+.\tools\release\Test-PassportHostedServicesDeployment.ps1
+```
+
+Build the local Docker image when the machine has Docker and enough disk available:
+
+```powershell
+.\tools\release\Test-PassportHostedServicesDeployment.ps1 -BuildDockerImage
+```
+
+See `deploy/hosted-services/README.md` for the staging compose flow and required environment variables.
 
 ## Automated Tests
 
