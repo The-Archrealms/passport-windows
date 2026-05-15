@@ -243,90 +243,34 @@ namespace ArchrealmsPassport.Windows.Services
             {
                 var resolvedWorkspaceRoot = PassportEnvironment.ResolveWorkspaceRoot(workspaceRoot);
                 var readEvents = ReadEvents(resolvedWorkspaceRoot).ToArray();
-                var duplicateEventIds = new HashSet<string>(StringComparer.Ordinal);
-                var duplicateNonces = new HashSet<string>(StringComparer.Ordinal);
-                var archGenesisAllocationIds = new HashSet<string>(StringComparer.Ordinal);
                 foreach (var item in readEvents)
                 {
                     var ledgerEvent = item.Event;
-                    if (!duplicateEventIds.Add(ledgerEvent.EventId))
-                    {
-                        result.Failures.Add("Duplicate monetary ledger event ID: " + ledgerEvent.EventId);
-                    }
-
-                    if (!string.IsNullOrWhiteSpace(ledgerEvent.AntiReplayNonce)
-                        && !duplicateNonces.Add(ledgerEvent.AntiReplayNonce))
-                    {
-                        result.Failures.Add("Duplicate monetary ledger anti-replay nonce: " + ledgerEvent.AntiReplayNonce);
-                    }
-
-                    if (releaseLane.ProductionLedger
-                        && string.Equals(ledgerEvent.AssetCode, AssetArch, StringComparison.Ordinal)
-                        && string.Equals(ledgerEvent.EventType, EventArchGenesisAllocation, StringComparison.Ordinal)
-                        && ledgerEvent.EvidenceReferences.TryGetValue("arch_genesis_allocation_id", out var allocationId)
-                        && !string.IsNullOrWhiteSpace(allocationId)
-                        && !archGenesisAllocationIds.Add(allocationId.Trim()))
-                    {
-                        result.Failures.Add("Duplicate ARCH genesis allocation ID: " + allocationId.Trim() + ".");
-                    }
-
                     ValidateEventEnvelope(resolvedWorkspaceRoot, ledgerEvent, item.Path, result.Failures);
                 }
 
-                var priorGlobalSequence = 0L;
-                foreach (var item in readEvents
-                    .OrderBy(item => item.Event.GlobalSequence)
-                    .ThenBy(item => item.Event.CreatedUtc, StringComparer.Ordinal)
-                    .ThenBy(item => item.Event.EventId, StringComparer.Ordinal))
-                {
-                    if (item.Event.GlobalSequence <= priorGlobalSequence)
+                var coreReplay = PassportMonetaryLedgerReplayVerifier.Verify(
+                    readEvents.Select(item => ToCoreReplayEvent(item.Event)),
+                    new PassportMonetaryLedgerReplayOptions
                     {
-                        result.Failures.Add("Monetary ledger global sequence is not strictly increasing at event " + item.Event.EventId + ".");
-                    }
+                        ExpectedReleaseLane = releaseLane.Lane,
+                        ExpectedLedgerNamespace = releaseLane.LedgerNamespace,
+                        ProductionLedger = releaseLane.ProductionLedger,
+                        AllowProductionTokenRecords = releaseLane.AllowProductionTokenRecords,
+                        AllowStagingRecords = releaseLane.AllowStagingRecords,
+                        EnforceUniqueArchGenesisAllocationIds = releaseLane.ProductionLedger
+                    });
+                result.Failures.AddRange(coreReplay.Failures);
 
-                    priorGlobalSequence = item.Event.GlobalSequence;
-                }
-
-                var balances = new Dictionary<string, PassportMonetaryBalance>(StringComparer.Ordinal);
-                foreach (var accountGroup in readEvents
-                    .OrderBy(item => item.Event.AccountId, StringComparer.Ordinal)
-                    .ThenBy(item => item.Event.AccountSequence)
-                    .ThenBy(item => item.Event.CreatedUtc, StringComparer.Ordinal)
-                    .ThenBy(item => item.Event.EventId, StringComparer.Ordinal)
-                    .GroupBy(item => item.Event.AccountId, StringComparer.Ordinal))
+                result.EventCount = coreReplay.EventCount;
+                result.Balances.AddRange(coreReplay.Balances.Select(balance => new PassportMonetaryBalance
                 {
-                    var expectedSequence = 1L;
-                    var priorHash = string.Empty;
-                    var sequenceIds = new HashSet<long>();
-
-                    foreach (var item in accountGroup)
-                    {
-                        var ledgerEvent = item.Event;
-                        if (!sequenceIds.Add(ledgerEvent.AccountSequence))
-                        {
-                            result.Failures.Add("Duplicate account sequence " + ledgerEvent.AccountSequence + " for " + ledgerEvent.AccountId + ".");
-                        }
-
-                        if (ledgerEvent.AccountSequence != expectedSequence)
-                        {
-                            result.Failures.Add("Expected account sequence " + expectedSequence + " for " + ledgerEvent.AccountId + " but found " + ledgerEvent.AccountSequence + ".");
-                        }
-
-                        if (!string.Equals(ledgerEvent.PriorAccountEventHash, priorHash, StringComparison.OrdinalIgnoreCase))
-                        {
-                            result.Failures.Add("Invalid prior account event hash at sequence " + ledgerEvent.AccountSequence + " for " + ledgerEvent.AccountId + ".");
-                        }
-
-                        ApplyEventSemantics(balances, ledgerEvent, result.Failures);
-                        priorHash = ledgerEvent.EventHashSha256;
-                        expectedSequence++;
-                    }
-                }
-
-                result.EventCount = readEvents.Length;
-                result.Balances.AddRange(balances.Values
-                    .OrderBy(balance => balance.AccountId, StringComparer.Ordinal)
-                    .ThenBy(balance => balance.AssetCode, StringComparer.Ordinal));
+                    AccountId = balance.AccountId,
+                    AssetCode = balance.AssetCode,
+                    AvailableBaseUnits = balance.AvailableBaseUnits,
+                    EscrowedBaseUnits = balance.EscrowedBaseUnits,
+                    BurnedBaseUnits = balance.BurnedBaseUnits
+                }));
                 result.Message = result.Succeeded
                     ? "Monetary ledger replay succeeded."
                     : "Monetary ledger replay failed.";
@@ -923,6 +867,29 @@ namespace ArchrealmsPassport.Windows.Services
         private static string ReadEvidence(PassportMonetaryLedgerEvent ledgerEvent, string key)
         {
             return ledgerEvent.EvidenceReferences.TryGetValue(key, out var value) ? value.Trim() : string.Empty;
+        }
+
+        private static PassportMonetaryLedgerReplayEvent ToCoreReplayEvent(PassportMonetaryLedgerEvent ledgerEvent)
+        {
+            return new PassportMonetaryLedgerReplayEvent
+            {
+                EventId = ledgerEvent.EventId,
+                EventType = ledgerEvent.EventType,
+                CreatedUtc = ledgerEvent.CreatedUtc,
+                ReleaseLane = ledgerEvent.ReleaseLane,
+                LedgerNamespace = ledgerEvent.LedgerNamespace,
+                ProductionTokenRecord = ledgerEvent.ProductionTokenRecord,
+                StagingRecord = ledgerEvent.StagingRecord,
+                AccountId = ledgerEvent.AccountId,
+                AssetCode = ledgerEvent.AssetCode,
+                AmountBaseUnits = ledgerEvent.AmountBaseUnits,
+                GlobalSequence = ledgerEvent.GlobalSequence,
+                AccountSequence = ledgerEvent.AccountSequence,
+                PriorAccountEventHash = ledgerEvent.PriorAccountEventHash,
+                EventHashSha256 = ledgerEvent.EventHashSha256,
+                AntiReplayNonce = ledgerEvent.AntiReplayNonce,
+                ArchGenesisAllocationId = ReadEvidence(ledgerEvent, "arch_genesis_allocation_id")
+            };
         }
 
         private void ValidateEventSignature(string workspaceRoot, PassportMonetaryLedgerEvent ledgerEvent, List<string> failures)
