@@ -16,6 +16,7 @@ The hosted services project provides the production-facing API boundary that Win
 | `GET /ai/runtime/status` | Non-secret hosted open-weight AI readiness | Reports whether inference URL, approved model ID, model artifact hash, license approval, vector store, and knowledge approval root are configured |
 | `GET /ops/runtime/status` | Non-secret hosted operations readiness | Reports managed data root, storage/backup/restore policy, managed signing-key custody, telemetry, and incident-response configuration without exposing secrets |
 | `GET /ops/operator/status` | Non-mutating operator authentication probe | Requires `X-Archrealms-Operator-Key` and returns authorization status for production readiness checks |
+| `GET /ops/storage/status` | Non-mutating managed-storage readiness probe | Requires `X-Archrealms-Operator-Key`, verifies hosted data-root write/delete probes and backup-manifest enumeration |
 | `POST /ai/session` | Authorize a Passport-signed AI session request | Verifies request hash, device signature evidence, token/key separation, expiry, and non-authority boundaries |
 | `POST /ai/chat` | Authenticated AI guide response | Requires matching bearer session token; blocks private key, seed, and recovery-secret prompts; retrieves approved knowledge-pack chunks; calls an OpenAI-compatible open-weight runtime when configured; otherwise returns the deterministic gateway-contract fallback |
 | `POST /capacity/reports/cc` | Create conservative CC capacity reports | Enforces positive conservative capacity, no thin-market issuance, qualified independent volume, reserve exclusion, haircut range, and authority hash evidence |
@@ -31,6 +32,7 @@ The hosted services project provides the production-facing API boundary that Win
 
 - The service uses `PassportHostedFileStore` by default.
 - Set `ARCHREALMS_PASSPORT_HOSTED_DATA_ROOT` to control the hosted data root.
+- Production readiness calls `/ops/storage/status` to verify the hosted data root, records root, and append-log root are writable and that backup-manifest enumeration can run.
 - AI session records are written without bearer tokens.
 - Hosted records are written with SHA-256 sidecars and append-log entries under `append-log/*.jsonl`.
 - Approved AI knowledge-pack chunks can be stored under `records/ai/knowledge-packs/{knowledge_pack_id}/chunks.jsonl` with source IDs, hashes, approval status, and chunk text.

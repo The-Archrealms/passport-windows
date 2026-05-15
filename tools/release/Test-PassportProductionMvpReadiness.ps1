@@ -343,6 +343,48 @@ function Test-HostedOperatorStatusEndpoint {
     return ""
 }
 
+function Test-HostedStorageStatusEndpoint {
+    $apiBaseUrl = Get-FirstEnvironmentValue -Names @(
+        "PASSPORT_WINDOWS_PRODUCTION_MVP_API_BASE_URL",
+        "PASSPORT_WINDOWS_RELEASE_LANE_API_BASE_URL"
+    )
+    $operatorKey = [System.Environment]::GetEnvironmentVariable("ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY")
+    if ([string]::IsNullOrWhiteSpace($apiBaseUrl) -or [string]::IsNullOrWhiteSpace($operatorKey)) {
+        return ""
+    }
+
+    $url = Join-EndpointPath -BaseUrl $apiBaseUrl -Path "/ops/storage/status"
+    try {
+        $response = Invoke-RestMethod `
+            -Method Get `
+            -Uri $url `
+            -Headers @{ "X-Archrealms-Operator-Key" = $operatorKey } `
+            -TimeoutSec $EndpointTimeoutSeconds
+    }
+    catch {
+        return "hosted storage status endpoint check failed for $url`: $($_.Exception.Message)"
+    }
+
+    if ($null -eq $response) {
+        return "hosted storage status endpoint returned no JSON for $url"
+    }
+
+    if ($response.schema -ne "archrealms.passport.hosted_storage_readiness.v1" -or $response.ready -ne $true) {
+        $missing = @()
+        if ($response.missing) {
+            $missing = @($response.missing)
+        }
+
+        if ($missing.Count -gt 0) {
+            return "hosted storage status endpoint is not ready for $url`: " + ($missing -join ", ")
+        }
+
+        return "hosted storage status endpoint is not ready for $url"
+    }
+
+    return ""
+}
+
 function Test-ManagedSigningEndpointProbe {
     $endpoint = [System.Environment]::GetEnvironmentVariable("ARCHREALMS_PASSPORT_HOSTED_SIGNING_ENDPOINT")
     if ([string]::IsNullOrWhiteSpace($endpoint)) {
@@ -659,6 +701,12 @@ $gates = @(
             "ARCHREALMS_PASSPORT_HOSTED_STORAGE_BACKUP_POLICY_URI",
             "ARCHREALMS_PASSPORT_HOSTED_STORAGE_RESTORE_RUNBOOK_URI"
         )
+
+    New-Gate `
+        -Id "managed_storage_status" `
+        -Description "Hosted managed storage is writable and backup-manifest enumeration is available." `
+        -RequiredEnvironment @() `
+        -ExtraCheck ${function:Test-HostedStorageStatusEndpoint}
 
     New-Gate `
         -Id "managed_signing_key_custody" `

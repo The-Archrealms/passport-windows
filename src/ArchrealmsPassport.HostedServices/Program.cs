@@ -47,6 +47,23 @@ app.MapGet("/ops/operator/status", (HttpRequest httpRequest) =>
     });
 });
 
+app.MapGet("/ops/storage/status", (HttpRequest httpRequest) =>
+{
+    var operatorAuthorization = AuthorizeOperator(httpRequest, operatorGate);
+    if (operatorAuthorization != null)
+    {
+        return operatorAuthorization;
+    }
+
+    var rateLimit = AuthorizeRate(httpRequest, rateLimiter, "operator-storage-status", maxRequests: 30, window: TimeSpan.FromMinutes(1));
+    if (rateLimit != null)
+    {
+        return rateLimit;
+    }
+
+    return Results.Json(PassportHostedStorageReadiness.FromFileStore(store));
+});
+
 app.MapPost("/ai/session", (HttpRequest httpRequest, PassportAiSessionAuthorizationRequest request) =>
 {
     var rateLimit = AuthorizeRate(httpRequest, rateLimiter, "ai-session", maxRequests: 30, window: TimeSpan.FromMinutes(1));
