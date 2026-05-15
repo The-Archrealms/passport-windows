@@ -115,6 +115,27 @@ function New-FileRecord {
     }
 }
 
+function Get-FailedChildChecks {
+    param([string]$Path)
+
+    $resolved = Resolve-RepoPath -Path $Path
+    $childReport = Read-JsonFile -Path $resolved
+    if ($null -eq $childReport -or -not $childReport.PSObject.Properties["checks"]) {
+        return @()
+    }
+
+    $failed = @()
+    foreach ($childCheck in @($childReport.checks | Where-Object { $_.passed -ne $true })) {
+        $failed += [pscustomobject][ordered]@{
+            id = [string]$childCheck.id
+            failures = @($childCheck.failures | ForEach-Object { ConvertTo-ReportText -Value $_ })
+            evidence_path = $(if ($childCheck.evidence -and $childCheck.evidence.PSObject.Properties["path"]) { [string]$childCheck.evidence.path } else { "" })
+        }
+    }
+
+    return $failed
+}
+
 function Get-CurrentCommit {
     Push-Location $repoRoot
     try {
@@ -234,6 +255,7 @@ if ($UseGeneratedFixture) {
     $ProductionMvpReadinessReportPath = Join-Path $fixtureRoot "production-mvp-readiness-report.json"
     $ProductionProvisioningPacketReportPath = Join-Path $fixtureRoot "production-provisioning-packet-validation-report.json"
     $ReleaseEvidenceValidationReportPath = Join-Path $fixtureRoot "production-mvp-release-evidence-validation-report.json"
+    $childProvisioningReportPath = Join-Path $fixtureRoot "synthetic-package-signing-provisioning-validation-report.json"
     $OutputPath = Join-Path $fixtureRoot "production-mvp-outstanding-work-report.json"
     $MarkdownOutputPath = Join-Path $fixtureRoot "production-mvp-outstanding-work-report.md"
     $NoFail = $true
@@ -272,6 +294,39 @@ if ($UseGeneratedFixture) {
         )
     })
 
+    Write-JsonFile -Path $childProvisioningReportPath -Value ([pscustomobject][ordered]@{
+        schema = "archrealms.passport.package_signing_provisioning_validation.v1"
+        created_utc = $createdUtc
+        passed = $false
+        failed_check_count = 3
+        checks = @(
+            [pscustomobject][ordered]@{
+                id = "production_msix_signing_request_contract"
+                passed = $false
+                failures = @("placeholder values remain in production-msix-signing-request.template.md")
+                evidence = [pscustomobject][ordered]@{
+                    path = "production-msix-signing-request.template.md"
+                }
+            },
+            [pscustomobject][ordered]@{
+                id = "sideload_trust_policy_contract"
+                passed = $false
+                failures = @("placeholder values remain in sideload-trust-policy.template.md")
+                evidence = [pscustomobject][ordered]@{
+                    path = "sideload-trust-policy.template.md"
+                }
+            },
+            [pscustomobject][ordered]@{
+                id = "store_signing_policy_contract"
+                passed = $false
+                failures = @("placeholder values remain in store-signing-policy.template.md")
+                evidence = [pscustomobject][ordered]@{
+                    path = "store-signing-policy.template.md"
+                }
+            }
+        )
+    })
+
     Write-JsonFile -Path $ProductionProvisioningPacketReportPath -Value ([pscustomobject][ordered]@{
         schema = "archrealms.passport.production_provisioning_packet_validation.v1"
         created_utc = $createdUtc
@@ -284,7 +339,7 @@ if ($UseGeneratedFixture) {
                 passed = $false
                 failures = @("package_signing_provisioning child report did not pass.")
                 evidence = [pscustomobject][ordered]@{
-                    report_path = "synthetic-package-signing-provisioning-validation-report.json"
+                    report_path = $childProvisioningReportPath
                     child_failed_check_count = 3
                 }
             }
@@ -388,13 +443,21 @@ if ($null -ne $readiness -and $readiness.PSObject.Properties["gates"]) {
 $failedProvisioningChecks = @()
 if ($null -ne $provisioning -and $provisioning.PSObject.Properties["checks"]) {
     foreach ($check in @($provisioning.checks | Where-Object { $_.passed -ne $true })) {
+        $childReportPath = $(if ($check.evidence -and $check.evidence.PSObject.Properties["report_path"]) { [string]$check.evidence.report_path } else { "" })
+        $resolvedChildReportPath = Resolve-RepoPath -Path $childReportPath
+        $childReportExists = (-not [string]::IsNullOrWhiteSpace($resolvedChildReportPath)) -and (Test-Path -LiteralPath $resolvedChildReportPath -PathType Leaf)
+        $childFailedChecks = if ($childReportExists) { @(Get-FailedChildChecks -Path $resolvedChildReportPath) } else { @() }
+
         $failedProvisioningChecks += [pscustomobject][ordered]@{
             id = [string]$check.id
             description = ConvertTo-ReportText -Value $check.description
             failures = @($check.failures | ForEach-Object { ConvertTo-ReportText -Value $_ })
             operator_action = $(if ($provisioningActionMap.ContainsKey([string]$check.id)) { [string]$provisioningActionMap[[string]$check.id] } else { "" })
-            child_report_path = $(if ($check.evidence -and $check.evidence.PSObject.Properties["report_path"]) { [string]$check.evidence.report_path } else { "" })
+            child_report_path = $childReportPath
+            child_report_exists = $childReportExists
+            child_report_sha256 = $(if ($childReportExists) { Get-Sha256Hex -Path $resolvedChildReportPath } else { "" })
             child_failed_check_count = $(if ($check.evidence -and $check.evidence.PSObject.Properties["child_failed_check_count"]) { [int]$check.evidence.child_failed_check_count } else { $null })
+            child_failed_checks = $childFailedChecks
         }
     }
 }
@@ -515,6 +578,13 @@ if (-not [string]::IsNullOrWhiteSpace($MarkdownOutputPath)) {
             $lines.Add("- ``$($check.id)``: $detail")
             if (-not [string]::IsNullOrWhiteSpace($check.child_report_path)) {
                 $lines.Add("  - Child report: $($check.child_report_path)")
+            }
+            foreach ($child in @($check.child_failed_checks | Select-Object -First 5)) {
+                $message = (@($child.failures) -join "; ")
+                if ([string]::IsNullOrWhiteSpace($message)) {
+                    $message = "failed"
+                }
+                $lines.Add("  - ``$($child.id)``: $message")
             }
         }
     }
