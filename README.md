@@ -223,6 +223,24 @@ When production copies are filled in a controlled deployment system, validate th
   -RequireNoPlaceholders
 ```
 
+## Managed Storage Provisioning
+
+ProductionMvp readiness requires a managed durable hosted data root, storage provider identifier, backup policy URI, and restore runbook URI. The repo includes provisioning templates under `deploy/managed-storage/` for storage layout, provider/data-root approval, backup-manifest scheduling, and readiness evidence.
+
+Validate the managed storage provisioning packet:
+
+```powershell
+.\tools\release\Test-PassportManagedStorageProvisioning.ps1
+```
+
+When production copies are filled in a controlled deployment system, validate them with:
+
+```powershell
+.\tools\release\Test-PassportManagedStorageProvisioning.ps1 `
+  -ManagedStoragePath C:\secure\archrealms-passport-managed-storage `
+  -RequireNoPlaceholders
+```
+
 ## Production Ops Documents
 
 ProductionMvp readiness references approved backup, restore, telemetry-retention, incident-response, and release-approval document IDs or URIs. The repo includes reviewable templates under `deploy/production-ops/` so those documents can be completed and validated before their IDs are loaded into the production environment.
