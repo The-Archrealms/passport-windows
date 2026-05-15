@@ -14,6 +14,7 @@ The hosted services project provides the production-facing API boundary that Win
 |---|---|---|
 | `GET /health` | Liveness and contract version | Returns `passport-hosted-services-v1` |
 | `GET /ai/runtime/status` | Non-secret hosted open-weight AI readiness | Reports whether inference URL, approved model ID, model artifact hash, license approval, vector store, and knowledge approval root are configured |
+| `GET /ops/runtime/status` | Non-secret hosted operations readiness | Reports managed data root, storage/backup/restore policy, managed signing-key custody, telemetry, and incident-response configuration without exposing secrets |
 | `POST /ai/session` | Authorize a Passport-signed AI session request | Verifies request hash, device signature evidence, token/key separation, expiry, and non-authority boundaries |
 | `POST /ai/chat` | Authenticated AI guide response | Requires matching bearer session token; blocks private key, seed, and recovery-secret prompts; retrieves approved knowledge-pack chunks; calls an OpenAI-compatible open-weight runtime when configured; otherwise returns the deterministic gateway-contract fallback |
 | `POST /capacity/reports/cc` | Create conservative CC capacity reports | Enforces positive conservative capacity, no thin-market issuance, qualified independent volume, reserve exclusion, haircut range, and authority hash evidence |
@@ -22,6 +23,8 @@ The hosted services project provides the production-facing API boundary that Win
 | `POST /telemetry/access` | Authorize redacted hosted telemetry access | Requires operator authentication, strict `telemetry_access` dual-control authority, request-payload hash binding, metadata-only access, and bounded time windows |
 | `POST /recovery/controls/validate` | Validate Passport recovery controls | Verifies self-service recovery signatures against hosted device public keys and support-mediated recovery overrides against strict dual-control admin authority |
 | `POST /storage/delivery/requests` | Accept storage delivery requests | Verifies storage delivery request hash, positive storage/epoch terms, and returns proof requirements before burn |
+| `POST /ops/backup/manifests` | Create signed hosted backup manifests | Requires operator authentication, hashes managed `records/` and `append-log/` files, excludes key material and raw payloads, and records backup/restore policy evidence |
+| `POST /ops/incidents` | Create signed hosted incident reports | Requires operator authentication and metadata-only incident records with severity, type, runbook, owner, telemetry-retention policy, and related record hashes |
 
 ## Storage
 
@@ -30,6 +33,7 @@ The hosted services project provides the production-facing API boundary that Win
 - AI session records are written without bearer tokens.
 - Hosted records are written with SHA-256 sidecars and append-log entries under `append-log/*.jsonl`.
 - Approved AI knowledge-pack chunks can be stored under `records/ai/knowledge-packs/{knowledge_pack_id}/chunks.jsonl` with source IDs, hashes, approval status, and chunk text.
+- Backup manifests enumerate only managed `records/` and `append-log/` files; they exclude `keys/`, private key material, raw AI prompts, and storage payload details.
 
 ## Operator And Signing Controls
 
@@ -43,6 +47,8 @@ The hosted services project provides the production-facing API boundary that Win
 - Hosted role-membership records are verified with issuer signatures and hosted registry public keys.
 - The telemetry access endpoint returns redacted append-log metadata only; it blocks personal data, raw AI prompts, and storage payload details.
 - The recovery controls endpoint rejects AI-approved recovery controls, validates signed device deauthorization/security-freeze records, and validates support-mediated recovery override records against hosted admin authority.
+- The backup manifest and incident endpoints return hosted service signatures and append-log entries like other hosted authority records.
+- The incident endpoint creates metadata-only incident reports; operational teams must keep sensitive evidence in the approved incident system referenced by the runbook.
 
 ## Hosted AI Runtime
 
@@ -62,7 +68,7 @@ The hosted services project provides the production-facing API boundary that Win
 ## Current Limits
 
 - Production MVP package publishing is guarded by `tools/release/Test-PassportProductionMvpReadiness.ps1`; the MSIX publisher runs it automatically for `-Lane ProductionMvp` unless explicitly skipped.
-- Production deployment still needs managed durable storage, backups, managed signing-key custody, incident logging, and managed release-lane deployment configuration.
+- Production deployment still needs managed durable storage provider configuration, backup/restore runbook URIs, managed signing-key custody, telemetry destination/retention configuration, incident-response owner/runbook configuration, and managed release-lane deployment configuration.
 - Production still needs final model endpoint selection, model artifact/license approval, managed vector store deployment, and production knowledge-pack approval workflow.
 - The service does not make fiat, exchange, external wallet, staking, yield, governance, or public stable-value claims.
 

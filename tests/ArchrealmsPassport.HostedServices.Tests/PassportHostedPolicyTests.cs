@@ -382,6 +382,105 @@ public sealed class PassportHostedPolicyTests
     }
 
     [Fact]
+    public void BackupManifestRequiresManagedRecordEntriesAndRestorePolicy()
+    {
+        var result = PassportHostedPolicy.CreateBackupManifestRecord(new PassportHostedBackupManifestRequest
+        {
+            ReleaseLane = "production-mvp",
+            LedgerNamespace = "archrealms-passport-production-mvp",
+            PolicyVersion = "passport-release-lanes-v1",
+            StorageProvider = "managed-object-storage",
+            BackupPolicyUri = "archrealms://runbooks/backup-policy-v1",
+            RestoreRunbookUri = "archrealms://runbooks/restore-v1",
+            BackupSnapshotId = "snapshot-1"
+        },
+        [
+            new PassportHostedBackupManifestEntry
+            {
+                RelativePath = "records/hosted/capacity-1.json",
+                Sha256 = new string('a', 64),
+                ByteCount = 128
+            },
+            new PassportHostedBackupManifestEntry
+            {
+                RelativePath = "append-log/20260515.jsonl",
+                Sha256 = new string('b', 64),
+                ByteCount = 64
+            }
+        ]);
+
+        Assert.True(result.Succeeded, result.Message);
+        Assert.Equal("passport_hosted_storage_backup_manifest", result.Record!["record_type"]);
+        Assert.Equal(false, result.Record["private_key_material_included"]);
+        Assert.Equal(2, result.Record["manifest_file_count"]);
+        Assert.Matches("^[0-9a-f]{64}$", result.Record["manifest_root_sha256"]?.ToString() ?? string.Empty);
+
+        var rejectedKeyMaterial = PassportHostedPolicy.CreateBackupManifestRecord(new PassportHostedBackupManifestRequest
+        {
+            ReleaseLane = "production-mvp",
+            LedgerNamespace = "archrealms-passport-production-mvp",
+            PolicyVersion = "passport-release-lanes-v1",
+            StorageProvider = "managed-object-storage",
+            BackupPolicyUri = "archrealms://runbooks/backup-policy-v1",
+            RestoreRunbookUri = "archrealms://runbooks/restore-v1"
+        },
+        [
+            new PassportHostedBackupManifestEntry
+            {
+                RelativePath = "keys/hosted-service-signing-key.pkcs8",
+                Sha256 = new string('c', 64),
+                ByteCount = 256
+            }
+        ]);
+
+        Assert.False(rejectedKeyMaterial.Succeeded);
+        Assert.Contains("no key material", rejectedKeyMaterial.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void IncidentReportIsMetadataOnlyAndRequiresResponseRunbook()
+    {
+        var result = PassportHostedPolicy.CreateIncidentReportRecord(new PassportHostedIncidentReportRequest
+        {
+            ReleaseLane = "production-mvp",
+            LedgerNamespace = "archrealms-passport-production-mvp",
+            PolicyVersion = "passport-release-lanes-v1",
+            IncidentId = "incident-1",
+            Severity = "high",
+            IncidentType = "storage_delivery_failure",
+            Summary = "Storage delivery failure detected for a production canary account.",
+            DetectedUtc = DateTimeOffset.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+            IncidentResponseRunbookUri = "archrealms://runbooks/incident-response-v1",
+            IncidentResponseOwner = "ops-duty-officer",
+            TelemetryRetentionPolicyUri = "archrealms://policies/telemetry-retention-v1",
+            RelatedRecordSha256 = [new string('d', 64)]
+        });
+
+        Assert.True(result.Succeeded, result.Message);
+        Assert.Equal("passport_hosted_incident_report", result.Record!["record_type"]);
+        Assert.Equal("high", result.Record["severity"]);
+        Assert.Equal(false, result.Record["contains_raw_ai_prompts"]);
+
+        var rejectedRawPrompt = PassportHostedPolicy.CreateIncidentReportRecord(new PassportHostedIncidentReportRequest
+        {
+            ReleaseLane = "production-mvp",
+            LedgerNamespace = "archrealms-passport-production-mvp",
+            PolicyVersion = "passport-release-lanes-v1",
+            Severity = "critical",
+            IncidentType = "ai_privacy",
+            Summary = "Raw prompt accidentally included.",
+            DetectedUtc = DateTimeOffset.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+            IncidentResponseRunbookUri = "archrealms://runbooks/incident-response-v1",
+            IncidentResponseOwner = "ops-duty-officer",
+            TelemetryRetentionPolicyUri = "archrealms://policies/telemetry-retention-v1",
+            ContainsRawAiPrompts = true
+        });
+
+        Assert.False(rejectedRawPrompt.Succeeded);
+        Assert.Contains("metadata-only", rejectedRawPrompt.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void RecoveryControlValidatesSelfServiceDeviceSignature()
     {
         using var workspace = TemporaryDirectory.Create();

@@ -162,6 +162,24 @@ public sealed class PassportHostedFileStore : IPassportHostedStore
         return entries.ToArray();
     }
 
+    public PassportHostedBackupManifestEntry[] CreateBackupManifestEntries()
+    {
+        var files = Directory.Exists(root)
+            ? Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
+            : Enumerable.Empty<string>();
+        return files
+            .Where(IsManagedBackupPath)
+            .OrderBy(ToStoreRelativePath, StringComparer.Ordinal)
+            .Select(path => new FileInfo(path))
+            .Select(file => new PassportHostedBackupManifestEntry
+            {
+                RelativePath = ToStoreRelativePath(file.FullName),
+                Sha256 = ComputeFileSha256(file.FullName),
+                ByteCount = file.Length
+            })
+            .ToArray();
+    }
+
     private void Append(string recordType, string recordId, string recordSha256, string path)
     {
         var appendPath = Path.Combine(AppendLogRoot, DateTime.UtcNow.ToString("yyyyMMdd") + ".jsonl");
@@ -191,6 +209,13 @@ public sealed class PassportHostedFileStore : IPassportHostedStore
         return fullPath.StartsWith(fullRoot, StringComparison.OrdinalIgnoreCase)
             ? fullPath[fullRoot.Length..].TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Replace(Path.DirectorySeparatorChar, '/')
             : fullPath.Replace(Path.DirectorySeparatorChar, '/');
+    }
+
+    private bool IsManagedBackupPath(string path)
+    {
+        var relativePath = ToStoreRelativePath(path);
+        return relativePath.StartsWith("records/", StringComparison.Ordinal)
+            || relativePath.StartsWith("append-log/", StringComparison.Ordinal);
     }
 
     private static string ReadString(Dictionary<string, object?> record, string name)

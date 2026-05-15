@@ -26,4 +26,6 @@ public static class PassportRecordTypes
     public const string SupportMediatedRecoveryOverride = "passport_support_mediated_recovery_override";
     public const string StorageServiceDeliveryRequest = "passport_storage_service_delivery_request";
     public const string StorageDeliveryAcceptance = "passport_storage_delivery_acceptance";
+    public const string HostedStorageBackupManifest = "passport_hosted_storage_backup_manifest";
+    public const string HostedIncidentReport = "passport_hosted_incident_report";
 }

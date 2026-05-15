@@ -89,6 +89,37 @@ public sealed class PassportHostedFileStoreTests
         Assert.DoesNotContain("hosted_record_path", JsonSerializer.Serialize(entries), StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void FileStoreCreatesBackupManifestEntriesForRecordsAndAppendLogOnly()
+    {
+        using var workspace = TemporaryDirectory.Create();
+        var store = new PassportHostedFileStore(workspace.Path);
+        store.SaveRecord("capacity-1", new Dictionary<string, object?>
+        {
+            ["schema_version"] = 1,
+            ["record_type"] = "passport_cc_capacity_report",
+            ["record_id"] = "capacity-1"
+        }, new string('d', 64));
+        store.SaveAiSession(new Dictionary<string, object?>
+        {
+            ["schema_version"] = 1,
+            ["record_type"] = "passport_ai_session_record",
+            ["record_id"] = "session-1",
+            ["session_id"] = "session-1",
+            ["expires_utc"] = DateTimeOffset.UtcNow.AddMinutes(30).ToString("yyyy-MM-ddTHH:mm:ssZ")
+        });
+        Directory.CreateDirectory(System.IO.Path.Combine(workspace.Path, "keys"));
+        File.WriteAllText(System.IO.Path.Combine(workspace.Path, "keys", "hosted-service-signing-key.pkcs8"), "private-key");
+
+        var entries = store.CreateBackupManifestEntries();
+
+        Assert.Contains(entries, entry => entry.RelativePath == "records/hosted/capacity-1.json");
+        Assert.Contains(entries, entry => entry.RelativePath.StartsWith("records/ai/sessions/", StringComparison.Ordinal));
+        Assert.Contains(entries, entry => entry.RelativePath.StartsWith("append-log/", StringComparison.Ordinal));
+        Assert.DoesNotContain(entries, entry => entry.RelativePath.StartsWith("keys/", StringComparison.Ordinal));
+        Assert.All(entries, entry => Assert.Matches("^[0-9a-f]{64}$", entry.Sha256));
+    }
+
     private sealed class TemporaryDirectory : IDisposable
     {
         private TemporaryDirectory(string path)

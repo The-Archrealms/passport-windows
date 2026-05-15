@@ -712,6 +712,177 @@ public static class PassportHostedPolicy
         return RecordResponse("Storage delivery request accepted.", recordId, record);
     }
 
+    public static PassportHostedRecordResponse CreateBackupManifestRecord(
+        PassportHostedBackupManifestRequest request,
+        PassportHostedBackupManifestEntry[] entries)
+    {
+        var releaseLane = NormalizeRequiredValue(request.ReleaseLane);
+        var ledgerNamespace = NormalizeRequiredValue(request.LedgerNamespace);
+        var policyVersion = NormalizeRequiredValue(request.PolicyVersion);
+        var storageProvider = NormalizeRequiredValue(request.StorageProvider);
+        var backupPolicyUri = NormalizeRequiredValue(request.BackupPolicyUri);
+        var restoreRunbookUri = NormalizeRequiredValue(request.RestoreRunbookUri);
+        if (string.IsNullOrWhiteSpace(releaseLane)
+            || string.IsNullOrWhiteSpace(ledgerNamespace)
+            || string.IsNullOrWhiteSpace(policyVersion))
+        {
+            return FailedRecord("Backup manifest requires release lane, ledger namespace, and policy version.");
+        }
+
+        if (string.IsNullOrWhiteSpace(storageProvider)
+            || string.IsNullOrWhiteSpace(backupPolicyUri)
+            || string.IsNullOrWhiteSpace(restoreRunbookUri))
+        {
+            return FailedRecord("Backup manifest requires storage provider, backup policy URI, and restore runbook URI.");
+        }
+
+        if (entries.Length == 0)
+        {
+            return FailedRecord("Backup manifest requires at least one managed records or append-log file.");
+        }
+
+        var normalizedEntries = entries
+            .Select(entry => new PassportHostedBackupManifestEntry
+            {
+                RelativePath = (entry.RelativePath ?? string.Empty).Trim().Replace('\\', '/'),
+                Sha256 = (entry.Sha256 ?? string.Empty).Trim().ToLowerInvariant(),
+                ByteCount = entry.ByteCount
+            })
+            .OrderBy(entry => entry.RelativePath, StringComparer.Ordinal)
+            .ToArray();
+
+        if (normalizedEntries.Any(entry => string.IsNullOrWhiteSpace(entry.RelativePath)
+            || (!entry.RelativePath.StartsWith("records/", StringComparison.Ordinal)
+                && !entry.RelativePath.StartsWith("append-log/", StringComparison.Ordinal))
+            || entry.RelativePath.Contains("/keys/", StringComparison.Ordinal)
+            || !LooksLikeSha256(entry.Sha256)
+            || entry.ByteCount < 0))
+        {
+            return FailedRecord("Backup manifest entries must be managed record or append-log files with SHA-256 hashes and no key material.");
+        }
+
+        var recordId = NewRecordId("hosted-backup-manifest");
+        var snapshotId = string.IsNullOrWhiteSpace(request.BackupSnapshotId)
+            ? DateTimeOffset.UtcNow.ToString("yyyyMMddTHHmmssZ") + "-snapshot"
+            : NormalizeRequiredValue(request.BackupSnapshotId);
+        var record = new Dictionary<string, object?>
+        {
+            ["schema_version"] = 1,
+            ["record_type"] = PassportRecordTypes.HostedStorageBackupManifest,
+            ["record_id"] = recordId,
+            ["created_utc"] = DateTimeOffset.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+            ["contract_version"] = ContractVersion,
+            ["release_lane"] = releaseLane,
+            ["ledger_namespace"] = ledgerNamespace,
+            ["policy_version"] = policyVersion,
+            ["storage_provider"] = storageProvider,
+            ["backup_policy_uri"] = backupPolicyUri,
+            ["restore_runbook_uri"] = restoreRunbookUri,
+            ["backup_snapshot_id"] = snapshotId,
+            ["manifest_file_count"] = normalizedEntries.Length,
+            ["manifest_total_bytes"] = normalizedEntries.Sum(entry => entry.ByteCount),
+            ["manifest_root_sha256"] = ComputeBackupManifestRootSha256(normalizedEntries),
+            ["private_key_material_included"] = false,
+            ["raw_ai_prompts_included"] = false,
+            ["storage_payloads_included"] = false,
+            ["entries"] = normalizedEntries.Select(entry => new Dictionary<string, object?>
+            {
+                ["relative_path"] = entry.RelativePath,
+                ["sha256"] = entry.Sha256,
+                ["byte_count"] = entry.ByteCount
+            }).ToArray(),
+            ["summary"] = "Hosted managed-storage backup manifest for record and append-log restore verification. Key material and raw payloads are excluded."
+        };
+
+        return RecordResponse("Hosted backup manifest created.", recordId, record);
+    }
+
+    public static PassportHostedRecordResponse CreateIncidentReportRecord(PassportHostedIncidentReportRequest request)
+    {
+        var releaseLane = NormalizeRequiredValue(request.ReleaseLane);
+        var ledgerNamespace = NormalizeRequiredValue(request.LedgerNamespace);
+        var policyVersion = NormalizeRequiredValue(request.PolicyVersion);
+        if (string.IsNullOrWhiteSpace(releaseLane)
+            || string.IsNullOrWhiteSpace(ledgerNamespace)
+            || string.IsNullOrWhiteSpace(policyVersion))
+        {
+            return FailedRecord("Incident report requires release lane, ledger namespace, and policy version.");
+        }
+
+        var severity = NormalizeSlug(request.Severity);
+        if (severity is not "low" and not "medium" and not "high" and not "critical")
+        {
+            return FailedRecord("Incident severity must be low, medium, high, or critical.");
+        }
+
+        var incidentType = NormalizeSlug(request.IncidentType);
+        if (string.IsNullOrWhiteSpace(incidentType) || string.Equals(incidentType, "aggregate", StringComparison.Ordinal))
+        {
+            return FailedRecord("Incident report requires an incident type.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Summary))
+        {
+            return FailedRecord("Incident report requires a summary.");
+        }
+
+        if (!TryReadUtc(request.DetectedUtc, out var detectedUtc))
+        {
+            return FailedRecord("Incident report requires detected_utc.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.IncidentResponseRunbookUri)
+            || string.IsNullOrWhiteSpace(request.IncidentResponseOwner)
+            || string.IsNullOrWhiteSpace(request.TelemetryRetentionPolicyUri))
+        {
+            return FailedRecord("Incident report requires runbook, owner, and telemetry retention policy references.");
+        }
+
+        if (request.ContainsPersonalData || request.ContainsRawAiPrompts || request.ContainsStoragePayloadDetails)
+        {
+            return FailedRecord("Hosted incident reports are metadata-only and cannot include personal data, raw AI prompts, or storage payload details.");
+        }
+
+        var relatedHashes = request.RelatedRecordSha256
+            .Select(hash => (hash ?? string.Empty).Trim().ToLowerInvariant())
+            .Where(hash => !string.IsNullOrWhiteSpace(hash))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (relatedHashes.Any(hash => !LooksLikeSha256(hash)))
+        {
+            return FailedRecord("Incident related record hashes must be SHA-256 values.");
+        }
+
+        var recordId = string.IsNullOrWhiteSpace(request.IncidentId)
+            ? NewRecordId("hosted-incident-" + severity)
+            : NormalizeRequiredValue(request.IncidentId);
+        var record = new Dictionary<string, object?>
+        {
+            ["schema_version"] = 1,
+            ["record_type"] = PassportRecordTypes.HostedIncidentReport,
+            ["record_id"] = recordId,
+            ["created_utc"] = DateTimeOffset.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+            ["contract_version"] = ContractVersion,
+            ["release_lane"] = releaseLane,
+            ["ledger_namespace"] = ledgerNamespace,
+            ["policy_version"] = policyVersion,
+            ["severity"] = severity,
+            ["incident_type"] = incidentType,
+            ["detected_utc"] = detectedUtc.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+            ["incident_response_runbook_uri"] = request.IncidentResponseRunbookUri.Trim(),
+            ["incident_response_owner"] = request.IncidentResponseOwner.Trim(),
+            ["telemetry_retention_policy_uri"] = request.TelemetryRetentionPolicyUri.Trim(),
+            ["related_record_sha256"] = relatedHashes,
+            ["contains_personal_data"] = false,
+            ["contains_raw_ai_prompts"] = false,
+            ["contains_storage_payload_details"] = false,
+            ["redaction_policy"] = "metadata_only_no_personal_data_no_raw_ai_prompts_no_storage_payload_details",
+            ["summary"] = request.Summary.Trim()
+        };
+
+        return RecordResponse("Hosted incident report created.", recordId, record);
+    }
+
     public static string ReadBearerToken(string authorizationHeader)
     {
         const string prefix = "Bearer ";
@@ -971,6 +1142,14 @@ public static class PassportHostedPolicy
             ["include_raw_ai_prompts"] = request.IncludeRawAiPrompts,
             ["include_storage_payload_details"] = request.IncludeStoragePayloadDetails
         };
+    }
+
+    private static string ComputeBackupManifestRootSha256(PassportHostedBackupManifestEntry[] entries)
+    {
+        var payload = entries
+            .OrderBy(entry => entry.RelativePath, StringComparer.Ordinal)
+            .Select(entry => entry.RelativePath + "|" + entry.Sha256 + "|" + entry.ByteCount);
+        return ComputeSha256(Encoding.UTF8.GetBytes(string.Join("\n", payload)));
     }
 
     private static bool Matches(JsonElement root, string propertyName, string expected)

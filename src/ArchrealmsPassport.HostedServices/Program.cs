@@ -22,6 +22,8 @@ app.MapGet("/health", () => Results.Json(new
 
 app.MapGet("/ai/runtime/status", () => Results.Json(PassportHostedAiRuntimeReadiness.FromEnvironment()));
 
+app.MapGet("/ops/runtime/status", () => Results.Json(PassportHostedOperationsReadiness.FromEnvironment()));
+
 app.MapPost("/ai/session", (HttpRequest httpRequest, PassportAiSessionAuthorizationRequest request) =>
 {
     var rateLimit = AuthorizeRate(httpRequest, rateLimiter, "ai-session", maxRequests: 30, window: TimeSpan.FromMinutes(1));
@@ -207,6 +209,68 @@ app.MapPost("/storage/delivery/requests", (HttpRequest httpRequest, PassportStor
     return Results.Json(result);
 });
 
+app.MapPost("/ops/backup/manifests", (HttpRequest httpRequest, PassportHostedBackupManifestRequest request) =>
+{
+    var operatorAuthorization = AuthorizeOperator(httpRequest, operatorGate);
+    if (operatorAuthorization != null)
+    {
+        return operatorAuthorization;
+    }
+
+    var rateLimit = AuthorizeRate(httpRequest, rateLimiter, "operator-backup-manifest", maxRequests: 10, window: TimeSpan.FromMinutes(1));
+    if (rateLimit != null)
+    {
+        return rateLimit;
+    }
+
+    var hydratedRequest = request with
+    {
+        StorageProvider = Coalesce(request.StorageProvider, Environment.GetEnvironmentVariable("ARCHREALMS_PASSPORT_HOSTED_STORAGE_PROVIDER")),
+        BackupPolicyUri = Coalesce(request.BackupPolicyUri, Environment.GetEnvironmentVariable("ARCHREALMS_PASSPORT_HOSTED_STORAGE_BACKUP_POLICY_URI")),
+        RestoreRunbookUri = Coalesce(request.RestoreRunbookUri, Environment.GetEnvironmentVariable("ARCHREALMS_PASSPORT_HOSTED_STORAGE_RESTORE_RUNBOOK_URI"))
+    };
+    var result = PassportHostedPolicy.CreateBackupManifestRecord(hydratedRequest, store.CreateBackupManifestEntries());
+    if (!result.Succeeded || result.Record == null)
+    {
+        return Results.BadRequest(result);
+    }
+
+    result = signer.Sign(result, "hosted_storage_backup_manifest");
+    store.SaveRecord(result.RecordId, result.Record!, result.RecordSha256);
+    return Results.Json(result);
+});
+
+app.MapPost("/ops/incidents", (HttpRequest httpRequest, PassportHostedIncidentReportRequest request) =>
+{
+    var operatorAuthorization = AuthorizeOperator(httpRequest, operatorGate);
+    if (operatorAuthorization != null)
+    {
+        return operatorAuthorization;
+    }
+
+    var rateLimit = AuthorizeRate(httpRequest, rateLimiter, "operator-incident-report", maxRequests: 30, window: TimeSpan.FromMinutes(1));
+    if (rateLimit != null)
+    {
+        return rateLimit;
+    }
+
+    var hydratedRequest = request with
+    {
+        IncidentResponseRunbookUri = Coalesce(request.IncidentResponseRunbookUri, Environment.GetEnvironmentVariable("ARCHREALMS_PASSPORT_INCIDENT_RESPONSE_RUNBOOK_URI")),
+        IncidentResponseOwner = Coalesce(request.IncidentResponseOwner, Environment.GetEnvironmentVariable("ARCHREALMS_PASSPORT_INCIDENT_RESPONSE_OWNER")),
+        TelemetryRetentionPolicyUri = Coalesce(request.TelemetryRetentionPolicyUri, Environment.GetEnvironmentVariable("ARCHREALMS_PASSPORT_TELEMETRY_RETENTION_POLICY_URI"))
+    };
+    var result = PassportHostedPolicy.CreateIncidentReportRecord(hydratedRequest);
+    if (!result.Succeeded || result.Record == null)
+    {
+        return Results.BadRequest(result);
+    }
+
+    result = signer.Sign(result, "hosted_incident_report");
+    store.SaveRecord(result.RecordId, result.Record!, result.RecordSha256);
+    return Results.Json(result);
+});
+
 app.Run();
 
 static IResult? AuthorizeOperator(HttpRequest request, PassportHostedOperatorGate operatorGate)
@@ -250,6 +314,11 @@ static IResult? AuthorizeRate(
         window_seconds = Math.Ceiling(result.Window.TotalSeconds),
         retry_after_seconds = Math.Ceiling(result.RetryAfter.TotalSeconds)
     }, statusCode: StatusCodes.Status429TooManyRequests);
+}
+
+static string Coalesce(string value, string? fallback)
+{
+    return !string.IsNullOrWhiteSpace(value) ? value : fallback?.Trim() ?? string.Empty;
 }
 
 public partial class Program

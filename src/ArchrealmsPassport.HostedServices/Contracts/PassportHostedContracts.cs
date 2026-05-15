@@ -309,6 +309,90 @@ public sealed record PassportHostedTelemetryEntry
     public string HostedRecordSha256 { get; init; } = string.Empty;
 }
 
+public sealed record PassportHostedBackupManifestRequest
+{
+    [JsonPropertyName("release_lane")]
+    public string ReleaseLane { get; init; } = string.Empty;
+
+    [JsonPropertyName("ledger_namespace")]
+    public string LedgerNamespace { get; init; } = string.Empty;
+
+    [JsonPropertyName("policy_version")]
+    public string PolicyVersion { get; init; } = string.Empty;
+
+    [JsonPropertyName("storage_provider")]
+    public string StorageProvider { get; init; } = string.Empty;
+
+    [JsonPropertyName("backup_policy_uri")]
+    public string BackupPolicyUri { get; init; } = string.Empty;
+
+    [JsonPropertyName("restore_runbook_uri")]
+    public string RestoreRunbookUri { get; init; } = string.Empty;
+
+    [JsonPropertyName("backup_snapshot_id")]
+    public string BackupSnapshotId { get; init; } = string.Empty;
+}
+
+public sealed record PassportHostedBackupManifestEntry
+{
+    [JsonPropertyName("relative_path")]
+    public string RelativePath { get; init; } = string.Empty;
+
+    [JsonPropertyName("sha256")]
+    public string Sha256 { get; init; } = string.Empty;
+
+    [JsonPropertyName("byte_count")]
+    public long ByteCount { get; init; }
+}
+
+public sealed record PassportHostedIncidentReportRequest
+{
+    [JsonPropertyName("release_lane")]
+    public string ReleaseLane { get; init; } = string.Empty;
+
+    [JsonPropertyName("ledger_namespace")]
+    public string LedgerNamespace { get; init; } = string.Empty;
+
+    [JsonPropertyName("policy_version")]
+    public string PolicyVersion { get; init; } = string.Empty;
+
+    [JsonPropertyName("incident_id")]
+    public string IncidentId { get; init; } = string.Empty;
+
+    [JsonPropertyName("severity")]
+    public string Severity { get; init; } = string.Empty;
+
+    [JsonPropertyName("incident_type")]
+    public string IncidentType { get; init; } = string.Empty;
+
+    [JsonPropertyName("summary")]
+    public string Summary { get; init; } = string.Empty;
+
+    [JsonPropertyName("detected_utc")]
+    public string DetectedUtc { get; init; } = string.Empty;
+
+    [JsonPropertyName("incident_response_runbook_uri")]
+    public string IncidentResponseRunbookUri { get; init; } = string.Empty;
+
+    [JsonPropertyName("incident_response_owner")]
+    public string IncidentResponseOwner { get; init; } = string.Empty;
+
+    [JsonPropertyName("telemetry_retention_policy_uri")]
+    public string TelemetryRetentionPolicyUri { get; init; } = string.Empty;
+
+    [JsonPropertyName("related_record_sha256")]
+    public string[] RelatedRecordSha256 { get; init; } = Array.Empty<string>();
+
+    [JsonPropertyName("contains_personal_data")]
+    public bool ContainsPersonalData { get; init; }
+
+    [JsonPropertyName("contains_raw_ai_prompts")]
+    public bool ContainsRawAiPrompts { get; init; }
+
+    [JsonPropertyName("contains_storage_payload_details")]
+    public bool ContainsStoragePayloadDetails { get; init; }
+}
+
 public sealed record PassportTelemetryAccessResponse
 {
     [JsonPropertyName("succeeded")]

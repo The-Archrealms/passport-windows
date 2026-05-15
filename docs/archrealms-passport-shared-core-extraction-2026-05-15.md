@@ -66,7 +66,7 @@
 ## Consumers
 
 - Windows Passport references `ArchrealmsPassport.Core` for AI gateway defaults, record types, monetary asset/event constants, wallet authority scopes, monetary balance semantics, monetary replay/export verification, registry record inspection/filtering, AI authority boundary validation, and secret-material prompt blocking.
-- `ArchrealmsPassport.HostedServices` references the same core package for hosted AI session/chat validation, hosted record-type creation, admin authority record types, and telemetry access record types.
+- `ArchrealmsPassport.HostedServices` references the same core package for hosted AI session/chat validation, hosted record-type creation, admin authority, telemetry access, backup manifest, and incident report record types.
 - `tools/ledger-verifier` now targets platform-neutral `net8.0` and references Core directly instead of the Windows/WPF project.
 
 ## Remaining Extraction
