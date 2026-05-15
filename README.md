@@ -400,7 +400,7 @@ Create a packaged Windows release bundle:
 .\tools\release\Publish-PassportWindows.ps1 -RuntimeIdentifier win-x64
 ```
 
-Release packaging is lane-aware. The default lane is `Staging`, which writes `passport-release-lane.json` into the artifact, uses the `archrealms-passport-staging` ledger namespace, and keeps runtime settings and keys under a staging-specific app data root. Supported lanes are `Dev`, `InternalVerification`, `Staging`, `CanaryMvp`, and `ProductionMvp`.
+Release packaging is lane-aware. The default lane is `Staging`, which writes `passport-release-lane.json` into the artifact, uses the `archrealms-passport-staging` ledger namespace, and keeps runtime settings and keys under a staging-specific app data root. Supported lanes are `Dev`, `InternalVerification`, `Staging`, `CanaryMvp`, and `ProductionMvp`. If `-OutputRoot` is not supplied, zip artifacts are written under a lane-specific root such as `artifacts/release/staging-lane` so later builds for another lane cannot overwrite the active manifest.
 
 ```powershell
 .\tools\release\Publish-PassportWindows.ps1 `
@@ -420,16 +420,16 @@ If `-IpfsCliPath` and `ARCHREALMS_IPFS_CLI` are not set, the release script down
 
 That produces:
 
-- a published application directory under `artifacts/release/passport-windows-win-x64/publish`
-- a lane-specific zipped bundle, such as `artifacts/release/passport-windows-win-x64/passport-windows-win-x64-staging.zip`
-- a release manifest with file hashes under `artifacts/release/passport-windows-win-x64/release-manifest.json`
-- a runtime lane manifest under `artifacts/release/passport-windows-win-x64/publish/passport-release-lane.json`
+- a published application directory under `artifacts/release/staging-lane/passport-windows-win-x64/publish`
+- a lane-specific zipped bundle, such as `artifacts/release/staging-lane/passport-windows-win-x64/passport-windows-win-x64-staging.zip`
+- a release manifest with file hashes under `artifacts/release/staging-lane/passport-windows-win-x64/release-manifest.json`
+- a runtime lane manifest under `artifacts/release/staging-lane/passport-windows-win-x64/publish/passport-release-lane.json`
 
 Validate the zip artifact before handing it to testers:
 
 ```powershell
 .\tools\release\Test-PassportWindowsReleaseArtifact.ps1 `
-  -ManifestPath .\artifacts\release\passport-windows-win-x64\release-manifest.json `
+  -ManifestPath .\artifacts\release\staging-lane\passport-windows-win-x64\release-manifest.json `
   -RequireBundledIpfs
 ```
 
@@ -437,8 +437,8 @@ Validate the installed artifact behavior before handoff:
 
 ```powershell
 .\tools\release\Invoke-PassportWindowsInstalledArtifactValidation.ps1 `
-  -ManifestPath .\artifacts\release\passport-windows-win-x64\release-manifest.json `
-  -OutputPath .\artifacts\release\passport-windows-win-x64\installed-validation-report.json
+  -ManifestPath .\artifacts\release\staging-lane\passport-windows-win-x64\release-manifest.json `
+  -OutputPath .\artifacts\release\staging-lane\passport-windows-win-x64\installed-validation-report.json
 ```
 
 Create a sideload `MSIX` installer package:

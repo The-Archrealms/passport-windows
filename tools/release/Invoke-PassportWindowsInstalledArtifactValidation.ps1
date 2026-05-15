@@ -119,6 +119,11 @@ function Resolve-PackagedArtifactRoot {
 
     if (-not $ManifestPath) {
         $candidates = @(
+            "artifacts\release\staging-lane\passport-windows-win-x64\release-manifest.json",
+            "artifacts\release\internal-verification-lane\passport-windows-win-x64\release-manifest.json",
+            "artifacts\release\canary-mvp-lane\passport-windows-win-x64\release-manifest.json",
+            "artifacts\release\dev-lane\passport-windows-win-x64\release-manifest.json",
+            "artifacts\release\production-mvp-lane\passport-windows-win-x64\release-manifest.json",
             "artifacts\release\passport-windows-win-x64\release-manifest.json",
             "artifacts\release-validation\passport-windows-win-x64\release-manifest.json",
             "artifacts\release\passport-windows-msix-sideload\x64\msix-package-manifest.json",

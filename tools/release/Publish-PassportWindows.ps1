@@ -83,13 +83,14 @@ else {
 }
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+$laneSlug = Get-PassportWindowsReleaseLaneSlug -Lane $Lane
+$outputRootSupplied = -not [string]::IsNullOrWhiteSpace($OutputRoot)
 if (-not $OutputRoot) {
-    $OutputRoot = Join-Path $repoRoot "artifacts\release"
+    $OutputRoot = Join-Path $repoRoot ("artifacts\release\" + $laneSlug + "-lane")
 }
 $OutputRoot = [System.IO.Path]::GetFullPath($OutputRoot)
 
 $appProject = Join-Path $repoRoot "src\ArchrealmsPassport.Windows\ArchrealmsPassport.Windows.csproj"
-$laneSlug = Get-PassportWindowsReleaseLaneSlug -Lane $Lane
 $publishRoot = Join-Path $OutputRoot ("passport-windows-" + $RuntimeIdentifier)
 $publishDir = Join-Path $publishRoot "publish"
 $zipPath = Join-Path $publishRoot ("passport-windows-" + $RuntimeIdentifier + "-" + $laneSlug + ".zip")
@@ -176,6 +177,9 @@ $manifest = [pscustomobject]@{
     version = $Version
     package_version = $packageVersion
     git_commit = $gitCommit
+    output_root = $OutputRoot
+    output_root_supplied = $outputRootSupplied
+    default_output_root_is_lane_scoped = (-not $outputRootSupplied)
     publish_dir = $publishDir
     zip_path = $zipPath
     ipfs_runtime_bootstrap_skipped = $SkipIpfsRuntimeBootstrap.IsPresent

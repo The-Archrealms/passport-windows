@@ -136,6 +136,7 @@ function Get-ManifestLane {
 
 function Find-InternalVerificationManifestPaths {
     $candidates = @(
+        "artifacts\release\internal-verification-lane\passport-windows-win-x64\release-manifest.json",
         "artifacts\release\passport-windows-win-x64\release-manifest.json",
         "artifacts\release\passport-windows-msix-sideload\x64\msix-package-manifest.json",
         "artifacts\release\passport-windows-msix-store\x64\msix-package-manifest.json",
