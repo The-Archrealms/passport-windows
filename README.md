@@ -604,6 +604,14 @@ Generate a redacted release-evidence packet for product, engineering, security/p
 
 The evidence packet copies the current reports, records SHA-256 hashes, redacts environment values, lists remaining readiness gates, and writes `release-evidence.manifest.json` plus `release-evidence-summary.md`. It is review evidence only; citizen-facing production testing still requires `Test-PassportProductionMvpReadiness.ps1` to return `ready=true`.
 
+Validate the evidence-packet generator and redaction behavior with synthetic fixtures:
+
+```powershell
+.\tools\release\Test-PassportProductionMvpReleaseEvidencePacket.ps1 `
+  -UseSyntheticFixtures `
+  -OutputPath .\artifacts\release\production-mvp-release-evidence-packet-validation-report.json
+```
+
 Validate the package-signing provisioning packet before loading production signing secrets:
 
 ```powershell
