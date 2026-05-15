@@ -8,10 +8,13 @@ param(
 
     [string]$PreMvpReportPath = "artifacts\release\pre-mvp-internal-verification-report.json",
 
-    [switch]$GenerateOperatorKey
+    [switch]$GenerateOperatorKey,
+
+    [switch]$BlankUnconfiguredValues
 )
 
 $ErrorActionPreference = "Stop"
+$script:materializedVariableNames = @{}
 
 function New-Variable {
     param(
@@ -73,6 +76,25 @@ function Set-VariableExample {
     }
 
     $variable.example = $Example
+    $script:materializedVariableNames[$Name] = $true
+}
+
+function Get-TemplateValue {
+    param([object]$Variable)
+
+    if ($BlankUnconfiguredValues -and -not $script:materializedVariableNames.ContainsKey($Variable.name)) {
+        return ""
+    }
+
+    if ($Variable.example) {
+        return $Variable.example
+    }
+
+    if ($BlankUnconfiguredValues) {
+        return ""
+    }
+
+    return "<set value>"
 }
 
 $variables = @(
@@ -183,7 +205,7 @@ function Convert-ToPowerShellTemplate {
             $lines += "# secret: true"
         }
 
-        $value = if ($variable.example) { $variable.example } else { "<set value>" }
+        $value = Get-TemplateValue -Variable $variable
         $lines += '$env:' + $variable.name + ' = "' + $value.Replace('"', '\"') + '"'
         $lines += ""
     }
@@ -212,7 +234,7 @@ function Convert-ToEnvTemplate {
             $lines += "# secret: true"
         }
 
-        $value = if ($variable.example) { $variable.example } else { "<set value>" }
+        $value = Get-TemplateValue -Variable $variable
         $lines += "$($variable.name)=$value"
         $lines += ""
     }
