@@ -337,6 +337,12 @@ public static class PassportHostedPolicy
             return FailedChat("AI chat rejected private key, seed, or recovery-secret material.");
         }
 
+        var quota = ReadQuota(session.Session, session.MessageQuota, session.TokenQuota);
+        if (quota.MessagesUsed >= quota.MessageLimit || quota.TokensUsed >= quota.TokenLimit)
+        {
+            return FailedChat("AI session quota exceeded.");
+        }
+
         var retrievedChunks = knowledgeStore?.Retrieve(request.KnowledgePackId, request.Message, maxChunks: 3) ?? Array.Empty<PassportHostedKnowledgeChunk>();
         var sources = retrievedChunks.Length == 0
             ? request.ClientApprovedContextRefs.Take(3).ToArray()
@@ -362,6 +368,11 @@ public static class PassportHostedPolicy
                 + "Runtime: " + inference.ModelId + ". " + sourceSummary;
         }
 
+        var estimatedTokens = EstimateTokenUse(request.Message, fallbackAnswer);
+        UpdateAiSessionQuota(session.Session, quota, estimatedTokens);
+        sessionStore.SaveAiSession(session.Session);
+
+        var updatedQuota = ReadQuota(session.Session, session.MessageQuota, session.TokenQuota);
         return new PassportAiChatResponse
         {
             Succeeded = true,
@@ -369,7 +380,8 @@ public static class PassportHostedPolicy
                 ? "AI chat response created by hosted open-weight model runtime."
                 : "AI chat response created by hosted gateway contract fallback.",
             AnswerText = fallbackAnswer,
-            QuotaSummary = session.MessageQuota + " messages; " + session.TokenQuota + " tokens.",
+            QuotaSummary = Math.Max(0, updatedQuota.MessageLimit - updatedQuota.MessagesUsed) + " messages remaining; "
+                + Math.Max(0, updatedQuota.TokenLimit - updatedQuota.TokensUsed) + " tokens remaining.",
             Sources = sources
         };
     }
@@ -1533,6 +1545,26 @@ public static class PassportHostedPolicy
         }
 
         return (Math.Max(0, messageLimit), Math.Max(0, messagesUsed), Math.Max(0, tokenLimit), Math.Max(0, tokensUsed));
+    }
+
+    private static void UpdateAiSessionQuota(
+        Dictionary<string, object?> sessionRecord,
+        (int MessageLimit, int MessagesUsed, int TokenLimit, int TokensUsed) quota,
+        int estimatedTokens)
+    {
+        sessionRecord["quota"] = new Dictionary<string, object?>
+        {
+            ["message_limit"] = quota.MessageLimit,
+            ["token_limit"] = quota.TokenLimit,
+            ["messages_used"] = Math.Min(quota.MessageLimit, quota.MessagesUsed + 1),
+            ["tokens_used"] = Math.Min(quota.TokenLimit, quota.TokensUsed + Math.Max(1, estimatedTokens))
+        };
+    }
+
+    private static int EstimateTokenUse(string prompt, string answer)
+    {
+        var characterCount = (prompt?.Length ?? 0) + (answer?.Length ?? 0);
+        return Math.Max(1, (int)Math.Ceiling(characterCount / 4.0));
     }
 
     private static int ReadInt32(JsonElement root, string propertyName, int fallback)

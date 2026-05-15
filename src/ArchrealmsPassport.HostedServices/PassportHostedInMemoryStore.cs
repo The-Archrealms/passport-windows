@@ -63,13 +63,13 @@ public sealed class PassportHostedInMemoryStore : IPassportHostedStore
 
 public interface IPassportHostedSessionStore
 {
+    void SaveAiSession(Dictionary<string, object?> sessionRecord);
+
     bool TryGetAiSession(string sessionId, out PassportAiSessionAuthorizationResponse session);
 }
 
 public interface IPassportHostedStore : IPassportHostedSessionStore
 {
-    void SaveAiSession(Dictionary<string, object?> sessionRecord);
-
     void SaveRecord(string recordId, Dictionary<string, object?> record, string recordSha256);
 
     bool TryGetRecord(string recordId, out StoredHostedRecord record);

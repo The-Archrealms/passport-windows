@@ -135,6 +135,39 @@ public sealed class PassportHostedPolicyTests
         Assert.True(answer.Succeeded, answer.Message);
         Assert.Contains("cannot approve recovery", answer.AnswerText, StringComparison.OrdinalIgnoreCase);
         Assert.Single(answer.Sources);
+
+        var quota = PassportHostedPolicy.CreateAiQuotaResponse(session.SessionId, session.SessionToken, store);
+        Assert.True(quota.Succeeded, quota.Message);
+        Assert.Equal(24, quota.MessagesRemaining);
+        Assert.True(quota.TokensUsed > 0);
+    }
+
+    [Fact]
+    public void ChatConsumesAndEnforcesSessionQuota()
+    {
+        using var rsa = RSA.Create(2048);
+        var session = PassportHostedPolicy.AuthorizeAiSession(CreateAiSessionRequest(rsa) with
+        {
+            MessageQuota = 1,
+            TokenQuota = 10000
+        });
+        Assert.True(session.Succeeded, session.Message);
+
+        var store = new PassportHostedInMemoryStore();
+        store.SaveAiSession(session.Session!);
+
+        var first = PassportHostedPolicy.CreateAiChatResponse(
+            new PassportAiChatRequest { SessionId = session.SessionId, Message = "hello" },
+            session.SessionToken,
+            store);
+        Assert.True(first.Succeeded, first.Message);
+
+        var second = PassportHostedPolicy.CreateAiChatResponse(
+            new PassportAiChatRequest { SessionId = session.SessionId, Message = "again" },
+            session.SessionToken,
+            store);
+        Assert.False(second.Succeeded);
+        Assert.Contains("quota", second.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
