@@ -813,6 +813,17 @@ Validate the completion audit schema and checklist coverage:
 
 The validator checks the generated JSON/Markdown reports, required source evidence files, status counts, checklist IDs, evidence references, and `completion_ready` consistency. Add `-RequireComplete` only for the final production-testing approval path.
 
+To validate the positive completion contract without replacing real production evidence, run the generated fixture path:
+
+```powershell
+.\tools\release\Test-PassportTokenReadyMvpCompletionAuditReport.ps1 `
+  -UseGeneratedFixture `
+  -Generate `
+  -RequireComplete
+```
+
+This writes fixture-only reports under `artifacts\release\token-ready-mvp-completion-audit-fixture\` and proves `-RequireComplete` passes only when every PRD success criterion and ARD release gate has complete source evidence.
+
 Validate the package-signing provisioning packet before loading production signing secrets:
 
 ```powershell

@@ -1,7 +1,14 @@
 param(
+    [string]$PreMvpInternalVerificationReportPath = "artifacts\release\pre-mvp-internal-verification-report.json",
+    [string]$StagingReadinessReportPath = "artifacts\release\staging-readiness-report.json",
+    [string]$CanaryMvpReadinessReportPath = "artifacts\release\canary-mvp-readiness-report.json",
+    [string]$ProductionMvpReadinessReportPath = "artifacts\release\production-mvp-readiness-report.json",
+    [string]$ProductionMvpCloseoutManifestPath = "artifacts\release\production-mvp-closeout\production-mvp-closeout.manifest.json",
+    [string]$ProductionMvpOutstandingWorkReportPath = "artifacts\release\production-mvp-outstanding-work-report.json",
     [string]$ReportPath = "artifacts\release\token-ready-mvp-completion-audit-report.json",
     [string]$MarkdownPath = "artifacts\release\token-ready-mvp-completion-audit-report.md",
     [string]$OutputPath = "artifacts\release\token-ready-mvp-completion-audit-validation-report.json",
+    [switch]$UseGeneratedFixture,
     [switch]$Generate,
     [switch]$RequireComplete,
     [switch]$NoFail
@@ -45,6 +52,188 @@ function Read-JsonFile {
     return Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
 }
 
+function Write-JsonFile {
+    param(
+        [string]$Path,
+        [object]$Value
+    )
+
+    $parent = Split-Path -Parent $Path
+    if ($parent) {
+        New-Item -ItemType Directory -Force -Path $parent | Out-Null
+    }
+
+    Set-Content -LiteralPath $Path -Value ($Value | ConvertTo-Json -Depth 12) -Encoding UTF8
+}
+
+function New-FixtureCheck {
+    param([string]$Id)
+
+    return [pscustomobject][ordered]@{
+        id = $Id
+        description = "Generated complete-state fixture check: $Id"
+        passed = $true
+        failures = @()
+        evidence = [pscustomobject][ordered]@{
+            fixture = $true
+        }
+    }
+}
+
+function New-FixtureRequirement {
+    param(
+        [string]$Id,
+        [string[]]$CheckIds
+    )
+
+    return [pscustomobject][ordered]@{
+        id = $Id
+        description = "Generated complete-state fixture requirement: $Id"
+        check_ids = @($CheckIds)
+        passed = $true
+        missing_checks = @()
+        evidence = "Generated completion-audit fixture evidence."
+    }
+}
+
+function New-FixtureGate {
+    param([string]$Id)
+
+    return [pscustomobject][ordered]@{
+        id = $Id
+        description = "Generated complete-state fixture readiness gate: $Id"
+        passed = $true
+        missing = @()
+        evidence = [pscustomobject][ordered]@{
+            fixture = $true
+        }
+    }
+}
+
+function New-CompletionAuditFixture {
+    $fixtureRoot = Resolve-RepoPath -Path "artifacts\release\token-ready-mvp-completion-audit-fixture"
+    New-Item -ItemType Directory -Force -Path $fixtureRoot | Out-Null
+    $createdUtc = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
+
+    $preMvpPath = Join-Path $fixtureRoot "pre-mvp-internal-verification-report.json"
+    $stagingPath = Join-Path $fixtureRoot "staging-readiness-report.json"
+    $canaryPath = Join-Path $fixtureRoot "canary-mvp-readiness-report.json"
+    $productionReadinessPath = Join-Path $fixtureRoot "production-mvp-readiness-report.json"
+    $closeoutPath = Join-Path $fixtureRoot "production-mvp-closeout.manifest.json"
+    $outstandingPath = Join-Path $fixtureRoot "production-mvp-outstanding-work-report.json"
+    $reportPath = Join-Path $fixtureRoot "token-ready-mvp-completion-audit-report.json"
+    $markdownPath = Join-Path $fixtureRoot "token-ready-mvp-completion-audit-report.md"
+    $validationPath = Join-Path $fixtureRoot "token-ready-mvp-completion-audit-validation-report.json"
+
+    $preMvpCheckIds = @(
+        "core_tests",
+        "windows_tests",
+        "hosted_service_tests",
+        "ledger_verifier_build",
+        "production_monetary_provisioning_validation",
+        "open_weight_ai_runtime_deployment_validation"
+    )
+    $preMvpRequirements = @(
+        New-FixtureRequirement -Id "passport_core_contracts" -CheckIds @("core_tests")
+        New-FixtureRequirement -Id "passport_windows_user_flows" -CheckIds @("windows_tests")
+        New-FixtureRequirement -Id "hosted_ai_service_contracts" -CheckIds @("hosted_service_tests")
+        New-FixtureRequirement -Id "ledger_export_verifier" -CheckIds @("ledger_verifier_build")
+        New-FixtureRequirement -Id "production_monetary_provisioning_package" -CheckIds @("production_monetary_provisioning_validation")
+        New-FixtureRequirement -Id "open_weight_ai_runtime_deployment_package" -CheckIds @("open_weight_ai_runtime_deployment_validation")
+    )
+    Write-JsonFile -Path $preMvpPath -Value ([pscustomobject][ordered]@{
+        schema = "archrealms.passport.pre_mvp_internal_verification.v1"
+        created_utc = $createdUtc
+        passed = $true
+        fake_balance_migration_blocked = $true
+        check_count = $preMvpCheckIds.Count
+        checks = @($preMvpCheckIds | ForEach-Object { New-FixtureCheck -Id $_ })
+        requirement_count = $preMvpRequirements.Count
+        requirements = $preMvpRequirements
+    })
+
+    Write-JsonFile -Path $stagingPath -Value ([pscustomobject][ordered]@{
+        schema = "archrealms.passport.staging_readiness.v1"
+        created_utc = $createdUtc
+        ready = $true
+        synthetic_fixtures_used = $false
+        canary_or_production_release_approved = $true
+        failed_gate_count = 0
+        gates = @(New-FixtureGate -Id "staging_readiness")
+    })
+
+    Write-JsonFile -Path $canaryPath -Value ([pscustomobject][ordered]@{
+        schema = "archrealms.passport.canary_mvp_readiness.v1"
+        created_utc = $createdUtc
+        ready = $true
+        synthetic_fixtures_used = $false
+        production_release_approved = $true
+        failed_gate_count = 0
+        gates = @(New-FixtureGate -Id "canary_mvp_readiness")
+    })
+
+    $productionGateIds = @(
+        "pre_mvp_internal_verification",
+        "staging_readiness",
+        "canary_mvp_readiness",
+        "package_signing",
+        "release_lane_endpoints",
+        "hosted_runtime_status",
+        "hosted_ai_runtime_probe",
+        "hosted_operator_gate",
+        "hosted_operator_status",
+        "managed_storage_backups",
+        "managed_storage_status",
+        "managed_signing_key_custody",
+        "managed_signing_endpoint_probe",
+        "issuer_capacity_genesis_secrets",
+        "open_weight_ai_runtime",
+        "telemetry_incident_response",
+        "production_release_approvals"
+    )
+    Write-JsonFile -Path $productionReadinessPath -Value ([pscustomobject][ordered]@{
+        schema = "archrealms.passport.production_mvp_readiness.v1"
+        created_utc = $createdUtc
+        ready = $true
+        failed_gate_count = 0
+        gates = @($productionGateIds | ForEach-Object { New-FixtureGate -Id $_ })
+    })
+
+    Write-JsonFile -Path $closeoutPath -Value ([pscustomobject][ordered]@{
+        schema = "archrealms.passport.production_mvp_closeout.v1"
+        created_utc = $createdUtc
+        passed = $true
+        failures = @()
+    })
+
+    Write-JsonFile -Path $outstandingPath -Value ([pscustomobject][ordered]@{
+        schema = "archrealms.passport.production_mvp_outstanding_work.v1"
+        created_utc = $createdUtc
+        ready_for_production_testing = $true
+        failed_readiness_gates = @()
+        failed_provisioning_checks = @()
+        failed_release_evidence_checks = @()
+        summary = [pscustomobject][ordered]@{
+            failed_readiness_gate_count = 0
+            failed_provisioning_check_count = 0
+            failed_release_evidence_check_count = 0
+            failed_closeout_count = 0
+        }
+    })
+
+    return [pscustomobject][ordered]@{
+        pre_mvp_internal_verification = $preMvpPath
+        staging_readiness = $stagingPath
+        canary_mvp_readiness = $canaryPath
+        production_mvp_readiness = $productionReadinessPath
+        production_mvp_closeout = $closeoutPath
+        production_mvp_outstanding_work = $outstandingPath
+        completion_audit_report = $reportPath
+        completion_audit_markdown = $markdownPath
+        completion_audit_validation = $validationPath
+    }
+}
+
 function Format-CommandArgument {
     param([string]$Argument)
 
@@ -61,6 +250,12 @@ function Format-CommandArgument {
 
 function Invoke-CompletionAuditGenerator {
     param(
+        [string]$PreMvpInternalVerificationPath,
+        [string]$StagingReadinessPath,
+        [string]$CanaryMvpReadinessPath,
+        [string]$ProductionMvpReadinessPath,
+        [string]$ProductionMvpCloseoutPath,
+        [string]$ProductionMvpOutstandingWorkPath,
         [string]$JsonPath,
         [string]$MarkdownOutputPath
     )
@@ -73,6 +268,18 @@ function Invoke-CompletionAuditGenerator {
         "Bypass",
         "-File",
         $generator,
+        "-PreMvpInternalVerificationReportPath",
+        $PreMvpInternalVerificationPath,
+        "-StagingReadinessReportPath",
+        $StagingReadinessPath,
+        "-CanaryMvpReadinessReportPath",
+        $CanaryMvpReadinessPath,
+        "-ProductionMvpReadinessReportPath",
+        $ProductionMvpReadinessPath,
+        "-ProductionMvpCloseoutManifestPath",
+        $ProductionMvpCloseoutPath,
+        "-ProductionMvpOutstandingWorkReportPath",
+        $ProductionMvpOutstandingWorkPath,
         "-OutputPath",
         $JsonPath,
         "-MarkdownOutputPath",
@@ -180,14 +387,41 @@ function Get-SourceFile {
     return $Report.source_files.$Id
 }
 
+$resolvedPreMvpInternalVerificationReportPath = Resolve-RepoPath -Path $PreMvpInternalVerificationReportPath
+$resolvedStagingReadinessReportPath = Resolve-RepoPath -Path $StagingReadinessReportPath
+$resolvedCanaryMvpReadinessReportPath = Resolve-RepoPath -Path $CanaryMvpReadinessReportPath
+$resolvedProductionMvpReadinessReportPath = Resolve-RepoPath -Path $ProductionMvpReadinessReportPath
+$resolvedProductionMvpCloseoutManifestPath = Resolve-RepoPath -Path $ProductionMvpCloseoutManifestPath
+$resolvedProductionMvpOutstandingWorkReportPath = Resolve-RepoPath -Path $ProductionMvpOutstandingWorkReportPath
 $resolvedReportPath = Resolve-RepoPath -Path $ReportPath
 $resolvedMarkdownPath = Resolve-RepoPath -Path $MarkdownPath
 $resolvedOutputPath = Resolve-RepoPath -Path $OutputPath
 
+if ($UseGeneratedFixture) {
+    $fixture = New-CompletionAuditFixture
+    $resolvedPreMvpInternalVerificationReportPath = $fixture.pre_mvp_internal_verification
+    $resolvedStagingReadinessReportPath = $fixture.staging_readiness
+    $resolvedCanaryMvpReadinessReportPath = $fixture.canary_mvp_readiness
+    $resolvedProductionMvpReadinessReportPath = $fixture.production_mvp_readiness
+    $resolvedProductionMvpCloseoutManifestPath = $fixture.production_mvp_closeout
+    $resolvedProductionMvpOutstandingWorkReportPath = $fixture.production_mvp_outstanding_work
+    $resolvedReportPath = $fixture.completion_audit_report
+    $resolvedMarkdownPath = $fixture.completion_audit_markdown
+    $resolvedOutputPath = $fixture.completion_audit_validation
+}
+
 $checks = @()
 $generatorResult = $null
 if ($Generate) {
-    $generatorResult = Invoke-CompletionAuditGenerator -JsonPath $resolvedReportPath -MarkdownOutputPath $resolvedMarkdownPath
+    $generatorResult = Invoke-CompletionAuditGenerator `
+        -PreMvpInternalVerificationPath $resolvedPreMvpInternalVerificationReportPath `
+        -StagingReadinessPath $resolvedStagingReadinessReportPath `
+        -CanaryMvpReadinessPath $resolvedCanaryMvpReadinessReportPath `
+        -ProductionMvpReadinessPath $resolvedProductionMvpReadinessReportPath `
+        -ProductionMvpCloseoutPath $resolvedProductionMvpCloseoutManifestPath `
+        -ProductionMvpOutstandingWorkPath $resolvedProductionMvpOutstandingWorkReportPath `
+        -JsonPath $resolvedReportPath `
+        -MarkdownOutputPath $resolvedMarkdownPath
     $checks += Add-Check -Id "generator_exit_code" -Condition ($generatorResult.exit_code -eq 0) -Failure "completion audit generator failed" -Evidence $generatorResult
 }
 

@@ -143,11 +143,12 @@ function Get-OutstandingGateFailures {
         return @()
     }
 
-    $gate = @($OutstandingReport.failed_readiness_gates | Where-Object { [string]$_.id -eq $Id } | Select-Object -First 1)
-    if ($null -eq $gate) {
+    $gateMatches = @($OutstandingReport.failed_readiness_gates | Where-Object { [string]$_.id -eq $Id } | Select-Object -First 1)
+    if ($gateMatches.Count -eq 0) {
         return @()
     }
 
+    $gate = $gateMatches[0]
     return @($gate.missing | ForEach-Object { ConvertTo-AuditText -Value $_ })
 }
 
