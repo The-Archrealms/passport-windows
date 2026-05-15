@@ -22,6 +22,17 @@ app.MapGet("/health", () => Results.Json(new
 
 app.MapGet("/ai/runtime/status", () => Results.Json(PassportHostedAiRuntimeReadiness.FromEnvironment()));
 
+app.MapGet("/ai/status", (HttpRequest httpRequest) =>
+{
+    var rateLimit = AuthorizeRate(httpRequest, rateLimiter, "ai-status", maxRequests: 120, window: TimeSpan.FromMinutes(1));
+    if (rateLimit != null)
+    {
+        return rateLimit;
+    }
+
+    return Results.Json(PassportHostedPolicy.CreateAiGatewayStatus(PassportHostedAiRuntimeReadiness.FromEnvironment()));
+});
+
 app.MapGet("/ai/runtime/probe", async (HttpRequest httpRequest, CancellationToken cancellationToken) =>
 {
     var operatorAuthorization = AuthorizeOperator(httpRequest, operatorGate);
@@ -82,6 +93,36 @@ app.MapGet("/ops/storage/status", (HttpRequest httpRequest) =>
     return Results.Json(PassportHostedStorageReadiness.FromFileStore(store));
 });
 
+app.MapPost("/ai/challenge", (HttpRequest httpRequest, PassportAiChallengeRequest request) =>
+{
+    var rateLimit = AuthorizeRate(httpRequest, rateLimiter, "ai-challenge", maxRequests: 60, window: TimeSpan.FromMinutes(1));
+    if (rateLimit != null)
+    {
+        return rateLimit;
+    }
+
+    var result = PassportHostedPolicy.CreateAiChallenge(request);
+    if (!result.Succeeded || result.ChallengeRecord == null)
+    {
+        return Results.BadRequest(result);
+    }
+
+    var signed = signer.Sign(new PassportHostedRecordResponse
+    {
+        Succeeded = true,
+        Message = result.Message,
+        RecordId = result.ChallengeId,
+        RecordSha256 = result.ChallengeRecordSha256,
+        Record = result.ChallengeRecord
+    }, "ai_challenge");
+    store.SaveRecord(signed.RecordId, signed.Record!, signed.RecordSha256);
+    return Results.Json(result with
+    {
+        ChallengeRecord = signed.Record,
+        ChallengeRecordSha256 = signed.RecordSha256
+    });
+});
+
 app.MapPost("/ai/session", (HttpRequest httpRequest, PassportAiSessionAuthorizationRequest request) =>
 {
     var rateLimit = AuthorizeRate(httpRequest, rateLimiter, "ai-session", maxRequests: 30, window: TimeSpan.FromMinutes(1));
@@ -98,6 +139,19 @@ app.MapPost("/ai/session", (HttpRequest httpRequest, PassportAiSessionAuthorizat
 
     store.SaveAiSession(result.Session);
     return Results.Json(result);
+});
+
+app.MapGet("/ai/quota", (HttpRequest httpRequest) =>
+{
+    var rateLimit = AuthorizeRate(httpRequest, rateLimiter, "ai-quota", maxRequests: 120, window: TimeSpan.FromMinutes(1));
+    if (rateLimit != null)
+    {
+        return rateLimit;
+    }
+
+    var bearerToken = PassportHostedPolicy.ReadBearerToken(httpRequest.Headers.Authorization.ToString());
+    var result = PassportHostedPolicy.CreateAiQuotaResponse(httpRequest.Query["session_id"].ToString(), bearerToken, store);
+    return result.Succeeded ? Results.Json(result) : Results.BadRequest(result);
 });
 
 app.MapPost("/ai/chat", async (HttpRequest httpRequest, PassportAiChatRequest request, CancellationToken cancellationToken) =>
@@ -117,6 +171,26 @@ app.MapPost("/ai/chat", async (HttpRequest httpRequest, PassportAiChatRequest re
         aiInferenceGateway,
         cancellationToken);
     return result.Succeeded ? Results.Json(result) : Results.BadRequest(result);
+});
+
+app.MapPost("/ai/feedback", (HttpRequest httpRequest, PassportAiFeedbackRequest request) =>
+{
+    var rateLimit = AuthorizeRate(httpRequest, rateLimiter, "ai-feedback:" + request.SessionId, maxRequests: 60, window: TimeSpan.FromMinutes(1));
+    if (rateLimit != null)
+    {
+        return rateLimit;
+    }
+
+    var bearerToken = PassportHostedPolicy.ReadBearerToken(httpRequest.Headers.Authorization.ToString());
+    var result = PassportHostedPolicy.CreateAiFeedbackRecord(request, bearerToken, store);
+    if (!result.Succeeded || result.Record == null)
+    {
+        return Results.BadRequest(result);
+    }
+
+    result = signer.Sign(result, "ai_feedback");
+    store.SaveRecord(result.RecordId, result.Record!, result.RecordSha256);
+    return Results.Json(result);
 });
 
 app.MapPost("/capacity/reports/cc", (HttpRequest httpRequest, PassportCcCapacityReportRequest request) =>

@@ -13,13 +13,17 @@ The hosted services project provides the production-facing API boundary that Win
 | Endpoint | Purpose | Current implementation |
 |---|---|---|
 | `GET /health` | Liveness and contract version | Returns `passport-hosted-services-v1` |
+| `GET /ai/status` | User-facing AI gateway status | Returns healthy/degraded state, endpoint names, runtime readiness flag, model ID, and non-authority boundaries without exposing secrets |
 | `GET /ai/runtime/status` | Non-secret hosted open-weight AI readiness | Reports whether inference URL, approved model ID, model artifact hash, license approval, vector store, and knowledge approval root are configured |
 | `GET /ai/runtime/probe` | Non-mutating hosted AI inference probe | Requires `X-Archrealms-Operator-Key`, sends a readiness prompt through the configured runtime, and verifies a non-empty answer |
 | `GET /ops/runtime/status` | Non-secret hosted operations readiness | Reports managed data root, storage/backup/restore policy, managed signing-key custody, telemetry, and incident-response configuration without exposing secrets |
 | `GET /ops/operator/status` | Non-mutating operator authentication probe | Requires `X-Archrealms-Operator-Key` and returns authorization status for production readiness checks |
 | `GET /ops/storage/status` | Non-mutating managed-storage readiness probe | Requires `X-Archrealms-Operator-Key`, verifies hosted data-root write/delete probes and backup-manifest enumeration |
+| `POST /ai/challenge` | Create a Passport-signable AI challenge | Issues a short-lived nonce, gateway audience, requested scopes, and non-authority boundaries; saves a signed hosted challenge record |
 | `POST /ai/session` | Authorize a Passport-signed AI session request | Verifies request hash, device signature evidence, token/key separation, expiry, and non-authority boundaries |
+| `GET /ai/quota` | Read AI session quota | Requires matching bearer session token and `session_id`; returns message/token limits, usage, remaining quota, and reset time |
 | `POST /ai/chat` | Authenticated AI guide response | Requires matching bearer session token; blocks private key, seed, and recovery-secret prompts; retrieves approved knowledge-pack chunks; calls an OpenAI-compatible open-weight runtime when configured; otherwise returns the deterministic gateway-contract fallback |
+| `POST /ai/feedback` | Capture optional AI feedback | Requires matching bearer session token; stores metadata and feedback hash only; does not mutate ledger, wallet, identity, storage, registry, recovery, or admin state |
 | `POST /capacity/reports/cc` | Create conservative CC capacity reports | Enforces positive conservative capacity, no thin-market issuance, qualified independent volume, reserve exclusion, haircut range, and authority hash evidence |
 | `POST /arch/genesis/manifests` | Create sealed ARCH genesis manifests | Enforces fixed supply, base-unit precision, unique allocation IDs, allocation total equals supply, no post-genesis minting, and authority hash evidence |
 | `POST /admin/authority/validate` | Validate dual-control admin authority evidence | Checks action/scope/hash binding, distinct requester and approver devices, non-AI approval, and requester/approver signature record types |
@@ -38,6 +42,7 @@ The hosted services project provides the production-facing API boundary that Win
 - Hosted records are written with SHA-256 sidecars and append-log entries under `append-log/*.jsonl`.
 - Approved AI knowledge-pack chunks can be stored under `records/ai/knowledge-packs/{knowledge_pack_id}/chunks.jsonl` with source IDs, hashes, approval status, and chunk text.
 - Backup manifests enumerate only managed `records/` and `append-log/` files; they exclude `keys/`, private key material, raw AI prompts, and storage payload details.
+- AI challenge and feedback records are hosted records with append-log entries. Feedback records store a hash of feedback text, not the raw feedback text.
 
 ## Operator And Signing Controls
 
@@ -65,6 +70,7 @@ The hosted services project provides the production-facing API boundary that Win
 - Set `ARCHREALMS_PASSPORT_AI_MODEL_ARTIFACT_SHA256`, `ARCHREALMS_PASSPORT_AI_MODEL_LICENSE_APPROVAL_ID`, `ARCHREALMS_PASSPORT_AI_VECTOR_STORE_PROVIDER`, `ARCHREALMS_PASSPORT_AI_VECTOR_STORE_ID`, and `ARCHREALMS_PASSPORT_AI_KNOWLEDGE_APPROVAL_ROOT` so `/ai/runtime/status` can prove the production AI lane is configured before clients rely on it.
 - Production readiness calls `/ai/runtime/probe` with the operator key to prove the configured hosted AI gateway can obtain a non-mutating answer from the approved model runtime.
 - Passport clients call only the hosted gateway. They do not receive model runtime credentials and do not call vLLM/TGI directly.
+- `/ai/status`, `/ai/challenge`, `/ai/session`, `/ai/quota`, `/ai/chat`, and `/ai/feedback` make up the citizen-facing hosted AI gateway surface. The runtime status/probe endpoints remain release-readiness and operations controls.
 
 ## Release-Lane Configuration
 
@@ -75,7 +81,7 @@ The hosted services project provides the production-facing API boundary that Win
 ## Current Limits
 
 - Production MVP package publishing is guarded by `tools/release/Test-PassportProductionMvpReadiness.ps1`; the MSIX publisher runs it automatically for `-Lane ProductionMvp` unless explicitly skipped.
-- When production API and AI gateway URLs are configured, the readiness gate calls `/ops/runtime/status` and `/ai/runtime/status` and requires both endpoints to return the expected readiness schema with `ready=true`.
+- When production API and AI gateway URLs are configured, the readiness gate calls `/ops/runtime/status`, `/ops/operator/status`, `/ops/storage/status`, `/ai/runtime/status`, and `/ai/runtime/probe` and requires those endpoints to return the expected ready/authorized results.
 - Production deployment still needs managed durable storage provider configuration, backup/restore runbook URIs, managed signing-key custody, telemetry destination/retention configuration, incident-response owner/runbook configuration, and managed release-lane deployment configuration.
 - Production still needs final model endpoint selection, model artifact/license approval, managed vector store deployment, and production knowledge-pack approval workflow.
 - The service does not make fiat, exchange, external wallet, staking, yield, governance, or public stable-value claims.
@@ -83,5 +89,5 @@ The hosted services project provides the production-facing API boundary that Win
 ## Verification
 
 - Hosted service build: `dotnet build .\src\ArchrealmsPassport.HostedServices\ArchrealmsPassport.HostedServices.csproj -c Release`
-- Hosted service tests: `dotnet test .\tests\ArchrealmsPassport.HostedServices.Tests\ArchrealmsPassport.HostedServices.Tests.csproj -c Release`
+- Hosted service tests: `dotnet test .\tests\ArchrealmsPassport.HostedServices.Tests\ArchrealmsPassport.HostedServices.Tests.csproj -c Release` currently covers the hosted AI challenge, session, quota, chat, feedback, status, runtime status, and runtime probe policies.
 - Windows Passport uses `/ai/session` for remote gateways and keeps the local preview path for `https://ai.archrealms.local`.

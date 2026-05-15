@@ -15,6 +15,67 @@ public static class PassportHostedPolicy
         WriteIndented = true
     };
 
+    public static PassportAiChallengeResponse CreateAiChallenge(PassportAiChallengeRequest request)
+    {
+        try
+        {
+            var identityId = NormalizeRequired(request.IdentityId, "identity ID");
+            var deviceId = NormalizeRequired(request.DeviceId, "device ID");
+            var releaseLane = NormalizeRequired(request.ReleaseLane, "release lane");
+            var ledgerNamespace = NormalizeRequired(request.LedgerNamespace, "ledger namespace");
+            var policyVersion = NormalizeRequired(request.PolicyVersion, "policy version");
+            var now = DateTimeOffset.UtcNow;
+            var expiresUtc = now.AddMinutes(5);
+            var challengeId = NewRecordId("ai-challenge");
+            var nonce = CreateToken();
+            var scopes = NormalizeScopes(request.RequestedScopes);
+            if (!scopes.Contains("ai_guide", StringComparer.Ordinal))
+            {
+                throw new InvalidOperationException("AI challenge requires the ai_guide scope.");
+            }
+
+            var record = new Dictionary<string, object?>
+            {
+                ["schema_version"] = 1,
+                ["record_type"] = PassportRecordTypes.AiChallenge,
+                ["record_id"] = challengeId,
+                ["challenge_id"] = challengeId,
+                ["created_utc"] = now.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+                ["expires_utc"] = expiresUtc.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+                ["status"] = "issued",
+                ["contract_version"] = ContractVersion,
+                ["release_lane"] = releaseLane,
+                ["ledger_namespace"] = ledgerNamespace,
+                ["policy_version"] = policyVersion,
+                ["archrealms_identity_id"] = identityId,
+                ["device_id"] = deviceId,
+                ["client_build"] = NormalizeRequiredValue(request.ClientBuild),
+                ["challenge_nonce"] = nonce,
+                ["challenge_audience"] = PassportAiProtocolDefaults.GatewayAudience,
+                ["requested_scopes"] = scopes,
+                ["session_endpoint"] = PassportAiProtocolDefaults.SessionEndpoint,
+                ["authority_boundaries"] = PassportAiAuthorityPolicy.CreateNonAuthorityBoundaries(),
+                ["summary"] = "Passport-signable AI gateway challenge. This challenge cannot authorize wallet, recovery, ledger, storage-delivery, registry, or admin actions."
+            };
+
+            return new PassportAiChallengeResponse
+            {
+                Succeeded = true,
+                Message = "AI challenge issued.",
+                ChallengeId = challengeId,
+                ChallengeNonce = nonce,
+                ChallengeAudience = PassportAiProtocolDefaults.GatewayAudience,
+                ExpiresUtc = expiresUtc.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+                ChallengeRecordSha256 = ComputeSha256(JsonSerializer.SerializeToUtf8Bytes(record, JsonOptions)),
+                ChallengeRecord = record
+            };
+        }
+        catch (Exception ex)
+        {
+            return FailedAiChallenge("AI challenge failed: " + ex.Message);
+        }
+    }
+
     public static PassportAiSessionAuthorizationResponse AuthorizeAiSession(PassportAiSessionAuthorizationRequest request)
     {
         try
@@ -36,6 +97,12 @@ public static class PassportHostedPolicy
                 || expiresUtc.ToUniversalTime() <= DateTimeOffset.UtcNow)
             {
                 return FailedAiSession("AI session request is expired.");
+            }
+
+            var challengeValidation = ValidateAiChallengeObject(record);
+            if (!challengeValidation.Succeeded)
+            {
+                return FailedAiSession(challengeValidation.Message);
             }
 
             if (!record.TryGetProperty("session_token_policy", out var tokenPolicy)
@@ -112,6 +179,113 @@ public static class PassportHostedPolicy
         {
             return FailedAiSession("AI session authorization failed: " + ex.Message);
         }
+    }
+
+    public static PassportAiQuotaResponse CreateAiQuotaResponse(
+        string sessionId,
+        string bearerToken,
+        IPassportHostedSessionStore sessionStore)
+    {
+        var validation = ValidateAiSessionAccess(sessionId, bearerToken, sessionStore);
+        if (!validation.Succeeded || validation.Session == null)
+        {
+            return FailedQuota(validation.Message);
+        }
+
+        var session = validation.Session;
+        var quota = session.Session == null
+            ? (MessageLimit: session.MessageQuota, MessagesUsed: 0, TokenLimit: session.TokenQuota, TokensUsed: 0)
+            : ReadQuota(session.Session, session.MessageQuota, session.TokenQuota);
+        return new PassportAiQuotaResponse
+        {
+            Succeeded = true,
+            Message = "AI quota read.",
+            SessionId = session.SessionId,
+            ExpiresUtc = session.ExpiresUtc,
+            MessageLimit = quota.MessageLimit,
+            MessagesUsed = quota.MessagesUsed,
+            MessagesRemaining = Math.Max(0, quota.MessageLimit - quota.MessagesUsed),
+            TokenLimit = quota.TokenLimit,
+            TokensUsed = quota.TokensUsed,
+            TokensRemaining = Math.Max(0, quota.TokenLimit - quota.TokensUsed),
+            ResetUtc = session.ExpiresUtc
+        };
+    }
+
+    public static PassportHostedRecordResponse CreateAiFeedbackRecord(
+        PassportAiFeedbackRequest request,
+        string bearerToken,
+        IPassportHostedSessionStore sessionStore)
+    {
+        var validation = ValidateAiSessionAccess(request.SessionId, bearerToken, sessionStore);
+        if (!validation.Succeeded || validation.Session?.Session == null)
+        {
+            return FailedRecord(validation.Message);
+        }
+
+        if (request.Rating is < 1 or > 5)
+        {
+            return FailedRecord("AI feedback rating must be between 1 and 5.");
+        }
+
+        if (PassportAiAuthorityPolicy.ContainsSecretMaterial(request.FeedbackText))
+        {
+            return FailedRecord("AI feedback rejected private key, seed, or recovery-secret material.");
+        }
+
+        var sessionRecord = validation.Session.Session;
+        var feedbackText = (request.FeedbackText ?? string.Empty).Trim();
+        var recordId = NewRecordId("ai-feedback");
+        var record = new Dictionary<string, object?>
+        {
+            ["schema_version"] = 1,
+            ["record_type"] = PassportRecordTypes.AiFeedbackRecord,
+            ["record_id"] = recordId,
+            ["created_utc"] = DateTimeOffset.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+            ["status"] = "captured",
+            ["contract_version"] = ContractVersion,
+            ["release_lane"] = ReadString(sessionRecord, "release_lane"),
+            ["ledger_namespace"] = ReadString(sessionRecord, "ledger_namespace"),
+            ["policy_version"] = ReadString(sessionRecord, "policy_version"),
+            ["archrealms_identity_id"] = ReadString(sessionRecord, "archrealms_identity_id"),
+            ["device_id"] = ReadString(sessionRecord, "device_id"),
+            ["session_id"] = validation.Session.SessionId,
+            ["chat_record_id"] = NormalizeRequiredValue(request.ChatRecordId),
+            ["rating"] = request.Rating,
+            ["feedback_category"] = NormalizeSlug(request.FeedbackCategory),
+            ["feedback_text_sha256"] = string.IsNullOrWhiteSpace(feedbackText)
+                ? string.Empty
+                : ComputeSha256(Encoding.UTF8.GetBytes(feedbackText)),
+            ["feedback_text_stored"] = false,
+            ["diagnostics_upload_opt_in"] = request.DiagnosticsUploadOptIn,
+            ["model_training_allowed"] = false,
+            ["changes_ledger_state"] = false,
+            ["changes_identity_state"] = false,
+            ["authority_boundaries"] = PassportAiAuthorityPolicy.CreateNonAuthorityBoundaries(),
+            ["summary"] = "Metadata-only AI feedback. The hosted service stores a feedback hash and does not mutate Passport, wallet, ledger, storage, registry, recovery, or admin state."
+        };
+
+        return RecordResponse("AI feedback captured.", recordId, record);
+    }
+
+    public static PassportAiGatewayStatusResponse CreateAiGatewayStatus(PassportHostedAiRuntimeReadiness runtimeReadiness)
+    {
+        return new PassportAiGatewayStatusResponse
+        {
+            Status = runtimeReadiness.Ready ? "healthy" : "degraded",
+            Message = runtimeReadiness.Ready
+                ? "Hosted AI gateway is configured for the approved model runtime."
+                : "Hosted AI gateway is available, but runtime configuration is incomplete.",
+            ContractVersion = ContractVersion,
+            RuntimeReady = runtimeReadiness.Ready,
+            ModelId = runtimeReadiness.ModelId,
+            ChallengeEndpoint = PassportAiProtocolDefaults.ChallengeEndpoint,
+            SessionEndpoint = PassportAiProtocolDefaults.SessionEndpoint,
+            ChatEndpoint = PassportAiProtocolDefaults.ChatEndpoint,
+            QuotaEndpoint = PassportAiProtocolDefaults.QuotaEndpoint,
+            FeedbackEndpoint = PassportAiProtocolDefaults.FeedbackEndpoint,
+            AuthorityBoundaries = PassportAiAuthorityPolicy.CreateNonAuthorityBoundaries()
+        };
     }
 
     public static PassportAiChatResponse CreateAiChatResponse(
@@ -976,6 +1150,83 @@ public static class PassportHostedPolicy
         return rsa.VerifyData(signedPayload, signatureBytes, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
     }
 
+    private static PassportAiSessionAuthorizationResponse ValidateAiChallengeObject(JsonElement record)
+    {
+        if (!record.TryGetProperty("challenge", out var challenge) || challenge.ValueKind != JsonValueKind.Object)
+        {
+            return FailedAiSession("AI session request must include a Passport AI challenge.");
+        }
+
+        if (string.IsNullOrWhiteSpace(ReadString(challenge, "challenge_nonce")))
+        {
+            return FailedAiSession("AI session challenge nonce is required.");
+        }
+
+        var audience = ReadString(challenge, "audience");
+        if (string.IsNullOrWhiteSpace(audience))
+        {
+            audience = ReadString(challenge, "challenge_audience");
+        }
+
+        if (!string.Equals(audience, PassportAiProtocolDefaults.GatewayAudience, StringComparison.Ordinal))
+        {
+            return FailedAiSession("AI session challenge audience is invalid.");
+        }
+
+        var challengeExpiry = ReadString(challenge, "expires_utc");
+        if (string.IsNullOrWhiteSpace(challengeExpiry))
+        {
+            challengeExpiry = ReadString(challenge, "challenge_expires_utc");
+        }
+
+        if (!string.IsNullOrWhiteSpace(challengeExpiry)
+            && (!DateTimeOffset.TryParse(challengeExpiry, out var expiresUtc) || expiresUtc.ToUniversalTime() <= DateTimeOffset.UtcNow))
+        {
+            return FailedAiSession("AI session challenge is expired.");
+        }
+
+        if (!StringArrayContains(challenge, "requested_scopes", "ai_guide"))
+        {
+            return FailedAiSession("AI session challenge must request the ai_guide scope.");
+        }
+
+        return new PassportAiSessionAuthorizationResponse
+        {
+            Succeeded = true,
+            Message = "AI session challenge is valid."
+        };
+    }
+
+    private static AiSessionAccessResult ValidateAiSessionAccess(
+        string sessionId,
+        string bearerToken,
+        IPassportHostedSessionStore sessionStore)
+    {
+        if (string.IsNullOrWhiteSpace(bearerToken))
+        {
+            return AiSessionAccessResult.Failed("AI session bearer token is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(sessionId)
+            || !sessionStore.TryGetAiSession(sessionId, out var session)
+            || session.Session == null)
+        {
+            return AiSessionAccessResult.Failed("AI session was not found.");
+        }
+
+        if (!string.Equals(ComputeSha256(Encoding.UTF8.GetBytes(bearerToken)), session.SessionTokenSha256, StringComparison.OrdinalIgnoreCase))
+        {
+            return AiSessionAccessResult.Failed("AI session token does not match.");
+        }
+
+        if (!DateTimeOffset.TryParse(session.ExpiresUtc, out var expiresUtc) || expiresUtc.ToUniversalTime() <= DateTimeOffset.UtcNow)
+        {
+            return AiSessionAccessResult.Failed("AI session is expired.");
+        }
+
+        return AiSessionAccessResult.Success(session);
+    }
+
     private static PassportHostedRecordResponse ValidateAdminSignature(
         JsonElement signatureRecord,
         string expectedRecordType,
@@ -1150,7 +1401,8 @@ public static class PassportHostedPolicy
             "approved_knowledge_pack_id"
         };
 
-        return criticalFields.All(field => string.Equals(ReadString(payload, field), ReadString(requestRecord, field), StringComparison.Ordinal));
+        return criticalFields.All(field => string.Equals(ReadString(payload, field), ReadString(requestRecord, field), StringComparison.Ordinal))
+            && JsonPropertyMatches(payload, requestRecord, "challenge");
     }
 
     private static PassportArchGenesisAllocationRequest NormalizeAllocation(PassportArchGenesisAllocationRequest allocation)
@@ -1237,6 +1489,103 @@ public static class PassportHostedPolicy
                 || (property.ValueKind == JsonValueKind.String && bool.TryParse(property.GetString(), out var parsed) && parsed));
     }
 
+    private static string ReadString(Dictionary<string, object?> record, string propertyName)
+    {
+        if (!record.TryGetValue(propertyName, out var value) || value == null)
+        {
+            return string.Empty;
+        }
+
+        if (value is JsonElement element)
+        {
+            return element.ValueKind == JsonValueKind.String ? element.GetString() ?? string.Empty : element.ToString();
+        }
+
+        return value.ToString() ?? string.Empty;
+    }
+
+    private static (int MessageLimit, int MessagesUsed, int TokenLimit, int TokensUsed) ReadQuota(
+        Dictionary<string, object?> sessionRecord,
+        int fallbackMessageLimit,
+        int fallbackTokenLimit)
+    {
+        var messageLimit = fallbackMessageLimit;
+        var tokenLimit = fallbackTokenLimit;
+        var messagesUsed = 0;
+        var tokensUsed = 0;
+
+        if (sessionRecord.TryGetValue("quota", out var quotaValue))
+        {
+            if (quotaValue is JsonElement quotaElement && quotaElement.ValueKind == JsonValueKind.Object)
+            {
+                messageLimit = ReadInt32(quotaElement, "message_limit", fallbackMessageLimit);
+                tokenLimit = ReadInt32(quotaElement, "token_limit", fallbackTokenLimit);
+                messagesUsed = ReadInt32(quotaElement, "messages_used", 0);
+                tokensUsed = ReadInt32(quotaElement, "tokens_used", 0);
+            }
+            else if (quotaValue is Dictionary<string, object?> quota)
+            {
+                messageLimit = ReadInt32(quota, "message_limit", fallbackMessageLimit);
+                tokenLimit = ReadInt32(quota, "token_limit", fallbackTokenLimit);
+                messagesUsed = ReadInt32(quota, "messages_used", 0);
+                tokensUsed = ReadInt32(quota, "tokens_used", 0);
+            }
+        }
+
+        return (Math.Max(0, messageLimit), Math.Max(0, messagesUsed), Math.Max(0, tokenLimit), Math.Max(0, tokensUsed));
+    }
+
+    private static int ReadInt32(JsonElement root, string propertyName, int fallback)
+    {
+        return root.TryGetProperty(propertyName, out var property) && property.TryGetInt32(out var value) ? value : fallback;
+    }
+
+    private static int ReadInt32(Dictionary<string, object?> record, string propertyName, int fallback)
+    {
+        if (!record.TryGetValue(propertyName, out var value) || value == null)
+        {
+            return fallback;
+        }
+
+        if (value is JsonElement element)
+        {
+            return element.TryGetInt32(out var parsed) ? parsed : fallback;
+        }
+
+        try
+        {
+            return Convert.ToInt32(value);
+        }
+        catch
+        {
+            return fallback;
+        }
+    }
+
+    private static bool StringArrayContains(JsonElement root, string propertyName, string expected)
+    {
+        if (!root.TryGetProperty(propertyName, out var property) || property.ValueKind != JsonValueKind.Array)
+        {
+            return false;
+        }
+
+        return property.EnumerateArray()
+            .Any(item => item.ValueKind == JsonValueKind.String
+                && string.Equals(item.GetString(), expected, StringComparison.Ordinal));
+    }
+
+    private static bool JsonPropertyMatches(JsonElement payload, JsonElement requestRecord, string propertyName)
+    {
+        var payloadHasProperty = payload.TryGetProperty(propertyName, out var payloadProperty);
+        var requestHasProperty = requestRecord.TryGetProperty(propertyName, out var requestProperty);
+        if (!payloadHasProperty || !requestHasProperty)
+        {
+            return payloadHasProperty == requestHasProperty;
+        }
+
+        return JsonSerializer.Serialize(payloadProperty, JsonOptions) == JsonSerializer.Serialize(requestProperty, JsonOptions);
+    }
+
     private static string NormalizeRequired(string value, string label)
     {
         var normalized = NormalizeRequiredValue(value);
@@ -1257,6 +1606,16 @@ public static class PassportHostedPolicy
     {
         var normalized = (value ?? string.Empty).Trim().ToLowerInvariant().Replace(" ", "_").Replace("-", "_");
         return string.IsNullOrWhiteSpace(normalized) ? "aggregate" : normalized;
+    }
+
+    private static string[] NormalizeScopes(IEnumerable<string> requestedScopes)
+    {
+        var scopes = requestedScopes
+            .Select(scope => (scope ?? string.Empty).Trim())
+            .Where(scope => !string.IsNullOrWhiteSpace(scope))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        return scopes.Length == 0 ? new[] { "ai_guide" } : scopes;
     }
 
     private static string NormalizeActionType(string value)
@@ -1293,9 +1652,19 @@ public static class PassportHostedPolicy
         return new PassportAiSessionAuthorizationResponse { Succeeded = false, Message = message };
     }
 
+    private static PassportAiChallengeResponse FailedAiChallenge(string message)
+    {
+        return new PassportAiChallengeResponse { Succeeded = false, Message = message };
+    }
+
     private static PassportAiChatResponse FailedChat(string message)
     {
         return new PassportAiChatResponse { Succeeded = false, Message = message, AnswerText = message };
+    }
+
+    private static PassportAiQuotaResponse FailedQuota(string message)
+    {
+        return new PassportAiQuotaResponse { Succeeded = false, Message = message };
     }
 
     private static PassportHostedRecordResponse FailedRecord(string message)
@@ -1347,5 +1716,18 @@ public static class PassportHostedPolicy
     private static string ComputeSha256(byte[] value)
     {
         return Convert.ToHexString(SHA256.HashData(value)).ToLowerInvariant();
+    }
+
+    private sealed record AiSessionAccessResult(bool Succeeded, string Message, PassportAiSessionAuthorizationResponse? Session)
+    {
+        public static AiSessionAccessResult Success(PassportAiSessionAuthorizationResponse session)
+        {
+            return new AiSessionAccessResult(true, "AI session authorized.", session);
+        }
+
+        public static AiSessionAccessResult Failed(string message)
+        {
+            return new AiSessionAccessResult(false, message, null);
+        }
     }
 }

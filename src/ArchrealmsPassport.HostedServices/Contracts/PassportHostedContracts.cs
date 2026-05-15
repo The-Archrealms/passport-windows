@@ -3,6 +3,57 @@ using System.Text.Json.Serialization;
 
 namespace ArchrealmsPassport.HostedServices.Contracts;
 
+public sealed record PassportAiChallengeRequest
+{
+    [JsonPropertyName("archrealms_identity_id")]
+    public string IdentityId { get; init; } = string.Empty;
+
+    [JsonPropertyName("device_id")]
+    public string DeviceId { get; init; } = string.Empty;
+
+    [JsonPropertyName("release_lane")]
+    public string ReleaseLane { get; init; } = string.Empty;
+
+    [JsonPropertyName("ledger_namespace")]
+    public string LedgerNamespace { get; init; } = string.Empty;
+
+    [JsonPropertyName("policy_version")]
+    public string PolicyVersion { get; init; } = string.Empty;
+
+    [JsonPropertyName("client_build")]
+    public string ClientBuild { get; init; } = string.Empty;
+
+    [JsonPropertyName("requested_scopes")]
+    public string[] RequestedScopes { get; init; } = Array.Empty<string>();
+}
+
+public sealed record PassportAiChallengeResponse
+{
+    [JsonPropertyName("succeeded")]
+    public bool Succeeded { get; init; }
+
+    [JsonPropertyName("message")]
+    public string Message { get; init; } = string.Empty;
+
+    [JsonPropertyName("challenge_id")]
+    public string ChallengeId { get; init; } = string.Empty;
+
+    [JsonPropertyName("challenge_nonce")]
+    public string ChallengeNonce { get; init; } = string.Empty;
+
+    [JsonPropertyName("challenge_audience")]
+    public string ChallengeAudience { get; init; } = string.Empty;
+
+    [JsonPropertyName("expires_utc")]
+    public string ExpiresUtc { get; init; } = string.Empty;
+
+    [JsonPropertyName("challenge_record_sha256")]
+    public string ChallengeRecordSha256 { get; init; } = string.Empty;
+
+    [JsonPropertyName("challenge_record")]
+    public Dictionary<string, object?>? ChallengeRecord { get; init; }
+}
+
 public sealed record PassportAiSessionAuthorizationRequest
 {
     [JsonPropertyName("request_record")]
@@ -100,6 +151,102 @@ public sealed record PassportAiChatResponse
 
     [JsonPropertyName("sources")]
     public PassportAiSourceRef[] Sources { get; init; } = Array.Empty<PassportAiSourceRef>();
+}
+
+public sealed record PassportAiQuotaResponse
+{
+    [JsonPropertyName("succeeded")]
+    public bool Succeeded { get; init; }
+
+    [JsonPropertyName("message")]
+    public string Message { get; init; } = string.Empty;
+
+    [JsonPropertyName("session_id")]
+    public string SessionId { get; init; } = string.Empty;
+
+    [JsonPropertyName("expires_utc")]
+    public string ExpiresUtc { get; init; } = string.Empty;
+
+    [JsonPropertyName("message_limit")]
+    public int MessageLimit { get; init; }
+
+    [JsonPropertyName("messages_used")]
+    public int MessagesUsed { get; init; }
+
+    [JsonPropertyName("messages_remaining")]
+    public int MessagesRemaining { get; init; }
+
+    [JsonPropertyName("token_limit")]
+    public int TokenLimit { get; init; }
+
+    [JsonPropertyName("tokens_used")]
+    public int TokensUsed { get; init; }
+
+    [JsonPropertyName("tokens_remaining")]
+    public int TokensRemaining { get; init; }
+
+    [JsonPropertyName("reset_utc")]
+    public string ResetUtc { get; init; } = string.Empty;
+}
+
+public sealed record PassportAiFeedbackRequest
+{
+    [JsonPropertyName("session_id")]
+    public string SessionId { get; init; } = string.Empty;
+
+    [JsonPropertyName("chat_record_id")]
+    public string ChatRecordId { get; init; } = string.Empty;
+
+    [JsonPropertyName("rating")]
+    public int Rating { get; init; }
+
+    [JsonPropertyName("feedback_category")]
+    public string FeedbackCategory { get; init; } = string.Empty;
+
+    [JsonPropertyName("feedback_text")]
+    public string FeedbackText { get; init; } = string.Empty;
+
+    [JsonPropertyName("diagnostics_upload_opt_in")]
+    public bool DiagnosticsUploadOptIn { get; init; }
+}
+
+public sealed record PassportAiGatewayStatusResponse
+{
+    [JsonPropertyName("schema")]
+    public string Schema { get; init; } = "archrealms.passport.hosted_ai_gateway_status.v1";
+
+    [JsonPropertyName("status")]
+    public string Status { get; init; } = string.Empty;
+
+    [JsonPropertyName("message")]
+    public string Message { get; init; } = string.Empty;
+
+    [JsonPropertyName("contract_version")]
+    public string ContractVersion { get; init; } = string.Empty;
+
+    [JsonPropertyName("runtime_ready")]
+    public bool RuntimeReady { get; init; }
+
+    [JsonPropertyName("model_id")]
+    public string ModelId { get; init; } = string.Empty;
+
+    [JsonPropertyName("challenge_endpoint")]
+    public string ChallengeEndpoint { get; init; } = string.Empty;
+
+    [JsonPropertyName("session_endpoint")]
+    public string SessionEndpoint { get; init; } = string.Empty;
+
+    [JsonPropertyName("chat_endpoint")]
+    public string ChatEndpoint { get; init; } = string.Empty;
+
+    [JsonPropertyName("quota_endpoint")]
+    public string QuotaEndpoint { get; init; } = string.Empty;
+
+    [JsonPropertyName("feedback_endpoint")]
+    public string FeedbackEndpoint { get; init; } = string.Empty;
+
+    [JsonPropertyName("authority_boundaries")]
+    public Dictionary<string, object?> AuthorityBoundaries { get; init; } = new();
 }
 
 public sealed record PassportAiSourceRef

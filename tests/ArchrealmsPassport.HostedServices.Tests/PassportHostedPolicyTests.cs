@@ -13,6 +13,34 @@ public sealed class PassportHostedPolicyTests
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
     [Fact]
+    public void AiChallengeCreatesSignableChallengeAndSessionRequiresChallenge()
+    {
+        var challenge = PassportHostedPolicy.CreateAiChallenge(new PassportAiChallengeRequest
+        {
+            IdentityId = "identity-1",
+            DeviceId = "device-1",
+            ReleaseLane = "production-mvp",
+            LedgerNamespace = "archrealms-passport-production-mvp",
+            PolicyVersion = "passport-release-lanes-v1",
+            ClientBuild = "test-build",
+            RequestedScopes = ["ai_guide"]
+        });
+
+        Assert.True(challenge.Succeeded, challenge.Message);
+        Assert.Equal("archrealms-ai-gateway", challenge.ChallengeAudience);
+        Assert.NotNull(challenge.ChallengeRecord);
+        Assert.Equal("passport_ai_challenge", challenge.ChallengeRecord!["record_type"]);
+        Assert.Matches("^[0-9a-f]{64}$", challenge.ChallengeRecordSha256);
+
+        using var rsa = RSA.Create(2048);
+        var missingChallenge = CreateAiSessionRequest(rsa, includeChallenge: false);
+        var rejected = PassportHostedPolicy.AuthorizeAiSession(missingChallenge);
+
+        Assert.False(rejected.Succeeded);
+        Assert.Contains("challenge", rejected.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void AuthorizeAiSessionVerifiesDeviceSignatureAndDoesNotStoreBearerToken()
     {
         using var rsa = RSA.Create(2048);
@@ -107,6 +135,69 @@ public sealed class PassportHostedPolicyTests
         Assert.True(answer.Succeeded, answer.Message);
         Assert.Contains("cannot approve recovery", answer.AnswerText, StringComparison.OrdinalIgnoreCase);
         Assert.Single(answer.Sources);
+    }
+
+    [Fact]
+    public void AiQuotaAndFeedbackRequireSessionTokenAndRemainNonAuthoritative()
+    {
+        using var rsa = RSA.Create(2048);
+        var session = PassportHostedPolicy.AuthorizeAiSession(CreateAiSessionRequest(rsa));
+        Assert.True(session.Succeeded, session.Message);
+
+        var store = new PassportHostedInMemoryStore();
+        store.SaveAiSession(session.Session!);
+
+        var badQuota = PassportHostedPolicy.CreateAiQuotaResponse(session.SessionId, "wrong-token", store);
+        Assert.False(badQuota.Succeeded);
+
+        var quota = PassportHostedPolicy.CreateAiQuotaResponse(session.SessionId, session.SessionToken, store);
+        Assert.True(quota.Succeeded, quota.Message);
+        Assert.Equal(25, quota.MessageLimit);
+        Assert.Equal(25, quota.MessagesRemaining);
+        Assert.Equal(10000, quota.TokenLimit);
+
+        var feedback = PassportHostedPolicy.CreateAiFeedbackRecord(new PassportAiFeedbackRequest
+        {
+            SessionId = session.SessionId,
+            ChatRecordId = "chat-1",
+            Rating = 5,
+            FeedbackCategory = "helpful",
+            FeedbackText = "Helpful answer.",
+            DiagnosticsUploadOptIn = false
+        }, session.SessionToken, store);
+
+        Assert.True(feedback.Succeeded, feedback.Message);
+        Assert.Equal("passport_ai_feedback_record", feedback.Record!["record_type"]);
+        Assert.Equal(false, feedback.Record["feedback_text_stored"]);
+        Assert.Equal(false, feedback.Record["changes_ledger_state"]);
+        Assert.DoesNotContain("Helpful answer.", JsonSerializer.Serialize(feedback.Record, JsonOptions), StringComparison.Ordinal);
+
+        var secretFeedback = PassportHostedPolicy.CreateAiFeedbackRecord(new PassportAiFeedbackRequest
+        {
+            SessionId = session.SessionId,
+            Rating = 1,
+            FeedbackText = "recovery seed phrase: secret"
+        }, session.SessionToken, store);
+        Assert.False(secretFeedback.Succeeded);
+        Assert.Contains("recovery-secret", secretFeedback.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void AiGatewayStatusReportsRuntimeReadinessWithoutAuthority()
+    {
+        var status = PassportHostedPolicy.CreateAiGatewayStatus(PassportHostedAiRuntimeReadiness.FromValues(
+            "https://model-runtime.example/v1",
+            "Qwen/Qwen3-8B",
+            new string('a', 64),
+            "license-approval-1",
+            "managed-vector-store",
+            "archrealms-passport-mvp",
+            "knowledge-root-2026-05-15"));
+
+        Assert.Equal("healthy", status.Status);
+        Assert.True(status.RuntimeReady);
+        Assert.Equal("/ai/challenge", status.ChallengeEndpoint);
+        Assert.False((bool)status.AuthorityBoundaries["can_execute_wallet_operations"]!);
     }
 
     [Fact]
@@ -549,7 +640,7 @@ public sealed class PassportHostedPolicyTests
         Assert.Equal("support_mediated_dual_control", result.Record["validation_mode"]);
     }
 
-    private static PassportAiSessionAuthorizationRequest CreateAiSessionRequest(RSA rsa)
+    private static PassportAiSessionAuthorizationRequest CreateAiSessionRequest(RSA rsa, bool includeChallenge = true)
     {
         var record = new Dictionary<string, object?>
         {
@@ -590,6 +681,19 @@ public sealed class PassportHostedPolicyTests
                 ["recovery_secret_material_included"] = false
             }
         };
+
+        if (includeChallenge)
+        {
+            record["challenge"] = new Dictionary<string, object?>
+            {
+                ["challenge_id"] = "challenge-1",
+                ["challenge_nonce"] = "nonce-1",
+                ["audience"] = "archrealms-ai-gateway",
+                ["expires_utc"] = DateTimeOffset.UtcNow.AddMinutes(5).ToString("yyyy-MM-ddTHH:mm:ssZ"),
+                ["requested_scopes"] = new[] { "ai_guide" }
+            };
+        }
+
         var payload = JsonSerializer.SerializeToUtf8Bytes(record, JsonOptions);
         var signature = rsa.SignData(payload, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
         record["signature"] = new Dictionary<string, object?>
