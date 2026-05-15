@@ -205,6 +205,27 @@ Build the local Docker image when the machine has Docker and enough disk availab
 
 See `deploy/hosted-services/README.md` for the staging compose flow and required environment variables.
 
+## Open-Weight AI Runtime Deployment
+
+The Passport hosted AI gateway expects a private OpenAI-compatible model runtime at `ARCHREALMS_PASSPORT_AI_INFERENCE_BASE_URL`. Deployment templates for vLLM and Hugging Face TGI live under `deploy/open-weight-ai-runtime/`; Passport clients still talk only to the hosted gateway, never directly to the model runtime.
+
+Validate the runtime deployment package:
+
+```powershell
+.\tools\release\Test-PassportOpenWeightAiRuntimeDeployment.ps1
+```
+
+After a local or private runtime is running, the same validator can send a non-mutating OpenAI-compatible chat probe:
+
+```powershell
+.\tools\release\Test-PassportOpenWeightAiRuntimeDeployment.ps1 `
+  -ProbeRuntime `
+  -RuntimeBaseUrl http://127.0.0.1:8000/v1 `
+  -ModelId Qwen/Qwen3-8B
+```
+
+See `deploy/open-weight-ai-runtime/README.md` for the vLLM/TGI compose commands and required model, artifact, license, vector-store, and knowledge-root evidence.
+
 ## Automated Tests
 
 Run the C# unit and service integration suite:

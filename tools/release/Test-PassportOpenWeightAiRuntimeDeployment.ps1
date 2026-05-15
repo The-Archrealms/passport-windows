@@ -1,0 +1,268 @@
+param(
+    [string]$VllmComposePath = "deploy\open-weight-ai-runtime\docker-compose.vllm.yml",
+
+    [string]$TgiComposePath = "deploy\open-weight-ai-runtime\docker-compose.tgi.yml",
+
+    [string]$EnvTemplatePath = "deploy\open-weight-ai-runtime\open-weight-ai-runtime.env.template",
+
+    [string]$ReadmePath = "deploy\open-weight-ai-runtime\README.md",
+
+    [string]$OutputPath = "artifacts\release\open-weight-ai-runtime-deployment-validation-report.json",
+
+    [switch]$ProbeRuntime,
+
+    [string]$RuntimeBaseUrl = $env:ARCHREALMS_PASSPORT_AI_INFERENCE_BASE_URL,
+
+    [string]$ModelId = $env:ARCHREALMS_PASSPORT_AI_MODEL_ID,
+
+    [string]$RuntimeApiKey = $env:ARCHREALMS_PASSPORT_AI_INFERENCE_API_KEY,
+
+    [int]$EndpointTimeoutSeconds = 20
+)
+
+$ErrorActionPreference = "Stop"
+
+$scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+$repoRoot = [System.IO.Path]::GetFullPath((Join-Path $scriptRoot "..\.."))
+
+function Resolve-RepoPath {
+    param([string]$Path)
+    return [System.IO.Path]::GetFullPath((Join-Path $repoRoot $Path))
+}
+
+function New-Check {
+    param(
+        [string]$Id,
+        [bool]$Passed,
+        [string[]]$Failures = @(),
+        [object]$Evidence = $null
+    )
+
+    $normalizedFailures = @($Failures | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+
+    return [pscustomobject][ordered]@{
+        id = $Id
+        passed = $Passed
+        failures = $normalizedFailures
+        evidence = $Evidence
+    }
+}
+
+function Test-TextContains {
+    param(
+        [string]$Text,
+        [string[]]$Required,
+        [string[]]$Forbidden = @()
+    )
+
+    $failures = New-Object System.Collections.Generic.List[string]
+    foreach ($requiredText in $Required) {
+        if ($Text.IndexOf($requiredText, [StringComparison]::OrdinalIgnoreCase) -lt 0) {
+            $failures.Add("missing text: $requiredText")
+        }
+    }
+
+    foreach ($forbiddenText in $Forbidden) {
+        if ($Text.IndexOf($forbiddenText, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
+            $failures.Add("forbidden text: $forbiddenText")
+        }
+    }
+
+    return $failures.ToArray()
+}
+
+function Invoke-RuntimeProbe {
+    param(
+        [string]$BaseUrl,
+        [string]$RuntimeModelId,
+        [string]$ApiKey
+    )
+
+    if ([string]::IsNullOrWhiteSpace($BaseUrl)) {
+        return New-Check -Id "runtime_chat_completion_probe" -Passed $false -Failures @("RuntimeBaseUrl is required when -ProbeRuntime is set.") -Evidence $null
+    }
+
+    if ([string]::IsNullOrWhiteSpace($RuntimeModelId)) {
+        return New-Check -Id "runtime_chat_completion_probe" -Passed $false -Failures @("ModelId is required when -ProbeRuntime is set.") -Evidence $null
+    }
+
+    $endpoint = $BaseUrl.TrimEnd("/") + "/chat/completions"
+    $headers = @{}
+    if (-not [string]::IsNullOrWhiteSpace($ApiKey)) {
+        $headers["Authorization"] = "Bearer " + $ApiKey.Trim()
+    }
+
+    $body = [pscustomobject][ordered]@{
+        model = $RuntimeModelId
+        temperature = 0
+        max_tokens = 64
+        messages = @(
+            [pscustomobject][ordered]@{
+                role = "system"
+                content = "You are a non-authoritative readiness probe responder."
+            },
+            [pscustomobject][ordered]@{
+                role = "user"
+                content = "Readiness probe. Reply with a short confirmation."
+            }
+        )
+    } | ConvertTo-Json -Depth 5
+
+    try {
+        $response = Invoke-RestMethod `
+            -Method Post `
+            -Uri $endpoint `
+            -Headers $headers `
+            -Body $body `
+            -ContentType "application/json" `
+            -TimeoutSec $EndpointTimeoutSeconds
+    }
+    catch {
+        return New-Check -Id "runtime_chat_completion_probe" -Passed $false -Failures @("runtime probe failed for $endpoint`: $($_.Exception.Message)") -Evidence @{ endpoint = $endpoint }
+    }
+
+    $answer = ""
+    if ($response -and $response.choices -and $response.choices.Count -gt 0) {
+        $answer = [string]$response.choices[0].message.content
+    }
+
+    $failures = @()
+    if ([string]::IsNullOrWhiteSpace($answer)) {
+        $failures += "runtime response did not include choices[0].message.content"
+    }
+
+    return New-Check -Id "runtime_chat_completion_probe" -Passed ($failures.Count -eq 0) -Failures $failures -Evidence @{
+        endpoint = $endpoint
+        model_id = $RuntimeModelId
+        answer_received = -not [string]::IsNullOrWhiteSpace($answer)
+    }
+}
+
+$resolvedVllmCompose = Resolve-RepoPath $VllmComposePath
+$resolvedTgiCompose = Resolve-RepoPath $TgiComposePath
+$resolvedEnvTemplate = Resolve-RepoPath $EnvTemplatePath
+$resolvedReadme = Resolve-RepoPath $ReadmePath
+$resolvedOutput = Resolve-RepoPath $OutputPath
+
+$checks = New-Object System.Collections.Generic.List[object]
+
+$missingFiles = @()
+foreach ($path in @($resolvedVllmCompose, $resolvedTgiCompose, $resolvedEnvTemplate, $resolvedReadme)) {
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+        $missingFiles += $path
+    }
+}
+
+$checks.Add((New-Check -Id "deployment_files_exist" -Passed ($missingFiles.Count -eq 0) -Failures $missingFiles -Evidence @{
+    vllm_compose = $resolvedVllmCompose
+    tgi_compose = $resolvedTgiCompose
+    env_template = $resolvedEnvTemplate
+    readme = $resolvedReadme
+}))
+
+if ($missingFiles.Count -eq 0) {
+    $vllmText = Get-Content -LiteralPath $resolvedVllmCompose -Raw
+    $vllmFailures = Test-TextContains `
+        -Text $vllmText `
+        -Required @(
+            "vllm/vllm-openai",
+            "ARCHREALMS_PASSPORT_AI_MODEL_ID",
+            "--served-model-name",
+            '127.0.0.1:${ARCHREALMS_PASSPORT_AI_RUNTIME_HOST_PORT:-8000}:8000',
+            "/v1/models",
+            "ai-model-cache"
+        ) `
+        -Forbidden @(
+            '0.0.0.0:${ARCHREALMS_PASSPORT_AI_RUNTIME_HOST_PORT'
+        )
+    $checks.Add((New-Check -Id "vllm_compose_gateway_contract" -Passed ($vllmFailures.Count -eq 0) -Failures $vllmFailures -Evidence @{ path = $resolvedVllmCompose }))
+
+    $tgiText = Get-Content -LiteralPath $resolvedTgiCompose -Raw
+    $tgiFailures = Test-TextContains `
+        -Text $tgiText `
+        -Required @(
+            "ghcr.io/huggingface/text-generation-inference",
+            "ARCHREALMS_PASSPORT_AI_MODEL_ID",
+            "--model-id",
+            '127.0.0.1:${ARCHREALMS_PASSPORT_AI_RUNTIME_HOST_PORT:-8000}:8000',
+            "/health",
+            "ai-model-cache"
+        ) `
+        -Forbidden @(
+            '0.0.0.0:${ARCHREALMS_PASSPORT_AI_RUNTIME_HOST_PORT'
+        )
+    $checks.Add((New-Check -Id "tgi_compose_gateway_contract" -Passed ($tgiFailures.Count -eq 0) -Failures $tgiFailures -Evidence @{ path = $resolvedTgiCompose }))
+
+    $envText = Get-Content -LiteralPath $resolvedEnvTemplate -Raw
+    $envFailures = Test-TextContains `
+        -Text $envText `
+        -Required @(
+            "ARCHREALMS_PASSPORT_AI_RUNTIME_PROVIDER",
+            "ARCHREALMS_PASSPORT_AI_RUNTIME_IMAGE",
+            "ARCHREALMS_PASSPORT_AI_RUNTIME_HOST_PORT",
+            "ARCHREALMS_PASSPORT_AI_INFERENCE_BASE_URL",
+            "ARCHREALMS_PASSPORT_AI_INFERENCE_API_KEY",
+            "ARCHREALMS_PASSPORT_AI_MODEL_ID",
+            "ARCHREALMS_PASSPORT_AI_MODEL_ARTIFACT_SHA256",
+            "ARCHREALMS_PASSPORT_AI_MODEL_LICENSE_APPROVAL_ID",
+            "ARCHREALMS_PASSPORT_AI_VECTOR_STORE_PROVIDER",
+            "ARCHREALMS_PASSPORT_AI_VECTOR_STORE_ID",
+            "ARCHREALMS_PASSPORT_AI_KNOWLEDGE_APPROVAL_ROOT",
+            "ARCHREALMS_PASSPORT_AI_MAX_OUTPUT_TOKENS",
+            "ARCHREALMS_PASSPORT_AI_TEMPERATURE",
+            "HF_TOKEN"
+        ) `
+        -Forbidden @(
+            "hf-",
+            "sk-"
+        )
+    $checks.Add((New-Check -Id "env_template_runtime_readiness_variables" -Passed ($envFailures.Count -eq 0) -Failures $envFailures -Evidence @{ path = $resolvedEnvTemplate }))
+
+    $readmeText = Get-Content -LiteralPath $resolvedReadme -Raw
+    $readmeFailures = Test-TextContains `
+        -Text $readmeText `
+        -Required @(
+            "Passport clients never call this runtime directly",
+            "/v1/chat/completions",
+            "docker-compose.vllm.yml",
+            "docker-compose.tgi.yml",
+            "ARCHREALMS_PASSPORT_AI_INFERENCE_BASE_URL",
+            "/ai/runtime/status",
+            "/ai/runtime/probe",
+            "Test-PassportOpenWeightAiRuntimeDeployment.ps1"
+        )
+    $checks.Add((New-Check -Id "readme_operator_contract" -Passed ($readmeFailures.Count -eq 0) -Failures $readmeFailures -Evidence @{ path = $resolvedReadme }))
+}
+
+if ($ProbeRuntime) {
+    $checks.Add((Invoke-RuntimeProbe -BaseUrl $RuntimeBaseUrl -RuntimeModelId $ModelId -ApiKey $RuntimeApiKey))
+}
+else {
+    $checks.Add((New-Check -Id "runtime_chat_completion_probe" -Passed $true -Failures @() -Evidence @{
+        skipped = $true
+        reason = "Use -ProbeRuntime with -RuntimeBaseUrl and -ModelId after a local or private runtime is running."
+    }))
+}
+
+$failed = @($checks | Where-Object { -not $_.passed })
+$report = [pscustomobject][ordered]@{
+    schema = "archrealms.passport.open_weight_ai_runtime_deployment_validation.v1"
+    created_utc = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
+    repo_root = $repoRoot
+    passed = $failed.Count -eq 0
+    failed_check_count = $failed.Count
+    runtime_probe_requested = [bool]$ProbeRuntime
+    checks = $checks
+}
+
+$parent = Split-Path -Parent $resolvedOutput
+if ($parent) {
+    New-Item -ItemType Directory -Force -Path $parent | Out-Null
+}
+
+$report | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $resolvedOutput -Encoding UTF8
+$report | ConvertTo-Json -Depth 8
+
+if ($failed.Count -gt 0) {
+    exit 1
+}

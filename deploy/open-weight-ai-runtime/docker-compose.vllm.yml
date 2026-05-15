@@ -1,0 +1,45 @@
+name: archrealms-passport-open-weight-ai-runtime-vllm
+
+services:
+  ai-runtime:
+    image: ${ARCHREALMS_PASSPORT_AI_RUNTIME_IMAGE:-vllm/vllm-openai:latest}
+    restart: unless-stopped
+    ipc: host
+    command:
+      - --model
+      - ${ARCHREALMS_PASSPORT_AI_MODEL_ID:?ARCHREALMS_PASSPORT_AI_MODEL_ID is required}
+      - --served-model-name
+      - ${ARCHREALMS_PASSPORT_AI_MODEL_ID:?ARCHREALMS_PASSPORT_AI_MODEL_ID is required}
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+    environment:
+      HF_HOME: /models/huggingface
+      HUGGING_FACE_HUB_TOKEN: ${HF_TOKEN:-}
+      HF_TOKEN: ${HF_TOKEN:-}
+      VLLM_LOGGING_LEVEL: ${ARCHREALMS_PASSPORT_AI_RUNTIME_LOG_LEVEL:-INFO}
+    ports:
+      - "127.0.0.1:${ARCHREALMS_PASSPORT_AI_RUNTIME_HOST_PORT:-8000}:8000"
+    volumes:
+      - ai-model-cache:/models
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "python3 - <<'PY'\nimport json, urllib.request\nurllib.request.urlopen('http://127.0.0.1:8000/v1/models', timeout=5)\nPY"
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: ${ARCHREALMS_PASSPORT_AI_RUNTIME_GPU_COUNT:-1}
+              capabilities:
+                - gpu
+
+volumes:
+  ai-model-cache:
+    name: archrealms-passport-ai-model-cache

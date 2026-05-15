@@ -1,0 +1,42 @@
+name: archrealms-passport-open-weight-ai-runtime-tgi
+
+services:
+  ai-runtime:
+    image: ${ARCHREALMS_PASSPORT_AI_RUNTIME_IMAGE:-ghcr.io/huggingface/text-generation-inference:latest}
+    restart: unless-stopped
+    command:
+      - --model-id
+      - ${ARCHREALMS_PASSPORT_AI_MODEL_ID:?ARCHREALMS_PASSPORT_AI_MODEL_ID is required}
+      - --hostname
+      - 0.0.0.0
+      - --port
+      - "8000"
+    environment:
+      HF_HOME: /data/huggingface
+      HUGGING_FACE_HUB_TOKEN: ${HF_TOKEN:-}
+      HF_TOKEN: ${HF_TOKEN:-}
+    ports:
+      - "127.0.0.1:${ARCHREALMS_PASSPORT_AI_RUNTIME_HOST_PORT:-8000}:8000"
+    volumes:
+      - ai-model-cache:/data
+    shm_size: ${ARCHREALMS_PASSPORT_AI_RUNTIME_SHM_SIZE:-1g}
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "python3 - <<'PY'\nimport urllib.request\nurllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)\nPY"
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: ${ARCHREALMS_PASSPORT_AI_RUNTIME_GPU_COUNT:-1}
+              capabilities:
+                - gpu
+
+volumes:
+  ai-model-cache:
+    name: archrealms-passport-ai-model-cache
