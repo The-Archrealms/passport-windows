@@ -359,6 +359,11 @@
                             <StackPanel>
                                 <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Recovery" />
 
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Readiness" />
+                                <TextBlock AutomationProperties.AutomationId="RecoveryReadinessText"
+                                           Style="{StaticResource StatusValueStyle}"
+                                           Text="{Binding RecoveryReadinessText}" />
+
                                 <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Reason Code" />
                                 <TextBox AutomationProperties.AutomationId="RecoveryReasonCodeTextBox"
                                          Style="{StaticResource CodeTextBoxStyle}"

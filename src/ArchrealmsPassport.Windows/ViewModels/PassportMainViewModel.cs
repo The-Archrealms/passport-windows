@@ -159,6 +159,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
         private bool _recoveryFreezePendingEscrow = true;
         private bool _recoveryRevokeAiSessions = true;
         private bool _recoveryPauseStorageNodeOperations = true;
+        private string _recoveryReadinessText = "Recovery readiness unavailable until a Passport is active.";
         private string _recoveryStatusText = "No recovery action recorded.";
         private string _latestRecoveryGuidanceText = "No recovery guidance export yet.";
         private string _latestSecurityFreezeText = "No security freeze yet.";

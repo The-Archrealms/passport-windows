@@ -370,6 +370,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
         public bool RecoveryFreezePendingEscrow { get { return _recoveryFreezePendingEscrow; } set { SetField(ref _recoveryFreezePendingEscrow, value); } }
         public bool RecoveryRevokeAiSessions { get { return _recoveryRevokeAiSessions; } set { SetField(ref _recoveryRevokeAiSessions, value); } }
         public bool RecoveryPauseStorageNodeOperations { get { return _recoveryPauseStorageNodeOperations; } set { SetField(ref _recoveryPauseStorageNodeOperations, value); } }
+        public string RecoveryReadinessText { get { return _recoveryReadinessText; } private set { SetField(ref _recoveryReadinessText, value); } }
         public string RecoveryStatusText { get { return _recoveryStatusText; } private set { SetField(ref _recoveryStatusText, value); } }
         public string LatestRecoveryGuidanceText { get { return _latestRecoveryGuidanceText; } private set { SetField(ref _latestRecoveryGuidanceText, value); } }
         public string LatestSecurityFreezeText { get { return _latestSecurityFreezeText; } private set { SetField(ref _latestSecurityFreezeText, value); } }

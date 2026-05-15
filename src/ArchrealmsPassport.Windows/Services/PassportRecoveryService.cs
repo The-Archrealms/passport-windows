@@ -361,6 +361,38 @@ namespace ArchrealmsPassport.Windows.Services
             return HasActiveSecurityFreezeFlag(workspaceRoot, identityId, "pause_storage_node_operations");
         }
 
+        public PassportRecoveryReadiness GetRecoveryReadiness(string workspaceRoot, string identityId)
+        {
+            try
+            {
+                var resolvedWorkspaceRoot = PassportEnvironment.ResolveWorkspaceRoot(workspaceRoot);
+                var normalizedIdentityId = NormalizeRequired(identityId, "identity ID");
+                var activeDeviceIds = ListActiveDeviceIds(resolvedWorkspaceRoot, normalizedIdentityId);
+                var deauthorizedDeviceIds = ListDeauthorizedDeviceIds(resolvedWorkspaceRoot, normalizedIdentityId);
+                var recoverableDeviceCount = activeDeviceIds.Count(item => !deauthorizedDeviceIds.Contains(item));
+                var readiness = new PassportRecoveryReadiness
+                {
+                    ActiveDeviceCount = activeDeviceIds.Count,
+                    DeauthorizedDeviceCount = deauthorizedDeviceIds.Count,
+                    RecoverableDeviceCount = recoverableDeviceCount,
+                    QuorumReady = recoverableDeviceCount >= 2,
+                    WalletOperationsFrozen = IsWalletOperationsFrozen(resolvedWorkspaceRoot, normalizedIdentityId),
+                    PendingEscrowFrozen = IsPendingEscrowFrozen(resolvedWorkspaceRoot, normalizedIdentityId),
+                    AiSessionsRevoked = AreAiSessionsRevoked(resolvedWorkspaceRoot, normalizedIdentityId),
+                    StorageNodeOperationsPaused = AreStorageNodeOperationsPaused(resolvedWorkspaceRoot, normalizedIdentityId)
+                };
+                readiness.Summary = BuildReadinessSummary(readiness);
+                return readiness;
+            }
+            catch (Exception ex)
+            {
+                return new PassportRecoveryReadiness
+                {
+                    Summary = "Recovery readiness unavailable: " + ex.Message
+                };
+            }
+        }
+
         private bool HasActiveSecurityFreezeFlag(string workspaceRoot, string identityId, string flagName)
         {
             try
@@ -389,6 +421,97 @@ namespace ArchrealmsPassport.Windows.Services
             {
                 return false;
             }
+        }
+
+        private static HashSet<string> ListActiveDeviceIds(string workspaceRoot, string identityId)
+        {
+            var devices = new HashSet<string>(StringComparer.Ordinal);
+            var deviceRoot = Path.Combine(workspaceRoot, "records", "registry", "device-credentials");
+            if (!Directory.Exists(deviceRoot))
+            {
+                return devices;
+            }
+
+            foreach (var file in Directory.GetFiles(deviceRoot, "*.json").OrderByDescending(Path.GetFileName))
+            {
+                using var document = JsonDocument.Parse(File.ReadAllText(file));
+                var root = document.RootElement;
+                if (Matches(root, "record_type", "device_credential_record")
+                    && Matches(root, "status", "active")
+                    && Matches(root, "archrealms_identity_id", identityId)
+                    && TryGetString(root, "device_id", out var deviceId)
+                    && !string.IsNullOrWhiteSpace(deviceId))
+                {
+                    devices.Add(deviceId);
+                }
+            }
+
+            return devices;
+        }
+
+        private HashSet<string> ListDeauthorizedDeviceIds(string workspaceRoot, string identityId)
+        {
+            var devices = new HashSet<string>(StringComparer.Ordinal);
+            var recordsRoot = Path.Combine(workspaceRoot, "records", "passport", "recovery", "device-deauthorizations");
+            if (!Directory.Exists(recordsRoot))
+            {
+                return devices;
+            }
+
+            foreach (var file in Directory.GetFiles(recordsRoot, "*.json")
+                .Where(file => !file.EndsWith(".signature.json", StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(Path.GetFileName))
+            {
+                using var document = JsonDocument.Parse(File.ReadAllText(file));
+                var root = document.RootElement;
+                if (Matches(root, "record_type", "passport_device_deauthorization")
+                    && Matches(root, "release_lane", releaseLane.Lane)
+                    && Matches(root, "ledger_namespace", releaseLane.LedgerNamespace)
+                    && Matches(root, "archrealms_identity_id", identityId)
+                    && TryGetString(root, "target_device_id", out var deviceId)
+                    && !string.IsNullOrWhiteSpace(deviceId))
+                {
+                    devices.Add(deviceId);
+                }
+            }
+
+            return devices;
+        }
+
+        private static string BuildReadinessSummary(PassportRecoveryReadiness readiness)
+        {
+            var parts = new List<string>
+            {
+                readiness.RecoverableDeviceCount + " recoverable device" + (readiness.RecoverableDeviceCount == 1 ? "" : "s"),
+                readiness.QuorumReady ? "quorum ready" : "add another device for recovery quorum"
+            };
+
+            if (readiness.DeauthorizedDeviceCount > 0)
+            {
+                parts.Add(readiness.DeauthorizedDeviceCount + " deauthorized");
+            }
+
+            if (readiness.WalletOperationsFrozen)
+            {
+                parts.Add("wallet frozen");
+            }
+
+            if (readiness.PendingEscrowFrozen)
+            {
+                parts.Add("escrow frozen");
+            }
+
+            if (readiness.AiSessionsRevoked)
+            {
+                parts.Add("AI revoked");
+            }
+
+            if (readiness.StorageNodeOperationsPaused)
+            {
+                parts.Add("storage paused");
+            }
+
+            return string.Join("; ", parts);
         }
 
         private PassportRecoveryRecordResult WriteSignedRecoveryRecord(

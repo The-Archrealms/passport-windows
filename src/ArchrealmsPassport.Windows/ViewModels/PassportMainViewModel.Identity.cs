@@ -50,6 +50,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
             AiKnowledgePackId = string.IsNullOrWhiteSpace(settings.AiKnowledgePackId) ? "archrealms-mvp-approved-knowledge" : settings.AiKnowledgePackId;
             AiDiagnosticsUploadOptIn = settings.AiDiagnosticsUploadOptIn;
             UpdateMonetaryStatus();
+            UpdateRecoveryReadiness();
         }
 
         private string ResolveAiGatewayUrl(string configuredGatewayUrl)
@@ -140,6 +141,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
 
             RaiseHomePropertiesChanged();
             UpdateMonetaryStatus();
+            UpdateRecoveryReadiness();
         }
 
         private async Task ProvisionIdentityAsync()

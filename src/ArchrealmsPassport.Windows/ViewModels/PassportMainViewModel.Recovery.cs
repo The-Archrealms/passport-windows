@@ -40,6 +40,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
                 LatestSecurityFreezeText = freeze.RecordPath;
                 AppendLog("Security freeze: " + freeze.RecordPath);
                 UpdateMonetaryStatus();
+                UpdateRecoveryReadiness();
             }
 
             return Task.CompletedTask;
@@ -63,6 +64,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
             {
                 LatestDeviceDeauthorizationText = deauthorization.RecordPath;
                 AppendLog("Device deauthorization: " + deauthorization.RecordPath);
+                UpdateRecoveryReadiness();
                 RaiseCommandAvailability();
             }
 
@@ -90,6 +92,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
                 _settingsStore.Save(CreateSettingsSnapshot());
                 AppendLog("Wallet revocation: " + revocation.RevocationRecordPath);
                 UpdateMonetaryStatus();
+                UpdateRecoveryReadiness();
             }
 
             return Task.CompletedTask;
@@ -116,6 +119,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
                 AppendLog("Old wallet revocation: " + rotation.Revocation.RevocationRecordPath);
                 AppendLog("New wallet binding: " + rotation.Binding.BindingRecordPath);
                 UpdateMonetaryStatus();
+                UpdateRecoveryReadiness();
             }
 
             return Task.CompletedTask;
@@ -124,6 +128,20 @@ namespace ArchrealmsPassport.Windows.ViewModels
         private bool CanRevokeWalletKey()
         {
             return HasActiveWalletKey() && CanUseActiveDeviceCredential();
+        }
+
+        private void UpdateRecoveryReadiness()
+        {
+            if (string.IsNullOrWhiteSpace(ActiveIdentityId))
+            {
+                RecoveryReadinessText = "Recovery readiness unavailable until a Passport is active.";
+                return;
+            }
+
+            var readiness = new PassportRecoveryService(_releaseLane).GetRecoveryReadiness(
+                WorkspaceRoot,
+                ActiveIdentityId);
+            RecoveryReadinessText = readiness.Summary;
         }
     }
 }

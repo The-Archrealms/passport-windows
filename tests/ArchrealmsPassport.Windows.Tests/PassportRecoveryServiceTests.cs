@@ -102,6 +102,53 @@ public sealed class PassportRecoveryServiceTests
     }
 
     [Fact]
+    public void RecoveryReadinessSummarizesDeviceQuorumAndFreezeState()
+    {
+        using var workspace = PassportTestWorkspace.Create();
+        var releaseLane = PassportReleaseLane.CreateDefault("staging");
+        var secondDeviceId = AddSecondActiveDevice(workspace);
+        var recovery = new PassportRecoveryService(releaseLane);
+
+        var ready = recovery.GetRecoveryReadiness(workspace.Root, workspace.IdentityId);
+
+        Assert.Equal(2, ready.RecoverableDeviceCount);
+        Assert.True(ready.QuorumReady);
+        Assert.Contains("quorum ready", ready.Summary, StringComparison.OrdinalIgnoreCase);
+
+        var freeze = recovery.CreateAccountSecurityFreeze(
+            workspace.Root,
+            workspace.IdentityId,
+            workspace.DeviceId,
+            workspace.KeyReferencePath,
+            "identity_compromise",
+            freezeWalletOperations: true,
+            freezePendingEscrow: true,
+            revokeAiSessions: true,
+            pauseStorageNodeOperations: false);
+        Assert.True(freeze.Succeeded, freeze.Message);
+
+        var deauthorization = recovery.CreateDeviceDeauthorization(
+            workspace.Root,
+            workspace.IdentityId,
+            workspace.DeviceId,
+            workspace.KeyReferencePath,
+            secondDeviceId,
+            "device_loss");
+        Assert.True(deauthorization.Succeeded, deauthorization.Message);
+
+        var degraded = recovery.GetRecoveryReadiness(workspace.Root, workspace.IdentityId);
+
+        Assert.Equal(1, degraded.RecoverableDeviceCount);
+        Assert.False(degraded.QuorumReady);
+        Assert.True(degraded.WalletOperationsFrozen);
+        Assert.True(degraded.PendingEscrowFrozen);
+        Assert.True(degraded.AiSessionsRevoked);
+        Assert.False(degraded.StorageNodeOperationsPaused);
+        Assert.Contains("add another device", degraded.Summary, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("wallet frozen", degraded.Summary, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void SupportMediatedRecoveryOverrideRequiresDualControlAuthority()
     {
         using var workspace = PassportTestWorkspace.Create();
