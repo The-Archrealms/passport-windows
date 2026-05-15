@@ -25,6 +25,7 @@ param(
     [string]$CertificatePassword,
     [string]$CertificatePfxBase64,
     [int]$ProductionMvpReadinessEndpointTimeoutSeconds = 10,
+    [string]$ProductionMvpReadinessBypassReason,
     [bool]$SelfContained = $true,
     [switch]$SkipIpfsRuntimeBootstrap,
     [switch]$SkipSignatureVerification,
@@ -485,13 +486,26 @@ try {
 catch {
 }
 
+$productionMvpReadinessGateRequired = [string]::Equals($laneSlug, "production-mvp", [System.StringComparison]::Ordinal)
+$productionMvpReadinessGateSkipped = $false
+$productionMvpReadinessGatePassed = $false
+$productionMvpReadinessReportPath = ""
+$productionMvpReadinessBypassReasonValue = ""
+
 if ([string]::Equals($laneSlug, "production-mvp", [System.StringComparison]::Ordinal)) {
     if ($SkipProductionMvpReadinessGate) {
+        if ([string]::IsNullOrWhiteSpace($ProductionMvpReadinessBypassReason)) {
+            throw "Skipping the ProductionMvp readiness gate requires -ProductionMvpReadinessBypassReason so the bypass is auditable."
+        }
+
+        $productionMvpReadinessGateSkipped = $true
+        $productionMvpReadinessBypassReasonValue = $ProductionMvpReadinessBypassReason.Trim()
         Write-Warning "Skipping ProductionMvp readiness gate. This package must not be treated as production-test ready until the readiness gate passes."
     }
     else {
         $readinessScript = Join-Path $repoRoot "tools\release\Test-PassportProductionMvpReadiness.ps1"
         $readinessReportPath = Join-Path $artifactRoot "production-mvp-readiness-report.json"
+        $productionMvpReadinessReportPath = $readinessReportPath
         $packageSigningConfigured = -not [string]::Equals($certificateSource, "generated-test-certificate", [System.StringComparison]::Ordinal)
         $timestampConfigured = -not [string]::IsNullOrWhiteSpace($TimestampUrl)
         $packageSigningConfiguredValue = if ($packageSigningConfigured) { "1" } else { "0" }
@@ -522,6 +536,8 @@ if ([string]::Equals($laneSlug, "production-mvp", [System.StringComparison]::Ord
             if ($LASTEXITCODE -ne 0) {
                 throw "ProductionMvp readiness gate failed. See $readinessReportPath."
             }
+
+            $productionMvpReadinessGatePassed = $true
         }
         finally {
             foreach ($entry in $previousReadinessEnvironment.GetEnumerator()) {
@@ -792,6 +808,12 @@ $releaseManifest = [pscustomobject]@{
     certificate_path = $certificateCer
     certificate_sha256 = (Get-Sha256 -Path $certificateCer)
     signature_verification_skipped = $SkipSignatureVerification.IsPresent
+    production_mvp_readiness_gate_required = $productionMvpReadinessGateRequired
+    production_mvp_readiness_gate_skipped = $productionMvpReadinessGateSkipped
+    production_mvp_readiness_gate_passed = $productionMvpReadinessGatePassed
+    production_mvp_ready_for_production_testing = ($productionMvpReadinessGateRequired -and $productionMvpReadinessGatePassed -and -not $productionMvpReadinessGateSkipped)
+    production_mvp_readiness_report_path = $productionMvpReadinessReportPath
+    production_mvp_readiness_bypass_reason = $productionMvpReadinessBypassReasonValue
     appx_manifest_path = $layoutManifestPath
     git_commit = $gitCommit
     file_count = @($layoutFiles).Count

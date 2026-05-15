@@ -575,7 +575,7 @@ Canary MVP readiness is the first citizen-facing real-token lane. Generate a can
 
 Production readiness rejects synthetic canary reports. A passing canary report must be non-synthetic, must prove the canary policy limits were enforced, must reconcile ARCH, CC, escrow, burn, refund, re-credit, Crown reserve, and service-delivery records, and must include signed product, engineering, security/privacy, and Crown monetary authority approval for Production MVP promotion.
 
-Production MVP packages are gated by `tools\release\Test-PassportProductionMvpReadiness.ps1`. `Publish-PassportWindowsMsix.ps1 -Lane ProductionMvp` runs this gate automatically unless `-SkipProductionMvpReadinessGate` is supplied. The gate emits `production-mvp-readiness-report.json` and fails until pre-MVP internal verification, staging readiness, canary MVP readiness, package signing, production endpoints, hosted operator controls, managed storage/backups, managed key custody, issuer/capacity/genesis authority IDs, open-weight AI runtime/vector store, telemetry/incident response, and release approvals are configured. Production endpoint URLs must use HTTPS unless they are loopback URLs for local validation. The live probe gates require the corresponding endpoint, operator-key, and managed-custody inputs before they can pass; then the gate calls `/ops/runtime/status`, `/ops/operator/status`, `/ops/storage/status`, `/ai/runtime/status`, `/ai/runtime/probe`, and the managed signing endpoint, and those readiness endpoints must return ready/authorized results.
+Production MVP packages are gated by `tools\release\Test-PassportProductionMvpReadiness.ps1`. `Publish-PassportWindowsMsix.ps1 -Lane ProductionMvp` runs this gate automatically unless `-SkipProductionMvpReadinessGate` is supplied with an explicit `-ProductionMvpReadinessBypassReason`. A bypassed package is marked in `msix-package-manifest.json` and fails `Test-PassportWindowsReleaseArtifact.ps1`; it must not be treated as production-test ready. The gate emits `production-mvp-readiness-report.json` and fails until pre-MVP internal verification, staging readiness, canary MVP readiness, package signing, production endpoints, hosted operator controls, managed storage/backups, managed key custody, issuer/capacity/genesis authority IDs, open-weight AI runtime/vector store, telemetry/incident response, and release approvals are configured. Production endpoint URLs must use HTTPS unless they are loopback URLs for local validation. The live probe gates require the corresponding endpoint, operator-key, and managed-custody inputs before they can pass; then the gate calls `/ops/runtime/status`, `/ops/operator/status`, `/ops/storage/status`, `/ai/runtime/status`, `/ai/runtime/probe`, and the managed signing endpoint, and those readiness endpoints must return ready/authorized results.
 
 Run the gate directly:
 
@@ -591,6 +591,13 @@ The fail-closed regression check clears all ProductionMvp readiness variables an
 ```powershell
 .\tools\release\Test-PassportProductionMvpReadinessFailClosed.ps1 `
   -OutputPath .\artifacts\release\production-mvp-readiness-fail-closed-validation-report.json
+```
+
+The artifact policy regression check verifies that ProductionMvp artifact validation rejects manifests that omit readiness evidence or record a readiness bypass:
+
+```powershell
+.\tools\release\Test-PassportProductionMvpArtifactPolicy.ps1 `
+  -OutputPath .\artifacts\release\production-mvp-artifact-policy-validation-report.json
 ```
 
 Generate a production MVP environment template before wiring secrets or deployment variables:

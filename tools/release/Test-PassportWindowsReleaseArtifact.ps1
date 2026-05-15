@@ -196,6 +196,41 @@ function Test-ReleaseLaneManifest {
     return $laneManifest
 }
 
+function Test-ProductionMvpReadinessManifestPolicy {
+    param(
+        [pscustomobject]$Manifest,
+        [System.Collections.Generic.List[string]]$Failures
+    )
+
+    if (-not $Manifest.PSObject.Properties["production_mvp_readiness_gate_required"]) {
+        Add-Failure -Failures $Failures -Message "ProductionMvp artifact manifest must include production_mvp_readiness_gate_required."
+    }
+    elseif ([bool]$Manifest.production_mvp_readiness_gate_required -ne $true) {
+        Add-Failure -Failures $Failures -Message "ProductionMvp artifact manifest must mark production_mvp_readiness_gate_required=true."
+    }
+
+    if (-not $Manifest.PSObject.Properties["production_mvp_readiness_gate_skipped"]) {
+        Add-Failure -Failures $Failures -Message "ProductionMvp artifact manifest must include production_mvp_readiness_gate_skipped."
+    }
+    elseif ([bool]$Manifest.production_mvp_readiness_gate_skipped -eq $true) {
+        Add-Failure -Failures $Failures -Message "ProductionMvp artifact skipped the readiness gate and cannot be treated as production-test ready."
+    }
+
+    if (-not $Manifest.PSObject.Properties["production_mvp_readiness_gate_passed"]) {
+        Add-Failure -Failures $Failures -Message "ProductionMvp artifact manifest must include production_mvp_readiness_gate_passed."
+    }
+    elseif ([bool]$Manifest.production_mvp_readiness_gate_passed -ne $true) {
+        Add-Failure -Failures $Failures -Message "ProductionMvp artifact did not pass the readiness gate."
+    }
+
+    if (-not $Manifest.PSObject.Properties["production_mvp_ready_for_production_testing"]) {
+        Add-Failure -Failures $Failures -Message "ProductionMvp artifact manifest must include production_mvp_ready_for_production_testing."
+    }
+    elseif ([bool]$Manifest.production_mvp_ready_for_production_testing -ne $true) {
+        Add-Failure -Failures $Failures -Message "ProductionMvp artifact is not marked ready for production testing."
+    }
+}
+
 if (-not $ManifestPath -or $ManifestPath.Count -lt 1) {
     $ManifestPath = @(
         "artifacts\release\passport-windows-win-x64\release-manifest.json",
@@ -258,6 +293,9 @@ try {
             }
 
             $laneManifest = Test-ReleaseLaneManifest -Manifest $manifest -ArtifactRoot $artifactRoot -Failures $failures
+            if ($laneManifest -and [string]::Equals([string]$laneManifest.lane, "production-mvp", [System.StringComparison]::Ordinal)) {
+                Test-ProductionMvpReadinessManifestPolicy -Manifest $manifest -Failures $failures
+            }
         }
 
         if ($RequireBundledIpfs -and -not $bundledIpfsIncluded) {
