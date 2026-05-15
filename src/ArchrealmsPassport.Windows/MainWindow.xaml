@@ -368,6 +368,113 @@
                 </ScrollViewer>
             </TabItem>
 
+            <TabItem Header="Admin">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <Grid Margin="0,18,0,0">
+                        <Border MaxWidth="760"
+                                HorizontalAlignment="Left"
+                                Style="{StaticResource CardStyle}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Admin Authority" />
+
+                                <Grid Margin="0,12,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource FieldLabelStyle}" Text="Action Type" />
+                                    <ComboBox Grid.Row="1"
+                                              Grid.Column="0"
+                                              Margin="0,0,8,0"
+                                              Height="36"
+                                              ItemsSource="{Binding AdminActionTypes}"
+                                              SelectedItem="{Binding AdminActionType, UpdateSourceTrigger=PropertyChanged}" />
+
+                                    <TextBlock Grid.Row="0" Grid.Column="1" Style="{StaticResource FieldLabelStyle}" Text="Authority Scope" />
+                                    <TextBox Grid.Row="1"
+                                             Grid.Column="1"
+                                             Margin="8,0,0,0"
+                                             Style="{StaticResource CodeTextBoxStyle}"
+                                             Text="{Binding AdminAuthorityScope, UpdateSourceTrigger=PropertyChanged}" />
+
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Style="{StaticResource FieldLabelStyle}" Text="Reason Code" />
+                                    <TextBox Grid.Row="3"
+                                             Grid.Column="0"
+                                             Margin="0,0,8,0"
+                                             Style="{StaticResource CodeTextBoxStyle}"
+                                             Text="{Binding AdminReasonCode, UpdateSourceTrigger=PropertyChanged}" />
+
+                                    <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource FieldLabelStyle}" Text="Approver Device ID" />
+                                    <TextBox Grid.Row="3"
+                                             Grid.Column="1"
+                                             Margin="8,0,0,0"
+                                             Style="{StaticResource CodeTextBoxStyle}"
+                                             Text="{Binding AdminApproverDeviceId, UpdateSourceTrigger=PropertyChanged}" />
+
+                                    <TextBlock Grid.Row="4" Grid.ColumnSpan="2" Style="{StaticResource FieldLabelStyle}" Text="Approver Device Key Path" />
+                                    <TextBox Grid.Row="5"
+                                             Grid.ColumnSpan="2"
+                                             Style="{StaticResource CodeTextBoxStyle}"
+                                             Text="{Binding AdminApproverDeviceKeyPath, UpdateSourceTrigger=PropertyChanged}" />
+                                </Grid>
+
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Target Record ID" />
+                                <TextBox Style="{StaticResource CodeTextBoxStyle}" Text="{Binding AdminTargetRecordId, UpdateSourceTrigger=PropertyChanged}" />
+
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Target Record Path" />
+                                <TextBox Style="{StaticResource CodeTextBoxStyle}" Text="{Binding AdminTargetRecordPath, UpdateSourceTrigger=PropertyChanged}" />
+
+                                <WrapPanel Margin="0,12,0,0">
+                                    <Button AutomationProperties.AutomationId="HashAdminTargetRecordButton" Style="{StaticResource SecondaryButtonStyle}" Command="{Binding HashAdminTargetRecordCommand}" Content="Hash Target" />
+                                </WrapPanel>
+
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Target Record SHA-256" />
+                                <TextBox Style="{StaticResource CodeTextBoxStyle}" Text="{Binding AdminTargetRecordSha256, UpdateSourceTrigger=PropertyChanged}" />
+
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Requested Payload SHA-256" />
+                                <TextBox Style="{StaticResource CodeTextBoxStyle}" Text="{Binding AdminRequestedPayloadSha256, UpdateSourceTrigger=PropertyChanged}" />
+
+                                <WrapPanel Margin="0,16,0,0">
+                                    <Button AutomationProperties.AutomationId="CreateAdminAuthorityButton" Style="{StaticResource ActionButtonStyle}" Command="{Binding CreateAdminAuthorityCommand}" Content="Create Authority" />
+                                </WrapPanel>
+
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Status" />
+                                <TextBlock AutomationProperties.AutomationId="AdminAuthorityStatusText"
+                                           Style="{StaticResource StatusValueStyle}"
+                                           Text="{Binding AdminAuthorityStatusText}" />
+
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Authority Record" />
+                                <TextBox Style="{StaticResource CodeTextBoxStyle}" IsReadOnly="True" Text="{Binding LatestAdminAuthorityRecordText, Mode=OneWay}" />
+
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Requester Signature" />
+                                <TextBox Style="{StaticResource CodeTextBoxStyle}" IsReadOnly="True" Text="{Binding LatestAdminRequesterSignatureText, Mode=OneWay}" />
+
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Approver Signature" />
+                                <TextBox Style="{StaticResource CodeTextBoxStyle}" IsReadOnly="True" Text="{Binding LatestAdminApproverSignatureText, Mode=OneWay}" />
+
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Evidence" />
+                                <TextBox AutomationProperties.AutomationId="AdminAuthorityEvidenceTextBox"
+                                         Height="110"
+                                         Style="{StaticResource CodeTextBoxStyle}"
+                                         IsReadOnly="True"
+                                         Text="{Binding LatestAdminAuthorityEvidenceText, Mode=OneWay}"
+                                         AcceptsReturn="True"
+                                         VerticalScrollBarVisibility="Auto" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </ScrollViewer>
+            </TabItem>
+
             <TabItem Header="Storage">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <Grid Margin="0,18,0,0">

@@ -691,6 +691,8 @@ namespace ArchrealmsPassport.Windows.ViewModels
             _deauthorizeDeviceCommand.RaiseCanExecuteChanged();
             _revokeWalletKeyCommand.RaiseCanExecuteChanged();
             _rotateWalletKeyCommand.RaiseCanExecuteChanged();
+            _hashAdminTargetRecordCommand.RaiseCanExecuteChanged();
+            _createAdminAuthorityCommand.RaiseCanExecuteChanged();
             _primaryActionCommand.RaiseCanExecuteChanged();
         }
     }

@@ -44,6 +44,24 @@ namespace ArchrealmsPassport.Windows.ViewModels
             }
         }
 
+        public IReadOnlyList<string> AdminActionTypes
+        {
+            get
+            {
+                return new[]
+                {
+                    "cc_issue",
+                    "ledger_correction",
+                    "wallet_revocation",
+                    "device_revocation",
+                    "recovery_override",
+                    "escrow_release",
+                    "burn_override",
+                    "telemetry_access"
+                };
+            }
+        }
+
         public string CitizenName
         {
             get { return _citizenName; }
@@ -343,6 +361,20 @@ namespace ArchrealmsPassport.Windows.ViewModels
         public string LatestSecurityFreezeText { get { return _latestSecurityFreezeText; } private set { SetField(ref _latestSecurityFreezeText, value); } }
         public string LatestDeviceDeauthorizationText { get { return _latestDeviceDeauthorizationText; } private set { SetField(ref _latestDeviceDeauthorizationText, value); } }
         public string LatestWalletRevocationText { get { return _latestWalletRevocationText; } private set { SetField(ref _latestWalletRevocationText, value); } }
+        public string AdminActionType { get { return _adminActionType; } set { SetField(ref _adminActionType, value); } }
+        public string AdminAuthorityScope { get { return _adminAuthorityScope; } set { SetField(ref _adminAuthorityScope, value); } }
+        public string AdminReasonCode { get { return _adminReasonCode; } set { SetField(ref _adminReasonCode, value); } }
+        public string AdminApproverDeviceId { get { return _adminApproverDeviceId; } set { SetField(ref _adminApproverDeviceId, value); } }
+        public string AdminApproverDeviceKeyPath { get { return _adminApproverDeviceKeyPath; } set { SetField(ref _adminApproverDeviceKeyPath, value); } }
+        public string AdminTargetRecordId { get { return _adminTargetRecordId; } set { SetField(ref _adminTargetRecordId, value); } }
+        public string AdminTargetRecordPath { get { return _adminTargetRecordPath; } set { SetField(ref _adminTargetRecordPath, value); } }
+        public string AdminTargetRecordSha256 { get { return _adminTargetRecordSha256; } set { SetField(ref _adminTargetRecordSha256, value); } }
+        public string AdminRequestedPayloadSha256 { get { return _adminRequestedPayloadSha256; } set { SetField(ref _adminRequestedPayloadSha256, value); } }
+        public string AdminAuthorityStatusText { get { return _adminAuthorityStatusText; } private set { SetField(ref _adminAuthorityStatusText, value); } }
+        public string LatestAdminAuthorityRecordText { get { return _latestAdminAuthorityRecordText; } private set { SetField(ref _latestAdminAuthorityRecordText, value); } }
+        public string LatestAdminRequesterSignatureText { get { return _latestAdminRequesterSignatureText; } private set { SetField(ref _latestAdminRequesterSignatureText, value); } }
+        public string LatestAdminApproverSignatureText { get { return _latestAdminApproverSignatureText; } private set { SetField(ref _latestAdminApproverSignatureText, value); } }
+        public string LatestAdminAuthorityEvidenceText { get { return _latestAdminAuthorityEvidenceText; } private set { SetField(ref _latestAdminAuthorityEvidenceText, value); } }
         public string ActivityLog { get { return _activityLog; } private set { SetField(ref _activityLog, value); } }
 
         public string ReleaseLaneSummaryText

@@ -52,6 +52,8 @@ namespace ArchrealmsPassport.Windows.ViewModels
         private readonly AsyncRelayCommand _deauthorizeDeviceCommand;
         private readonly AsyncRelayCommand _revokeWalletKeyCommand;
         private readonly AsyncRelayCommand _rotateWalletKeyCommand;
+        private readonly AsyncRelayCommand _hashAdminTargetRecordCommand;
+        private readonly AsyncRelayCommand _createAdminAuthorityCommand;
         private readonly AsyncRelayCommand _primaryActionCommand;
 
         private string _citizenName = string.Empty;
@@ -147,6 +149,20 @@ namespace ArchrealmsPassport.Windows.ViewModels
         private string _latestSecurityFreezeText = "No security freeze yet.";
         private string _latestDeviceDeauthorizationText = "No device deauthorization yet.";
         private string _latestWalletRevocationText = "No wallet revocation yet.";
+        private string _adminActionType = "ledger_correction";
+        private string _adminAuthorityScope = "passport_admin";
+        private string _adminReasonCode = "operator_error";
+        private string _adminApproverDeviceId = string.Empty;
+        private string _adminApproverDeviceKeyPath = string.Empty;
+        private string _adminTargetRecordId = string.Empty;
+        private string _adminTargetRecordPath = string.Empty;
+        private string _adminTargetRecordSha256 = string.Empty;
+        private string _adminRequestedPayloadSha256 = string.Empty;
+        private string _adminAuthorityStatusText = "No admin authority action recorded.";
+        private string _latestAdminAuthorityRecordText = "No admin authority record yet.";
+        private string _latestAdminRequesterSignatureText = "No requester signature yet.";
+        private string _latestAdminApproverSignatureText = "No approver signature yet.";
+        private string _latestAdminAuthorityEvidenceText = "No admin authority evidence yet.";
         private string _activityLog = string.Empty;
         private bool _storageNetworkStopInProgress;
 
@@ -204,6 +220,8 @@ namespace ArchrealmsPassport.Windows.ViewModels
             _deauthorizeDeviceCommand = new AsyncRelayCommand(DeauthorizeDeviceAsync, CanUseActiveDeviceCredential);
             _revokeWalletKeyCommand = new AsyncRelayCommand(RevokeWalletKeyAsync, CanRevokeWalletKey);
             _rotateWalletKeyCommand = new AsyncRelayCommand(RotateWalletKeyAsync, CanRevokeWalletKey);
+            _hashAdminTargetRecordCommand = new AsyncRelayCommand(HashAdminTargetRecordAsync, CanHashAdminTargetRecord);
+            _createAdminAuthorityCommand = new AsyncRelayCommand(CreateAdminAuthorityAsync, CanCreateAdminAuthority);
             _primaryActionCommand = new AsyncRelayCommand(ExecutePrimaryActionAsync, CanExecutePrimaryAction);
 
             SaveSettingsCommand = _saveSettingsCommand;
@@ -243,6 +261,8 @@ namespace ArchrealmsPassport.Windows.ViewModels
             DeauthorizeDeviceCommand = _deauthorizeDeviceCommand;
             RevokeWalletKeyCommand = _revokeWalletKeyCommand;
             RotateWalletKeyCommand = _rotateWalletKeyCommand;
+            HashAdminTargetRecordCommand = _hashAdminTargetRecordCommand;
+            CreateAdminAuthorityCommand = _createAdminAuthorityCommand;
             PrimaryActionCommand = _primaryActionCommand;
 
             LoadSettings();
@@ -289,6 +309,8 @@ namespace ArchrealmsPassport.Windows.ViewModels
         public ICommand DeauthorizeDeviceCommand { get; private set; }
         public ICommand RevokeWalletKeyCommand { get; private set; }
         public ICommand RotateWalletKeyCommand { get; private set; }
+        public ICommand HashAdminTargetRecordCommand { get; private set; }
+        public ICommand CreateAdminAuthorityCommand { get; private set; }
         public ICommand PrimaryActionCommand { get; private set; }
     }
 }

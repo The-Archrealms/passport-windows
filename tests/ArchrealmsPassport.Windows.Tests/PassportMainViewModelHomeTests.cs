@@ -113,4 +113,22 @@ public sealed class PassportMainViewModelHomeTests
 
         Assert.Equal("ARCH available 125; CC available 40, escrowed 10, burned 5", summary);
     }
+
+    [Fact]
+    public void AdminAuthorityEvidenceTextUsesServiceEvidenceKeys()
+    {
+        var result = new PassportAdminAuthorityResult
+        {
+            RecordPath = "records/passport/admin-authority/ledger_correction/action.json",
+            RequesterSignaturePath = "records/passport/admin-authority/ledger_correction/requester.json",
+            ApproverSignaturePath = "records/passport/admin-authority/ledger_correction/approver.json"
+        };
+
+        var evidence = PassportMainViewModel.BuildAdminAuthorityEvidenceText(result, new string('a', 64));
+
+        Assert.Contains("admin_authority_record_path=", evidence);
+        Assert.Contains("admin_authority_record_sha256=", evidence);
+        Assert.Contains("admin_authority_requester_signature_path=", evidence);
+        Assert.Contains("admin_authority_approver_signature_path=", evidence);
+    }
 }
