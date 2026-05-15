@@ -264,7 +264,8 @@ if ($null -eq $finalPreviewValidationReport -or [bool]$finalPreviewValidationRep
 $createdUtc = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
 $runbookPath = Join-Path $resolvedOutput "operator-runbook.md"
 $staffPilotReportPath = Resolve-RepoPath -Path "artifacts\release\pre-mvp-staff-steward-pilot-report.json"
-$staffPilotReportValidationPath = Join-Path $resolvedOutput "pilot-report-generation-output.json"
+$staffPilotReportGenerationOutputPath = Join-Path $resolvedOutput "pilot-report-generation-output.json"
+$staffPilotReportValidationPath = Join-Path $resolvedOutput "pilot-report-validation-report.json"
 $finalPreMvpReportPath = Resolve-RepoPath -Path "artifacts\release\pre-mvp-internal-verification-report.json"
 
 $simulationHashExpression = if ($simulationReport.exists) { $simulationReport.sha256 } else { "<simulation-run-report-sha256>" }
@@ -356,9 +357,15 @@ $runbookLines = @(
     "  -ConfirmHostedAiPrivacyValidated ``",
     "  -ConfirmProductionReadinessBlockersReviewed ``",
     "  -ConfirmPilotSignoffSigned ``",
-    "  -ConfirmNoProductionRecordsCreated | Tee-Object -FilePath `"$staffPilotReportValidationPath`"",
+    "  -ConfirmNoProductionRecordsCreated | Tee-Object -FilePath `"$staffPilotReportGenerationOutputPath`"",
     "",
     "`$staffPilotHash = (Get-FileHash -Algorithm SHA256 -LiteralPath `"$staffPilotReportPath`").Hash.ToLowerInvariant()",
+    "",
+    ".\tools\release\Test-PassportPreMvpStaffStewardPilotReport.ps1 ``",
+    "  -ReportPath `"$staffPilotReportPath`" ``",
+    "  -ReportSha256 `$staffPilotHash ``",
+    "  -OutputPath `"$staffPilotReportValidationPath`"",
+    "",
     "`$simulationHash = `"$simulationHashExpression`"",
     "",
     ".\tools\release\Test-PassportPreMvpInternalVerification.ps1 ``",

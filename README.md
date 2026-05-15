@@ -578,6 +578,12 @@ Pre-MVP internal verification has its own gate. Run it after building an `Intern
   -ConfirmPilotSignoffSigned `
   -ConfirmNoProductionRecordsCreated
 
+$staffPilotHash = (Get-FileHash -Algorithm SHA256 .\artifacts\release\pre-mvp-staff-steward-pilot-report.json).Hash.ToLowerInvariant()
+
+.\tools\release\Test-PassportPreMvpStaffStewardPilotReport.ps1 `
+  -ReportPath .\artifacts\release\pre-mvp-staff-steward-pilot-report.json `
+  -ReportSha256 $staffPilotHash
+
 .\tools\release\Test-PassportPreMvpInternalVerification.ps1 `
   -SimulationRunReportPath .\artifacts\release\pre-mvp-simulation-run-report.json `
   -SimulationRunReportSha256 <sha256> `

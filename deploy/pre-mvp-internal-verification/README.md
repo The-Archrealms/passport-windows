@@ -90,7 +90,17 @@ After the staff/steward pilot is complete, generate the pilot report from explic
   -ConfirmNoProductionRecordsCreated
 ```
 
-The templates remain available for controlled document-system review. The generated report includes hashed `evidence_files`; `Test-PassportPreMvpInternalVerification.ps1` verifies those files exist, match their recorded SHA-256 values, and pass the staff/steward pilot evidence packet schema validation. Pass both evidence report paths and SHA-256 hashes to the verifier:
+Validate the generated pilot report and record its SHA-256 before using it to close the umbrella gate:
+
+```powershell
+$staffPilotHash = (Get-FileHash -Algorithm SHA256 .\artifacts\release\pre-mvp-staff-steward-pilot-report.json).Hash.ToLowerInvariant()
+
+.\tools\release\Test-PassportPreMvpStaffStewardPilotReport.ps1 `
+  -ReportPath .\artifacts\release\pre-mvp-staff-steward-pilot-report.json `
+  -ReportSha256 $staffPilotHash
+```
+
+The templates remain available for controlled document-system review. The generated report includes hashed `evidence_files`; `Test-PassportPreMvpStaffStewardPilotReport.ps1` and `Test-PassportPreMvpInternalVerification.ps1` verify those files exist, match their recorded SHA-256 values, and pass the staff/steward pilot evidence packet schema validation. Pass both evidence report paths and SHA-256 hashes to the verifier:
 
 ```powershell
 .\tools\release\Test-PassportPreMvpInternalVerification.ps1 `

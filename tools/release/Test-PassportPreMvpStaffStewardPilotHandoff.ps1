@@ -260,6 +260,7 @@ else {
     foreach ($requiredText in @(
         "Test-PassportPreMvpStaffStewardPilotEvidencePacket.ps1",
         "New-PassportPreMvpStaffStewardPilotReport.ps1",
+        "Test-PassportPreMvpStaffStewardPilotReport.ps1",
         "Test-PassportPreMvpInternalVerification.ps1",
         "must fail",
         "no citizen production ARCH",
