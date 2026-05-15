@@ -8,6 +8,10 @@ param(
 
     [string]$PreMvpReportPath = "artifacts\release\pre-mvp-internal-verification-report.json",
 
+    [switch]$IncludeCurrentStagingReadinessReport,
+
+    [string]$StagingReadinessReportPath = "artifacts\release\staging-readiness-report.json",
+
     [switch]$GenerateOperatorKey,
 
     [switch]$BlankUnconfiguredValues
@@ -101,6 +105,9 @@ $variables = @(
     New-Variable -Gate "pre_mvp_internal_verification" -Name "ARCHREALMS_PASSPORT_PRE_MVP_VERIFICATION_REPORT_PATH" -Description "Path to the passing pre-MVP internal verification report produced by tools/release/Test-PassportPreMvpInternalVerification.ps1."
     New-Variable -Gate "pre_mvp_internal_verification" -Name "ARCHREALMS_PASSPORT_PRE_MVP_VERIFICATION_REPORT_SHA256" -Description "SHA-256 hex digest of the pre-MVP internal verification report."
 
+    New-Variable -Gate "staging_readiness" -Name "ARCHREALMS_PASSPORT_STAGING_READINESS_REPORT_PATH" -Description "Path to the passing staging readiness report produced by tools/release/Test-PassportStagingReadiness.ps1."
+    New-Variable -Gate "staging_readiness" -Name "ARCHREALMS_PASSPORT_STAGING_READINESS_REPORT_SHA256" -Description "SHA-256 hex digest of the staging readiness report."
+
     New-Variable -Gate "package_signing" -Name "PASSPORT_WINDOWS_MSIX_PFX_BASE64" -Required $false -Secret $true -Description "Base64-encoded stable production MVP MSIX signing PFX. Required unless PASSPORT_WINDOWS_MSIX_PFX_PATH is set."
     New-Variable -Gate "package_signing" -Name "PASSPORT_WINDOWS_MSIX_PFX_PATH" -Required $false -Secret $true -Description "Local path to the stable production MVP MSIX signing PFX. Required unless PASSPORT_WINDOWS_MSIX_PFX_BASE64 is set."
     New-Variable -Gate "package_signing" -Name "PASSPORT_WINDOWS_MSIX_PFX_PASSWORD" -Secret $true -Description "Password for the stable production MVP MSIX signing PFX."
@@ -166,6 +173,17 @@ if ($IncludeCurrentPreMvpReport) {
     Set-VariableExample -Variables $variables -Name "ARCHREALMS_PASSPORT_PRE_MVP_VERIFICATION_REPORT_SHA256" -Example $reportSha256
 }
 
+if ($IncludeCurrentStagingReadinessReport) {
+    $resolvedStagingReportPath = [System.IO.Path]::GetFullPath($StagingReadinessReportPath)
+    if (-not (Test-Path -LiteralPath $resolvedStagingReportPath -PathType Leaf)) {
+        throw "Staging readiness report was not found: $resolvedStagingReportPath"
+    }
+
+    $stagingReportSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $resolvedStagingReportPath).Hash.ToLowerInvariant()
+    Set-VariableExample -Variables $variables -Name "ARCHREALMS_PASSPORT_STAGING_READINESS_REPORT_PATH" -Example $resolvedStagingReportPath
+    Set-VariableExample -Variables $variables -Name "ARCHREALMS_PASSPORT_STAGING_READINESS_REPORT_SHA256" -Example $stagingReportSha256
+}
+
 if ($GenerateOperatorKey) {
     $generatedOperatorKey = New-OperatorKey
     $generatedOperatorKeySha256 = Get-Sha256Hex -Bytes ([System.Text.Encoding]::UTF8.GetBytes($generatedOperatorKey.Trim()))
@@ -179,6 +197,7 @@ $template = [pscustomobject][ordered]@{
     readiness_gate = "tools/release/Test-PassportProductionMvpReadiness.ps1"
     note = "Fill the values in a secure deployment environment. Do not commit populated env files."
     current_pre_mvp_report_included = [bool]$IncludeCurrentPreMvpReport
+    current_staging_readiness_report_included = [bool]$IncludeCurrentStagingReadinessReport
     generated_operator_key_included = [bool]$GenerateOperatorKey
     generated_operator_key_sha256 = $generatedOperatorKeySha256
     variables = $variables

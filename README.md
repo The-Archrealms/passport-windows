@@ -537,7 +537,26 @@ Pre-MVP internal verification has its own gate. Run it after building an `Intern
   -OutputPath .\artifacts\release\pre-mvp-internal-verification-report.json
 ```
 
-Production MVP packages are gated by `tools\release\Test-PassportProductionMvpReadiness.ps1`. `Publish-PassportWindowsMsix.ps1 -Lane ProductionMvp` runs this gate automatically unless `-SkipProductionMvpReadinessGate` is supplied. The gate emits `production-mvp-readiness-report.json` and fails until pre-MVP internal verification, package signing, production endpoints, hosted operator controls, managed storage/backups, managed key custody, issuer/capacity/genesis authority IDs, open-weight AI runtime/vector store, telemetry/incident response, and release approvals are configured. Production endpoint URLs must use HTTPS unless they are loopback URLs for local validation. When production API and AI gateway URLs are present, the gate also calls `/ops/runtime/status`, `/ops/operator/status`, `/ops/storage/status`, `/ai/runtime/status`, and `/ai/runtime/probe`; those readiness endpoints must return ready/authorized results.
+Staging readiness has its own gate so canary and production releases cannot skip the PRD staging-exit criterion. Generate a staging environment template after validating a `Staging` artifact with `Test-PassportWindowsReleaseArtifact.ps1`, then fill the staging endpoint, rollback-drill, and promotion-approval evidence:
+
+```powershell
+.\tools\release\New-PassportStagingEnvironmentTemplate.ps1 `
+  -Format Env `
+  -IncludeCurrentPreMvpReport `
+  -IncludeCurrentArtifactValidationReport `
+  -BlankUnconfiguredValues `
+  -OutputPath .\artifacts\release\staging.env
+```
+
+Then run:
+
+```powershell
+.\tools\release\Test-PassportStagingReadiness.ps1 `
+  -EnvironmentFile .\artifacts\release\staging.env `
+  -OutputPath .\artifacts\release\staging-readiness-report.json
+```
+
+Production MVP packages are gated by `tools\release\Test-PassportProductionMvpReadiness.ps1`. `Publish-PassportWindowsMsix.ps1 -Lane ProductionMvp` runs this gate automatically unless `-SkipProductionMvpReadinessGate` is supplied. The gate emits `production-mvp-readiness-report.json` and fails until pre-MVP internal verification, staging readiness, package signing, production endpoints, hosted operator controls, managed storage/backups, managed key custody, issuer/capacity/genesis authority IDs, open-weight AI runtime/vector store, telemetry/incident response, and release approvals are configured. Production endpoint URLs must use HTTPS unless they are loopback URLs for local validation. When production API and AI gateway URLs are present, the gate also calls `/ops/runtime/status`, `/ops/operator/status`, `/ops/storage/status`, `/ai/runtime/status`, and `/ai/runtime/probe`; those readiness endpoints must return ready/authorized results.
 
 Run the gate directly:
 
@@ -562,12 +581,13 @@ For a secure, gitignored working env file, the template generator can also fill 
 .\tools\release\New-PassportProductionMvpEnvironmentTemplate.ps1 `
   -Format Env `
   -IncludeCurrentPreMvpReport `
+  -IncludeCurrentStagingReadinessReport `
   -GenerateOperatorKey `
   -BlankUnconfiguredValues `
   -OutputPath .\artifacts\release\production-mvp.env
 ```
 
-The template lists each readiness-gate variable, whether it is secret, and the gate it satisfies. `-BlankUnconfiguredValues` keeps missing production values empty so the readiness gate reports them as missing instead of trying to validate placeholder URLs or certificates. Populate values only in a secure shell, CI secret store, or deployment environment; populated `.env` files and the `artifacts/` tree are ignored by git. The generated operator key must be stored only in the secure production secret store, while its SHA-256 hash is configured on the hosted service. Populated env files can be passed to the readiness gate or production package publisher with `-EnvironmentFile`. The readiness gate verifies the SHA-256 hash of the pre-MVP internal verification report, validates the production package-signing PFX when available, verifies that `ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY` hashes to `ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY_SHA256`, and authenticates against `/ops/operator/status`. Production hosted signing requires `ARCHREALMS_PASSPORT_HOSTED_SIGNING_ENDPOINT`; local hosted signing-key paths are development-only and fail the ProductionMvp gate. The readiness gate posts a non-mutating `production_mvp_readiness_probe` payload to the managed signing endpoint and verifies the returned RSA signature and public-key hash.
+The template lists each readiness-gate variable, whether it is secret, and the gate it satisfies. `-BlankUnconfiguredValues` keeps missing production values empty so the readiness gate reports them as missing instead of trying to validate placeholder URLs or certificates. Populate values only in a secure shell, CI secret store, or deployment environment; populated `.env` files and the `artifacts/` tree are ignored by git. The generated operator key must be stored only in the secure production secret store, while its SHA-256 hash is configured on the hosted service. Populated env files can be passed to the readiness gate or production package publisher with `-EnvironmentFile`. The readiness gate verifies the SHA-256 hash of the pre-MVP internal verification report and staging readiness report, validates the production package-signing PFX when available, verifies that `ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY` hashes to `ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY_SHA256`, and authenticates against `/ops/operator/status`. Production hosted signing requires `ARCHREALMS_PASSPORT_HOSTED_SIGNING_ENDPOINT`; local hosted signing-key paths are development-only and fail the ProductionMvp gate. The readiness gate posts a non-mutating `production_mvp_readiness_probe` payload to the managed signing endpoint and verifies the returned RSA signature and public-key hash.
 
 Validate the full production provisioning packet before loading approved values into the production environment:
 

@@ -309,6 +309,11 @@ if ($SkipDeploymentValidation) {
         -Description "Production release evidence packet generation and redaction are validated before release signoff." `
         -Passed $false `
         -Failures @("Production release evidence packet validation was skipped; pre-MVP verification cannot pass with skipped deployment validation.")
+    $checks += New-Check `
+        -Id "staging_readiness_gate_validation" `
+        -Description "Staging readiness gate generation and validation are exercised before production release gating can depend on it." `
+        -Passed $false `
+        -Failures @("Staging readiness gate validation was skipped; pre-MVP verification cannot pass with skipped deployment validation.")
 }
 else {
     $checks += New-ToolCheck `
@@ -359,6 +364,10 @@ else {
         -Id "production_release_evidence_packet_validation" `
         -Description "Production release evidence packet generation and redaction are validated before release signoff." `
         -Result (Invoke-Tool -FilePath "powershell" -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "tools\release\Test-PassportProductionMvpReleaseEvidencePacket.ps1", "-UseSyntheticFixtures", "-OutputPath", "artifacts\release\production-mvp-release-evidence-packet-validation-report.json"))
+    $checks += New-ToolCheck `
+        -Id "staging_readiness_gate_validation" `
+        -Description "Staging readiness gate generation and validation are exercised before production release gating can depend on it." `
+        -Result (Invoke-Tool -FilePath "powershell" -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "tools\release\Test-PassportStagingReadiness.ps1", "-UseSyntheticFixtures", "-OutputPath", "artifacts\release\staging-readiness-validation-report.json"))
 }
 
 if ($SkipArtifactValidation) {
@@ -456,6 +465,7 @@ $requirements = @(
     New-Requirement -Id "production_provisioning_packet" -Description "The full production provisioning packet can be validated as one operator handoff before ProductionMvp readiness values are loaded." -CheckIds @("production_provisioning_packet_validation") -Checks $checks -Evidence "Consolidated packet validation runs signing, endpoint, storage, signing-custody, hosted-services, managed-signing, AI runtime, ops, and monetary validators."
     New-Requirement -Id "production_provisioning_packet_scaffold" -Description "The production provisioning packet can be generated as a controlled working copy and validated through PacketRoot mode." -CheckIds @("production_provisioning_packet_scaffold_validation") -Checks $checks -Evidence "Scaffolder copies production provisioning folders, writes a manifest, and validates the generated packet through Test-PassportProductionProvisioningPacket.ps1 -PacketRoot."
     New-Requirement -Id "production_release_evidence_packet" -Description "The production release evidence packet can be generated without serializing environment secrets and can summarize readiness blockers for signoff." -CheckIds @("production_release_evidence_packet_validation") -Checks $checks -Evidence "Release evidence validator uses synthetic fixtures to exercise packet generation, report copying, SHA-256 recording, environment-value redaction, and blocking-gate summary output."
+    New-Requirement -Id "staging_readiness_gate" -Description "The staging readiness gate can prove staging artifact isolation, staging endpoint configuration, rollback evidence, and signed promotion approvals before canary or production release." -CheckIds @("staging_readiness_gate_validation") -Checks $checks -Evidence "Staging readiness validator uses synthetic fixtures to exercise report/hash validation, staging artifact validation, endpoint isolation, rollback evidence, promotion approvals, and no staging-to-production migration checks."
     New-Requirement -Id "no_fake_record_migration" -Description "Pre-MVP fake/synthetic records cannot migrate into production ARCH, CC, Crown reserve, citizen account, or production service-liability records." -CheckIds @("core_tests", "windows_tests", "internal_verification_artifact_lane") -Checks $checks -Evidence "Release-lane artifact validation and ledger replay enforce non-production lane isolation."
 )
 

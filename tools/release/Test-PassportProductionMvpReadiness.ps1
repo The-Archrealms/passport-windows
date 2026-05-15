@@ -872,6 +872,90 @@ function Test-PreMvpInternalVerificationReport {
     return $failures
 }
 
+function Test-StagingReadinessReport {
+    $reportPath = [System.Environment]::GetEnvironmentVariable("ARCHREALMS_PASSPORT_STAGING_READINESS_REPORT_PATH")
+    $expectedHash = [System.Environment]::GetEnvironmentVariable("ARCHREALMS_PASSPORT_STAGING_READINESS_REPORT_SHA256")
+    if ([string]::IsNullOrWhiteSpace($reportPath)) {
+        return ""
+    }
+
+    $failures = @()
+    if (-not (Test-Path -LiteralPath $reportPath -PathType Leaf)) {
+        return "ARCHREALMS_PASSPORT_STAGING_READINESS_REPORT_PATH does not exist"
+    }
+
+    if ([string]::IsNullOrWhiteSpace($expectedHash)) {
+        return $failures
+    }
+    elseif ($expectedHash.Trim() -notmatch '^[0-9a-fA-F]{64}$') {
+        $failures += "ARCHREALMS_PASSPORT_STAGING_READINESS_REPORT_SHA256 must be a SHA-256 hex string"
+    }
+    else {
+        $actualHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $reportPath).Hash.ToLowerInvariant()
+        if (-not [string]::Equals($actualHash, $expectedHash.Trim(), [System.StringComparison]::OrdinalIgnoreCase)) {
+            $failures += "ARCHREALMS_PASSPORT_STAGING_READINESS_REPORT_SHA256 does not match the report file"
+        }
+    }
+
+    try {
+        $report = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json
+    }
+    catch {
+        $failures += "staging readiness report is not valid JSON: $($_.Exception.Message)"
+        return $failures
+    }
+
+    if ($report.schema -ne "archrealms.passport.staging_readiness.v1") {
+        $failures += "staging readiness report has unexpected schema"
+    }
+
+    if ($report.ready -ne $true) {
+        $failures += "staging readiness report did not pass"
+    }
+
+    if ($report.staging_is_mvp -ne $false) {
+        $failures += "staging readiness report must state staging is not the MVP"
+    }
+
+    if ($report.synthetic_fixtures_used -eq $true) {
+        $failures += "production readiness cannot accept a staging readiness report created with synthetic fixtures"
+    }
+
+    if ($report.canary_or_production_release_approved -ne $true) {
+        $failures += "staging readiness report must approve canary or production release promotion"
+    }
+
+    $requiredGateIds = @(
+        "pre_mvp_internal_verification",
+        "staging_package_artifact",
+        "staging_lane_endpoints",
+        "staging_ledger_telemetry",
+        "staging_rollback_drill",
+        "staging_promotion_approvals",
+        "no_staging_to_production_migration"
+    )
+
+    $gatesById = @{}
+    foreach ($gate in @($report.gates)) {
+        if ($gate.id) {
+            $gatesById[[string]$gate.id] = $gate
+        }
+    }
+
+    foreach ($gateId in $requiredGateIds) {
+        if (-not $gatesById.ContainsKey($gateId)) {
+            $failures += "staging readiness report is missing gate $gateId"
+            continue
+        }
+
+        if ($gatesById[$gateId].passed -ne $true) {
+            $failures += "staging readiness gate did not pass: $gateId"
+        }
+    }
+
+    return $failures
+}
+
 function Test-Truthy {
     param(
         [string]$Value
@@ -889,6 +973,15 @@ $gates = @(
             "ARCHREALMS_PASSPORT_PRE_MVP_VERIFICATION_REPORT_SHA256"
         ) `
         -ExtraCheck ${function:Test-PreMvpInternalVerificationReport}
+
+    New-Gate `
+        -Id "staging_readiness" `
+        -Description "Staging has passed with isolated staging records, production-candidate artifacts, rollback evidence, and signed promotion approvals." `
+        -RequiredEnvironment @(
+            "ARCHREALMS_PASSPORT_STAGING_READINESS_REPORT_PATH",
+            "ARCHREALMS_PASSPORT_STAGING_READINESS_REPORT_SHA256"
+        ) `
+        -ExtraCheck ${function:Test-StagingReadinessReport}
 
     New-Gate `
         -Id "package_signing" `
