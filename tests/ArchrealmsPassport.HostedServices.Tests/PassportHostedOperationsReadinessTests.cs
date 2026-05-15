@@ -15,6 +15,7 @@ public sealed class PassportHostedOperationsReadinessTests
             signingKeyProvider: "cloud-kms",
             signingKeyId: "passport-hosted-signing-key",
             signingKeyCustody: "kms",
+            managedSigningEndpoint: "https://signing.archrealms.example/sign",
             localSigningKeyPath: null,
             telemetryDestination: "managed-telemetry",
             telemetryRetentionPolicyUri: "archrealms://policies/telemetry-retention-v1",
@@ -37,6 +38,7 @@ public sealed class PassportHostedOperationsReadinessTests
             signingKeyProvider: "",
             signingKeyId: "",
             signingKeyCustody: "local-file",
+            managedSigningEndpoint: "http://signing.archrealms.example/sign",
             localSigningKeyPath: "keys/hosted-service-signing-key.pkcs8",
             telemetryDestination: "",
             telemetryRetentionPolicyUri: "",
@@ -46,6 +48,7 @@ public sealed class PassportHostedOperationsReadinessTests
         Assert.False(readiness.Ready);
         Assert.Contains("ARCHREALMS_PASSPORT_HOSTED_DATA_ROOT", readiness.Missing);
         Assert.Contains("ARCHREALMS_PASSPORT_HOSTED_SIGNING_KEY_CUSTODY must be managed/kms/hsm", readiness.Missing);
+        Assert.Contains("ARCHREALMS_PASSPORT_HOSTED_SIGNING_ENDPOINT must use HTTPS unless it is a loopback validation URL", readiness.Missing);
         Assert.Contains("ARCHREALMS_PASSPORT_HOSTED_SIGNING_KEY_PATH must not be used for production managed custody", readiness.Missing);
     }
 }

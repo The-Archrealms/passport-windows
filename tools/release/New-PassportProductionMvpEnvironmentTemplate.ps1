@@ -45,6 +45,9 @@ $variables = @(
     New-Variable -Gate "managed_signing_key_custody" -Name "ARCHREALMS_PASSPORT_HOSTED_SIGNING_KEY_PROVIDER" -Description "Managed signing-key provider for hosted service signatures and Crown issuance keys." -Example "cloud-kms"
     New-Variable -Gate "managed_signing_key_custody" -Name "ARCHREALMS_PASSPORT_HOSTED_SIGNING_KEY_ID" -Description "Managed signing-key identifier."
     New-Variable -Gate "managed_signing_key_custody" -Name "ARCHREALMS_PASSPORT_HOSTED_SIGNING_KEY_CUSTODY" -Description "Managed custody mode. Allowed values: managed, kms, hsm, managed-hsm, cloud-kms." -Example "kms"
+    New-Variable -Gate "managed_signing_key_custody" -Name "ARCHREALMS_PASSPORT_HOSTED_SIGNING_ENDPOINT" -Description "HTTPS endpoint for managed service-record signing. The hosted service sends unsigned record payloads here and receives signature/public-key evidence." -Example "https://signing.archrealms.example/sign"
+    New-Variable -Gate "managed_signing_key_custody" -Name "ARCHREALMS_PASSPORT_HOSTED_SIGNING_ENDPOINT_API_KEY" -Required $false -Secret $true -Description "Optional bearer-like secret sent to the managed signing endpoint as X-Archrealms-Managed-Signing-Key."
+    New-Variable -Gate "managed_signing_key_custody" -Name "ARCHREALMS_PASSPORT_HOSTED_SIGNING_TIMEOUT_SECONDS" -Required $false -Description "Optional timeout for managed signing endpoint calls." -Example "10"
 
     New-Variable -Gate "issuer_capacity_genesis_secrets" -Name "ARCHREALMS_PASSPORT_CC_ISSUER_AUTHORITY_ID" -Description "Production MVP Crown Credit issuer authority identifier."
     New-Variable -Gate "issuer_capacity_genesis_secrets" -Name "ARCHREALMS_PASSPORT_CAPACITY_REPORT_ISSUER_ID" -Description "Production MVP conservative capacity-report issuer identifier."

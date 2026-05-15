@@ -159,6 +159,19 @@ function Test-ManagedSigningCustody {
         return "ARCHREALMS_PASSPORT_HOSTED_SIGNING_KEY_PATH must not be used for ProductionMvp managed custody"
     }
 
+    $endpoint = [System.Environment]::GetEnvironmentVariable("ARCHREALMS_PASSPORT_HOSTED_SIGNING_ENDPOINT")
+    if (-not [string]::IsNullOrWhiteSpace($endpoint)) {
+        $uri = $null
+        if (-not [System.Uri]::TryCreate($endpoint.Trim(), [System.UriKind]::Absolute, [ref]$uri)) {
+            return "ARCHREALMS_PASSPORT_HOSTED_SIGNING_ENDPOINT must be an absolute URL"
+        }
+
+        $isHttps = [string]::Equals($uri.Scheme, [System.Uri]::UriSchemeHttps, [System.StringComparison]::OrdinalIgnoreCase)
+        if (-not $isHttps -and -not $uri.IsLoopback) {
+            return "ARCHREALMS_PASSPORT_HOSTED_SIGNING_ENDPOINT must use HTTPS unless it is a loopback validation URL"
+        }
+    }
+
     return ""
 }
 
@@ -356,7 +369,8 @@ $gates = @(
         -RequiredEnvironment @(
             "ARCHREALMS_PASSPORT_HOSTED_SIGNING_KEY_PROVIDER",
             "ARCHREALMS_PASSPORT_HOSTED_SIGNING_KEY_ID",
-            "ARCHREALMS_PASSPORT_HOSTED_SIGNING_KEY_CUSTODY"
+            "ARCHREALMS_PASSPORT_HOSTED_SIGNING_KEY_CUSTODY",
+            "ARCHREALMS_PASSPORT_HOSTED_SIGNING_ENDPOINT"
         ) `
         -ExtraCheck ${function:Test-ManagedSigningCustody}
 

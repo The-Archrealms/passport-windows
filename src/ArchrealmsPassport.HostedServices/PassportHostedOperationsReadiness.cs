@@ -34,6 +34,9 @@ public sealed record PassportHostedOperationsReadiness
     [JsonPropertyName("signing_key_custody")]
     public string SigningKeyCustody { get; init; } = string.Empty;
 
+    [JsonPropertyName("managed_signing_endpoint_configured")]
+    public bool ManagedSigningEndpointConfigured { get; init; }
+
     [JsonPropertyName("local_signing_key_path_configured")]
     public bool LocalSigningKeyPathConfigured { get; init; }
 
@@ -59,6 +62,7 @@ public sealed record PassportHostedOperationsReadiness
             Environment.GetEnvironmentVariable("ARCHREALMS_PASSPORT_HOSTED_SIGNING_KEY_PROVIDER"),
             Environment.GetEnvironmentVariable("ARCHREALMS_PASSPORT_HOSTED_SIGNING_KEY_ID"),
             Environment.GetEnvironmentVariable("ARCHREALMS_PASSPORT_HOSTED_SIGNING_KEY_CUSTODY"),
+            Environment.GetEnvironmentVariable("ARCHREALMS_PASSPORT_HOSTED_SIGNING_ENDPOINT"),
             Environment.GetEnvironmentVariable("ARCHREALMS_PASSPORT_HOSTED_SIGNING_KEY_PATH"),
             Environment.GetEnvironmentVariable("ARCHREALMS_PASSPORT_TELEMETRY_DESTINATION"),
             Environment.GetEnvironmentVariable("ARCHREALMS_PASSPORT_TELEMETRY_RETENTION_POLICY_URI"),
@@ -74,6 +78,7 @@ public sealed record PassportHostedOperationsReadiness
         string? signingKeyProvider,
         string? signingKeyId,
         string? signingKeyCustody,
+        string? managedSigningEndpoint,
         string? localSigningKeyPath,
         string? telemetryDestination,
         string? telemetryRetentionPolicyUri,
@@ -84,6 +89,7 @@ public sealed record PassportHostedOperationsReadiness
         var normalizedStorageProvider = Normalize(storageProvider);
         var normalizedSigningKeyProvider = Normalize(signingKeyProvider);
         var normalizedSigningKeyCustody = Normalize(signingKeyCustody).ToLowerInvariant();
+        var normalizedManagedSigningEndpoint = Normalize(managedSigningEndpoint);
 
         AddIfMissing(missing, "ARCHREALMS_PASSPORT_HOSTED_DATA_ROOT", dataRoot);
         AddIfMissing(missing, "ARCHREALMS_PASSPORT_HOSTED_STORAGE_PROVIDER", normalizedStorageProvider);
@@ -92,6 +98,7 @@ public sealed record PassportHostedOperationsReadiness
         AddIfMissing(missing, "ARCHREALMS_PASSPORT_HOSTED_SIGNING_KEY_PROVIDER", normalizedSigningKeyProvider);
         AddIfMissing(missing, "ARCHREALMS_PASSPORT_HOSTED_SIGNING_KEY_ID", signingKeyId);
         AddIfMissing(missing, "ARCHREALMS_PASSPORT_HOSTED_SIGNING_KEY_CUSTODY", normalizedSigningKeyCustody);
+        AddIfMissing(missing, "ARCHREALMS_PASSPORT_HOSTED_SIGNING_ENDPOINT", normalizedManagedSigningEndpoint);
         AddIfMissing(missing, "ARCHREALMS_PASSPORT_TELEMETRY_DESTINATION", telemetryDestination);
         AddIfMissing(missing, "ARCHREALMS_PASSPORT_TELEMETRY_RETENTION_POLICY_URI", telemetryRetentionPolicyUri);
         AddIfMissing(missing, "ARCHREALMS_PASSPORT_INCIDENT_RESPONSE_RUNBOOK_URI", incidentResponseRunbookUri);
@@ -108,6 +115,12 @@ public sealed record PassportHostedOperationsReadiness
             missing.Add("ARCHREALMS_PASSPORT_HOSTED_SIGNING_KEY_PATH must not be used for production managed custody");
         }
 
+        if (!string.IsNullOrWhiteSpace(normalizedManagedSigningEndpoint)
+            && !IsHttpsOrLoopbackUrl(normalizedManagedSigningEndpoint))
+        {
+            missing.Add("ARCHREALMS_PASSPORT_HOSTED_SIGNING_ENDPOINT must use HTTPS unless it is a loopback validation URL");
+        }
+
         return new PassportHostedOperationsReadiness
         {
             Ready = missing.Count == 0,
@@ -119,6 +132,7 @@ public sealed record PassportHostedOperationsReadiness
             SigningKeyProvider = normalizedSigningKeyProvider,
             SigningKeyIdConfigured = !string.IsNullOrWhiteSpace(signingKeyId),
             SigningKeyCustody = normalizedSigningKeyCustody,
+            ManagedSigningEndpointConfigured = !string.IsNullOrWhiteSpace(normalizedManagedSigningEndpoint),
             LocalSigningKeyPathConfigured = !string.IsNullOrWhiteSpace(localSigningKeyPath),
             TelemetryDestinationConfigured = !string.IsNullOrWhiteSpace(telemetryDestination),
             TelemetryRetentionPolicyUriConfigured = !string.IsNullOrWhiteSpace(telemetryRetentionPolicyUri),
@@ -138,5 +152,12 @@ public sealed record PassportHostedOperationsReadiness
     private static string Normalize(string? value)
     {
         return string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim();
+    }
+
+    private static bool IsHttpsOrLoopbackUrl(string value)
+    {
+        return Uri.TryCreate(value, UriKind.Absolute, out var uri)
+            && (string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
+                || uri.IsLoopback);
     }
 }
