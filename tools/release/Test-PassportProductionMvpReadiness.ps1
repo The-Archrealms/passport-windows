@@ -675,6 +675,102 @@ function Test-ReleaseLaneEndpointUrls {
     return $failures
 }
 
+function Test-PreMvpInternalVerificationReport {
+    $reportPath = [System.Environment]::GetEnvironmentVariable("ARCHREALMS_PASSPORT_PRE_MVP_VERIFICATION_REPORT_PATH")
+    $expectedHash = [System.Environment]::GetEnvironmentVariable("ARCHREALMS_PASSPORT_PRE_MVP_VERIFICATION_REPORT_SHA256")
+    if ([string]::IsNullOrWhiteSpace($reportPath)) {
+        return ""
+    }
+
+    $failures = @()
+    if (-not (Test-Path -LiteralPath $reportPath -PathType Leaf)) {
+        return "ARCHREALMS_PASSPORT_PRE_MVP_VERIFICATION_REPORT_PATH does not exist"
+    }
+
+    if ([string]::IsNullOrWhiteSpace($expectedHash)) {
+        return $failures
+    }
+    elseif ($expectedHash.Trim() -notmatch '^[0-9a-fA-F]{64}$') {
+        $failures += "ARCHREALMS_PASSPORT_PRE_MVP_VERIFICATION_REPORT_SHA256 must be a SHA-256 hex string"
+    }
+    else {
+        $actualHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $reportPath).Hash.ToLowerInvariant()
+        if (-not [string]::Equals($actualHash, $expectedHash.Trim(), [System.StringComparison]::OrdinalIgnoreCase)) {
+            $failures += "ARCHREALMS_PASSPORT_PRE_MVP_VERIFICATION_REPORT_SHA256 does not match the report file"
+        }
+    }
+
+    try {
+        $report = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json
+    }
+    catch {
+        $failures += "pre-MVP internal verification report is not valid JSON: $($_.Exception.Message)"
+        return $failures
+    }
+
+    if ($report.schema -ne "archrealms.passport.pre_mvp_internal_verification.v1") {
+        $failures += "pre-MVP internal verification report has unexpected schema"
+    }
+
+    if ($report.passed -ne $true) {
+        $failures += "pre-MVP internal verification report did not pass"
+    }
+
+    if ($report.pre_mvp_testing_is_mvp -ne $false) {
+        $failures += "pre-MVP internal verification report must state pre-MVP testing is not the MVP"
+    }
+
+    if ($report.citizen_facing_token_release -ne $false) {
+        $failures += "pre-MVP internal verification report must not mark citizen-facing token release complete"
+    }
+
+    if ($report.fake_balance_migration_blocked -ne $true) {
+        $failures += "pre-MVP internal verification report must prove fake-balance migration is blocked"
+    }
+
+    $requiredIds = @(
+        "synthetic_users",
+        "crown_owned_test_devices",
+        "crown_owned_test_storage_nodes",
+        "synthetic_storage_payloads",
+        "fake_balances",
+        "fake_arch",
+        "fake_cc",
+        "ledger_replay_tests",
+        "key_recovery_attacks",
+        "storage_proof_attacks",
+        "storage_revocation_and_wipe_tests",
+        "bandwidth_limit_tests",
+        "escrow_burn_refund_recredit_tests",
+        "market_manipulation_simulations",
+        "service_failure_simulations",
+        "wallet_compromise_simulations",
+        "identity_compromise_simulations",
+        "ai_privacy_and_retention_tests",
+        "no_fake_record_migration"
+    )
+
+    $requirementsById = @{}
+    foreach ($requirement in @($report.requirements)) {
+        if ($requirement.id) {
+            $requirementsById[[string]$requirement.id] = $requirement
+        }
+    }
+
+    foreach ($requiredId in $requiredIds) {
+        if (-not $requirementsById.ContainsKey($requiredId)) {
+            $failures += "pre-MVP internal verification report is missing requirement $requiredId"
+            continue
+        }
+
+        if ($requirementsById[$requiredId].passed -ne $true) {
+            $failures += "pre-MVP internal verification requirement did not pass: $requiredId"
+        }
+    }
+
+    return $failures
+}
+
 function Test-Truthy {
     param(
         [string]$Value
@@ -684,6 +780,15 @@ function Test-Truthy {
 }
 
 $gates = @(
+    New-Gate `
+        -Id "pre_mvp_internal_verification" `
+        -Description "Pre-MVP internal verification has passed and cannot migrate fake ARCH, fake CC, or synthetic records into production balances." `
+        -RequiredEnvironment @(
+            "ARCHREALMS_PASSPORT_PRE_MVP_VERIFICATION_REPORT_PATH",
+            "ARCHREALMS_PASSPORT_PRE_MVP_VERIFICATION_REPORT_SHA256"
+        ) `
+        -ExtraCheck ${function:Test-PreMvpInternalVerificationReport}
+
     New-Gate `
         -Id "package_signing" `
         -Description "Production MVP package signing uses a stable certificate and timestamping, not a generated test certificate." `

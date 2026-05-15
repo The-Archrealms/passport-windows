@@ -80,6 +80,7 @@ The hosted services project provides the production-facing API boundary that Win
 
 ## Current Limits
 
+- Pre-MVP internal verification is guarded by `tools/release/Test-PassportPreMvpInternalVerification.ps1`; the production readiness gate requires a passing report path and SHA-256 hash before `ProductionMvp` can pass.
 - Production MVP package publishing is guarded by `tools/release/Test-PassportProductionMvpReadiness.ps1`; the MSIX publisher runs it automatically for `-Lane ProductionMvp` unless explicitly skipped.
 - When production API and AI gateway URLs are configured, the readiness gate calls `/ops/runtime/status`, `/ops/operator/status`, `/ops/storage/status`, `/ai/runtime/status`, and `/ai/runtime/probe` and requires those endpoints to return the expected ready/authorized results.
 - Production deployment still needs managed durable storage provider configuration, backup/restore runbook URIs, managed signing-key custody, telemetry destination/retention configuration, incident-response owner/runbook configuration, and managed release-lane deployment configuration.

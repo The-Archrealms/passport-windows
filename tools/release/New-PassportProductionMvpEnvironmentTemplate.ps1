@@ -28,6 +28,9 @@ function New-Variable {
 }
 
 $variables = @(
+    New-Variable -Gate "pre_mvp_internal_verification" -Name "ARCHREALMS_PASSPORT_PRE_MVP_VERIFICATION_REPORT_PATH" -Description "Path to the passing pre-MVP internal verification report produced by tools/release/Test-PassportPreMvpInternalVerification.ps1."
+    New-Variable -Gate "pre_mvp_internal_verification" -Name "ARCHREALMS_PASSPORT_PRE_MVP_VERIFICATION_REPORT_SHA256" -Description "SHA-256 hex digest of the pre-MVP internal verification report."
+
     New-Variable -Gate "package_signing" -Name "PASSPORT_WINDOWS_MSIX_PFX_BASE64" -Secret $true -Description "Base64-encoded stable production MVP MSIX signing PFX."
     New-Variable -Gate "package_signing" -Name "PASSPORT_WINDOWS_MSIX_PFX_PASSWORD" -Secret $true -Description "Password for the stable production MVP MSIX signing PFX."
     New-Variable -Gate "package_signing" -Name "PASSPORT_WINDOWS_MSIX_TIMESTAMP_URL" -Description "Authenticode timestamp server used for production MVP package signing." -Example "http://timestamp.sectigo.com"

@@ -1,0 +1,360 @@
+param(
+    [string]$OutputPath = "artifacts\release\pre-mvp-internal-verification-report.json",
+    [string]$DotnetPath,
+    [string]$Configuration = "Release",
+    [string[]]$ManifestPath,
+    [switch]$SkipDotnetTests,
+    [switch]$SkipArtifactValidation,
+    [switch]$NoFail
+)
+
+$ErrorActionPreference = "Stop"
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+
+function Resolve-DotnetPath {
+    param([string]$PreferredPath)
+
+    if (-not $PreferredPath -and $env:ARCHREALMS_DOTNET) {
+        $PreferredPath = $env:ARCHREALMS_DOTNET
+    }
+
+    if ($PreferredPath) {
+        return (Resolve-Path -LiteralPath $PreferredPath).Path
+    }
+
+    return (Get-Command dotnet -ErrorAction Stop).Source
+}
+
+function Format-Command {
+    param(
+        [string]$FilePath,
+        [string[]]$Arguments
+    )
+
+    $parts = @($FilePath)
+    foreach ($argument in $Arguments) {
+        if ($argument -match '\s') {
+            $parts += '"' + $argument.Replace('"', '\"') + '"'
+        }
+        else {
+            $parts += $argument
+        }
+    }
+
+    return ($parts -join " ")
+}
+
+function Get-OutputExcerpt {
+    param([object[]]$Output)
+
+    $text = (($Output | ForEach-Object { $_.ToString() }) -join [Environment]::NewLine).Trim()
+    if ($text.Length -le 4000) {
+        return $text
+    }
+
+    return $text.Substring($text.Length - 4000)
+}
+
+function Invoke-Tool {
+    param(
+        [string]$FilePath,
+        [string[]]$Arguments
+    )
+
+    Push-Location $repoRoot
+    try {
+        $output = & $FilePath @Arguments 2>&1
+        $exitCode = $LASTEXITCODE
+        if ($null -eq $exitCode) {
+            $exitCode = 0
+        }
+
+        return [pscustomobject][ordered]@{
+            command = Format-Command -FilePath $FilePath -Arguments $Arguments
+            exit_code = [int]$exitCode
+            output_excerpt = Get-OutputExcerpt -Output $output
+        }
+    }
+    finally {
+        Pop-Location
+    }
+}
+
+function New-Check {
+    param(
+        [string]$Id,
+        [string]$Description,
+        [bool]$Passed,
+        [string[]]$Failures,
+        [object]$Evidence = $null
+    )
+
+    return [pscustomobject][ordered]@{
+        id = $Id
+        description = $Description
+        passed = $Passed
+        failures = @($Failures)
+        evidence = $Evidence
+    }
+}
+
+function New-ToolCheck {
+    param(
+        [string]$Id,
+        [string]$Description,
+        [object]$Result
+    )
+
+    $failures = @()
+    if ($Result.exit_code -ne 0) {
+        $failures += "$Id exited with code $($Result.exit_code)."
+    }
+
+    return New-Check `
+        -Id $Id `
+        -Description $Description `
+        -Passed ($failures.Count -eq 0) `
+        -Failures $failures `
+        -Evidence $Result
+}
+
+function Get-ManifestLane {
+    param([string]$Path)
+
+    try {
+        $manifest = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
+        if ($manifest.PSObject.Properties["lane"] -and $manifest.lane) {
+            return [string]$manifest.lane
+        }
+    }
+    catch {
+    }
+
+    return ""
+}
+
+function Find-InternalVerificationManifestPaths {
+    $candidates = @(
+        "artifacts\release\passport-windows-win-x64\release-manifest.json",
+        "artifacts\release\passport-windows-msix-sideload\x64\msix-package-manifest.json",
+        "artifacts\release\passport-windows-msix-store\x64\msix-package-manifest.json",
+        "artifacts\release\passport-windows-msix\x64\msix-package-manifest.json"
+    )
+
+    $found = @()
+    foreach ($candidate in $candidates) {
+        $path = Join-Path $repoRoot $candidate
+        if ((Test-Path -LiteralPath $path -PathType Leaf) -and (Get-ManifestLane -Path $path) -eq "internal-verification") {
+            $found += $path
+        }
+    }
+
+    return $found
+}
+
+function Test-CheckPassed {
+    param(
+        [object[]]$Checks,
+        [string]$Id
+    )
+
+    foreach ($check in $Checks) {
+        if ($check.id -eq $Id) {
+            return [bool]$check.passed
+        }
+    }
+
+    return $false
+}
+
+function New-Requirement {
+    param(
+        [string]$Id,
+        [string]$Description,
+        [string[]]$CheckIds,
+        [object[]]$Checks,
+        [string]$Evidence
+    )
+
+    $missing = @()
+    foreach ($checkId in $CheckIds) {
+        if (-not (Test-CheckPassed -Checks $Checks -Id $checkId)) {
+            $missing += $checkId
+        }
+    }
+
+    return [pscustomobject][ordered]@{
+        id = $Id
+        description = $Description
+        check_ids = $CheckIds
+        passed = ($missing.Count -eq 0)
+        missing_checks = $missing
+        evidence = $Evidence
+    }
+}
+
+$checks = @()
+$dotnet = ""
+
+if ($SkipDotnetTests) {
+    $checks += New-Check `
+        -Id "core_tests" `
+        -Description "Platform-neutral core tests cover wallet, ledger, export, registry, and AI authority policies." `
+        -Passed $false `
+        -Failures @("Core tests were skipped; pre-MVP verification cannot pass with skipped tests.")
+    $checks += New-Check `
+        -Id "hosted_service_tests" `
+        -Description "Hosted service tests cover AI gateway, quota, policy, storage, operator, and runtime readiness boundaries." `
+        -Passed $false `
+        -Failures @("Hosted service tests were skipped; pre-MVP verification cannot pass with skipped tests.")
+    $checks += New-Check `
+        -Id "windows_tests" `
+        -Description "Windows Passport tests cover onboarding, wallet, ledger, recovery, storage, conversion, registry, and UI behavior." `
+        -Passed $false `
+        -Failures @("Windows tests were skipped; pre-MVP verification cannot pass with skipped tests.")
+    $checks += New-Check `
+        -Id "ledger_verifier_build" `
+        -Description "Portable ledger verifier builds for independent export replay." `
+        -Passed $false `
+        -Failures @("Ledger verifier build was skipped; pre-MVP verification cannot pass with skipped tests.")
+}
+else {
+    $dotnet = Resolve-DotnetPath -PreferredPath $DotnetPath
+    $checks += New-ToolCheck `
+        -Id "core_tests" `
+        -Description "Platform-neutral core tests cover wallet, ledger, export, registry, and AI authority policies." `
+        -Result (Invoke-Tool -FilePath $dotnet -Arguments @("test", "tests\ArchrealmsPassport.Core.Tests\ArchrealmsPassport.Core.Tests.csproj", "-c", $Configuration, "--no-restore"))
+    $checks += New-ToolCheck `
+        -Id "hosted_service_tests" `
+        -Description "Hosted service tests cover AI gateway, quota, policy, storage, operator, and runtime readiness boundaries." `
+        -Result (Invoke-Tool -FilePath $dotnet -Arguments @("test", "tests\ArchrealmsPassport.HostedServices.Tests\ArchrealmsPassport.HostedServices.Tests.csproj", "-c", $Configuration, "--no-restore"))
+    $checks += New-ToolCheck `
+        -Id "windows_tests" `
+        -Description "Windows Passport tests cover onboarding, wallet, ledger, recovery, storage, conversion, registry, and UI behavior." `
+        -Result (Invoke-Tool -FilePath $dotnet -Arguments @("test", "tests\ArchrealmsPassport.Windows.Tests\ArchrealmsPassport.Windows.Tests.csproj", "-c", $Configuration, "--no-restore"))
+    $checks += New-ToolCheck `
+        -Id "ledger_verifier_build" `
+        -Description "Portable ledger verifier builds for independent export replay." `
+        -Result (Invoke-Tool -FilePath $dotnet -Arguments @("build", "tools\ledger-verifier\Archrealms.LedgerVerifier.csproj", "-c", $Configuration, "--no-restore"))
+}
+
+if ($SkipArtifactValidation) {
+    $checks += New-Check `
+        -Id "internal_verification_artifact_lane" `
+        -Description "InternalVerification artifacts are lane-isolated and cannot migrate fake records into production token ledgers." `
+        -Passed $false `
+        -Failures @("InternalVerification artifact validation was skipped; pre-MVP verification cannot pass with skipped artifact validation.")
+}
+else {
+    $manifestPaths = @()
+    if ($ManifestPath -and $ManifestPath.Count -gt 0) {
+        foreach ($path in $ManifestPath) {
+            $manifestPaths += (Resolve-Path -LiteralPath $path).Path
+        }
+    }
+    else {
+        $manifestPaths = Find-InternalVerificationManifestPaths
+    }
+
+    if (-not $manifestPaths -or $manifestPaths.Count -eq 0) {
+        $checks += New-Check `
+            -Id "internal_verification_artifact_lane" `
+            -Description "InternalVerification artifacts are lane-isolated and cannot migrate fake records into production token ledgers." `
+            -Passed $false `
+            -Failures @("No InternalVerification release artifact manifest was found. Run tools\release\Publish-PassportWindows.ps1 or Publish-PassportWindowsMsix.ps1 with -Lane InternalVerification, or pass -ManifestPath.")
+    }
+    else {
+        $artifactReportPath = Join-Path (Split-Path -Parent ([System.IO.Path]::GetFullPath($OutputPath))) "pre-mvp-internal-artifact-validation-report.json"
+        $validationScript = Join-Path $repoRoot "tools\release\Test-PassportWindowsReleaseArtifact.ps1"
+        $arguments = @("-OutputPath", $artifactReportPath, "-ManifestPath") + $manifestPaths
+        $toolResult = Invoke-Tool -FilePath "powershell" -Arguments (@("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $validationScript) + $arguments)
+        $failures = @()
+        if ($toolResult.exit_code -ne 0) {
+            $failures += "Release artifact validation exited with code $($toolResult.exit_code)."
+        }
+
+        $artifactEvidence = [ordered]@{
+            command = $toolResult.command
+            exit_code = $toolResult.exit_code
+            output_excerpt = $toolResult.output_excerpt
+            manifest_paths = $manifestPaths
+            artifact_report_path = $artifactReportPath
+        }
+
+        if (Test-Path -LiteralPath $artifactReportPath -PathType Leaf) {
+            $artifactReport = Get-Content -LiteralPath $artifactReportPath -Raw | ConvertFrom-Json
+            foreach ($artifact in @($artifactReport.artifacts)) {
+                if ($artifact.lane -ne "internal-verification") {
+                    $failures += "Artifact $($artifact.manifest_path) is lane '$($artifact.lane)', expected 'internal-verification'."
+                }
+            }
+        }
+        else {
+            $failures += "Artifact validation report was not written: $artifactReportPath"
+        }
+
+        $checks += New-Check `
+            -Id "internal_verification_artifact_lane" `
+            -Description "InternalVerification artifacts are lane-isolated and cannot migrate fake records into production token ledgers." `
+            -Passed ($failures.Count -eq 0) `
+            -Failures $failures `
+            -Evidence $artifactEvidence
+    }
+}
+
+$requirements = @(
+    New-Requirement -Id "synthetic_users" -Description "Synthetic users are exercised before citizen-facing token release." -CheckIds @("windows_tests") -Checks $checks -Evidence "Windows tests use isolated PassportTestWorkspace identities and records."
+    New-Requirement -Id "crown_owned_test_devices" -Description "Crown-owned test devices and device authorization flows are exercised." -CheckIds @("windows_tests", "hosted_service_tests") -Checks $checks -Evidence "Device authorization, deauthorization, and hosted recovery validation tests use synthetic device keys."
+    New-Requirement -Id "crown_owned_test_storage_nodes" -Description "Crown-owned storage-node paths are exercised before citizen payloads." -CheckIds @("windows_tests", "hosted_service_tests") -Checks $checks -Evidence "Storage contribution, storage readiness, and storage delivery tests run against isolated local/hosted test roots."
+    New-Requirement -Id "synthetic_storage_payloads" -Description "Storage proof and delivery tests use synthetic payloads." -CheckIds @("windows_tests") -Checks $checks -Evidence "Storage redemption tests validate manifests, proof packages, delivery metering, and failed proof handling without citizen data."
+    New-Requirement -Id "fake_balances" -Description "Fake/pre-MVP balances are isolated from production balances." -CheckIds @("core_tests", "windows_tests", "internal_verification_artifact_lane") -Checks $checks -Evidence "Release-lane tests and artifact validation reject production-token permissions for non-production lanes."
+    New-Requirement -Id "fake_arch" -Description "Fake ARCH cannot migrate into production fixed-genesis ARCH." -CheckIds @("core_tests", "windows_tests", "internal_verification_artifact_lane") -Checks $checks -Evidence "Ledger replay rejects cross-lane records and post-genesis mint-like events."
+    New-Requirement -Id "fake_cc" -Description "Fake CC cannot migrate into production Crown Credit." -CheckIds @("core_tests", "windows_tests", "internal_verification_artifact_lane") -Checks $checks -Evidence "Ledger replay and artifact validation isolate non-production CC records from production ledger namespaces."
+    New-Requirement -Id "ledger_replay_tests" -Description "Ledger replay, export, hash-chain, nonce, and tamper checks pass." -CheckIds @("core_tests", "windows_tests", "ledger_verifier_build") -Checks $checks -Evidence "Core and Windows ledger/export verifier tests cover replay-derived balances and tamper rejection."
+    New-Requirement -Id "key_recovery_attacks" -Description "Key recovery attack paths are exercised." -CheckIds @("windows_tests", "hosted_service_tests") -Checks $checks -Evidence "Recovery, wallet rotation, device deauthorization, support override, and AI-approved recovery rejection tests pass."
+    New-Requirement -Id "storage_proof_attacks" -Description "Storage proof attack paths are exercised." -CheckIds @("windows_tests", "hosted_service_tests") -Checks $checks -Evidence "Storage proof package, quote-rate, burn, readiness, and service-delivery policy tests pass."
+    New-Requirement -Id "storage_revocation_and_wipe_tests" -Description "Storage revocation and wipe-oriented controls are exercised." -CheckIds @("windows_tests") -Checks $checks -Evidence "Home/recovery/storage tests cover storage pause scope, contribution lifecycle, and failed startup recovery paths."
+    New-Requirement -Id "bandwidth_limit_tests" -Description "Bandwidth and unmetered-network controls are exercised." -CheckIds @("windows_tests") -Checks $checks -Evidence "Network usage and storage contribution tests cover unmetered-network/bandwidth behavior."
+    New-Requirement -Id "escrow_burn_refund_recredit_tests" -Description "Escrow, burn, refund, and re-credit flows are exercised." -CheckIds @("core_tests", "windows_tests") -Checks $checks -Evidence "Monetary semantics and storage redemption tests cover CC escrow, burn, refund, and failed-epoch re-credit."
+    New-Requirement -Id "market_manipulation_simulations" -Description "Market manipulation and thin-market issuance paths are exercised." -CheckIds @("windows_tests", "hosted_service_tests") -Checks $checks -Evidence "Capacity report tests reject thin-market zero-issuance and over-limit issuance paths."
+    New-Requirement -Id "service_failure_simulations" -Description "Service failure, refund, re-credit, and extension paths are exercised." -CheckIds @("windows_tests") -Checks $checks -Evidence "Storage failure remedy tests create refund, re-credit, service-extension, and admin release records."
+    New-Requirement -Id "wallet_compromise_simulations" -Description "Wallet compromise and revoked-wallet paths are exercised." -CheckIds @("windows_tests", "core_tests") -Checks $checks -Evidence "Wallet revocation and production ledger tests reject revoked wallet keys."
+    New-Requirement -Id "identity_compromise_simulations" -Description "Identity compromise and device deauthorization paths are exercised." -CheckIds @("windows_tests", "hosted_service_tests") -Checks $checks -Evidence "Recovery tests cover identity_compromise freezes, device deauthorization, and hosted recovery validation."
+    New-Requirement -Id "ai_privacy_and_retention_tests" -Description "AI privacy, retention, quota, and non-authority controls are exercised." -CheckIds @("core_tests", "windows_tests", "hosted_service_tests") -Checks $checks -Evidence "AI policy tests cover no-training defaults, raw-prompt retention metadata, token-hash-only records, quota enforcement, and non-authority boundaries."
+    New-Requirement -Id "no_fake_record_migration" -Description "Pre-MVP fake/synthetic records cannot migrate into production ARCH, CC, Crown reserve, citizen account, or production service-liability records." -CheckIds @("core_tests", "windows_tests", "internal_verification_artifact_lane") -Checks $checks -Evidence "Release-lane artifact validation and ledger replay enforce non-production lane isolation."
+)
+
+$failedChecks = @($checks | Where-Object { -not $_.passed })
+$failedRequirements = @($requirements | Where-Object { -not $_.passed })
+$report = [pscustomobject][ordered]@{
+    schema = "archrealms.passport.pre_mvp_internal_verification.v1"
+    created_utc = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
+    repo_root = $repoRoot
+    configuration = $Configuration
+    dotnet_path = $dotnet
+    pre_mvp_testing_is_mvp = $false
+    citizen_facing_token_release = $false
+    fake_balance_migration_blocked = ((@($requirements | Where-Object { $_.id -eq "no_fake_record_migration" }) | Select-Object -First 1).passed -eq $true)
+    passed = ($failedChecks.Count -eq 0 -and $failedRequirements.Count -eq 0)
+    failed_check_count = $failedChecks.Count
+    failed_requirement_count = $failedRequirements.Count
+    checks = $checks
+    requirements = $requirements
+}
+
+$json = $report | ConvertTo-Json -Depth 10
+if ($OutputPath) {
+    $resolvedOutputPath = [System.IO.Path]::GetFullPath($OutputPath)
+    $outputDirectory = Split-Path -Parent $resolvedOutputPath
+    if ($outputDirectory) {
+        New-Item -ItemType Directory -Force -Path $outputDirectory | Out-Null
+    }
+
+    Set-Content -LiteralPath $resolvedOutputPath -Value $json -Encoding UTF8
+}
+
+$json
+if (-not $report.passed -and -not $NoFail) {
+    $failedIds = @($failedChecks | ForEach-Object { $_.id }) + @($failedRequirements | ForEach-Object { $_.id })
+    throw "Pre-MVP internal verification failed. Missing gates: " + ($failedIds -join ", ")
+}
