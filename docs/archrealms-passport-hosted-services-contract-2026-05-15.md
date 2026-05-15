@@ -90,4 +90,4 @@ The hosted services project provides the production-facing API boundary that Win
 
 - Hosted service build: `dotnet build .\src\ArchrealmsPassport.HostedServices\ArchrealmsPassport.HostedServices.csproj -c Release`
 - Hosted service tests: `dotnet test .\tests\ArchrealmsPassport.HostedServices.Tests\ArchrealmsPassport.HostedServices.Tests.csproj -c Release` currently covers the hosted AI challenge, session, quota, chat, feedback, status, runtime status, and runtime probe policies.
-- Windows Passport uses `/ai/session` for remote gateways and keeps the local preview path for `https://ai.archrealms.local`.
+- Windows Passport uses `/ai/challenge` followed by `/ai/session` for remote gateways and keeps the offline local preview challenge/session path for `https://ai.archrealms.local`.

@@ -11,7 +11,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
             _settingsStore.Save(CreateSettingsSnapshot());
 
             var service = new PassportAiGatewayService(_releaseLane);
-            var request = service.CreateSessionRequest(
+            var request = await service.CreateSessionRequestAsync(
                 WorkspaceRoot,
                 ActiveIdentityId,
                 ActiveDeviceId,

@@ -67,13 +67,54 @@ public sealed class PassportAiGatewayServiceTests
         var releaseLane = PassportReleaseLane.CreateDefault("production-mvp");
         var token = "hosted-token";
         var tokenSha256 = ComputeSha256(Encoding.UTF8.GetBytes(token));
+        var challengeRequested = false;
         var handler = new DelegateHttpMessageHandler(async request =>
         {
             Assert.Equal(HttpMethod.Post, request.Method);
-            Assert.EndsWith("/ai/session", request.RequestUri!.AbsolutePath, StringComparison.Ordinal);
+            if (request.RequestUri!.AbsolutePath.EndsWith("/ai/challenge", StringComparison.Ordinal))
+            {
+                using var challengeBody = JsonDocument.Parse(await request.Content!.ReadAsStringAsync());
+                var challengeRoot = challengeBody.RootElement;
+                Assert.Equal(workspace.IdentityId, PassportTestWorkspace.GetString(challengeRoot, "archrealms_identity_id"));
+                Assert.Equal(workspace.DeviceId, PassportTestWorkspace.GetString(challengeRoot, "device_id"));
+                challengeRequested = true;
+                var challengeRecord = new Dictionary<string, object?>
+                {
+                    ["schema_version"] = 1,
+                    ["record_type"] = "passport_ai_challenge",
+                    ["record_id"] = "challenge-1",
+                    ["challenge_id"] = "challenge-1",
+                    ["expires_utc"] = DateTime.UtcNow.AddMinutes(5).ToString("yyyy-MM-ddTHH:mm:ssZ"),
+                    ["challenge_nonce"] = "hosted-nonce",
+                    ["challenge_audience"] = "archrealms-ai-gateway",
+                    ["requested_scopes"] = new[] { "ai_guide" }
+                };
+                var challengeResponse = new Dictionary<string, object?>
+                {
+                    ["succeeded"] = true,
+                    ["message"] = "AI challenge issued.",
+                    ["challenge_id"] = "challenge-1",
+                    ["challenge_nonce"] = "hosted-nonce",
+                    ["challenge_audience"] = "archrealms-ai-gateway",
+                    ["expires_utc"] = DateTime.UtcNow.AddMinutes(5).ToString("yyyy-MM-ddTHH:mm:ssZ"),
+                    ["challenge_record_sha256"] = new string('c', 64),
+                    ["challenge_record"] = challengeRecord
+                };
+
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(JsonSerializer.Serialize(challengeResponse), Encoding.UTF8, "application/json")
+                };
+            }
+
+            Assert.True(challengeRequested);
+            Assert.EndsWith("/ai/session", request.RequestUri.AbsolutePath, StringComparison.Ordinal);
             using var body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync());
             var root = body.RootElement;
             Assert.Equal("passport_ai_session_request", PassportTestWorkspace.GetString(root.GetProperty("request_record"), "record_type"));
+            var signedChallenge = root.GetProperty("request_record").GetProperty("challenge");
+            Assert.Equal("challenge-1", PassportTestWorkspace.GetString(signedChallenge, "challenge_id"));
+            Assert.Equal("hosted-nonce", PassportTestWorkspace.GetString(signedChallenge, "challenge_nonce"));
             Assert.False(string.IsNullOrWhiteSpace(PassportTestWorkspace.GetString(root, "signed_payload_base64")));
             Assert.False(string.IsNullOrWhiteSpace(PassportTestWorkspace.GetString(root, "signature_base64")));
             Assert.False(string.IsNullOrWhiteSpace(PassportTestWorkspace.GetString(root, "device_public_key_spki_der_base64")));
@@ -130,7 +171,7 @@ public sealed class PassportAiGatewayServiceTests
             };
         });
         var service = new PassportAiGatewayService(releaseLane, new HttpClient(handler));
-        var requestRecord = service.CreateSessionRequest(
+        var requestRecord = await service.CreateSessionRequestAsync(
             workspace.Root,
             workspace.IdentityId,
             workspace.DeviceId,

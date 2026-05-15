@@ -29,6 +29,66 @@ namespace ArchrealmsPassport.Windows.Services
             this.httpClient = httpClient ?? new HttpClient();
         }
 
+        public async Task<PassportAiSessionResult> CreateSessionRequestAsync(
+            string workspaceRoot,
+            string identityId,
+            string deviceId,
+            string deviceKeyReferencePath,
+            string gatewayUrl,
+            string knowledgePackId,
+            bool diagnosticsUploadOptIn,
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            var resolvedWorkspaceRoot = PassportEnvironment.ResolveWorkspaceRoot(workspaceRoot);
+            if (string.IsNullOrWhiteSpace(identityId) || string.IsNullOrWhiteSpace(deviceId))
+            {
+                return Failed("AI session request requires an active Passport identity and device.");
+            }
+
+            if (string.IsNullOrWhiteSpace(deviceKeyReferencePath) || !PassportDeviceKeyStore.ReferenceExists(deviceKeyReferencePath))
+            {
+                return Failed("AI session request requires the active Passport device key.");
+            }
+
+            if (new PassportRecoveryService(releaseLane).AreAiSessionsRevoked(resolvedWorkspaceRoot, identityId))
+            {
+                return Failed("AI sessions are revoked by the current account security freeze.");
+            }
+
+            var normalizedGatewayUrl = string.IsNullOrWhiteSpace(gatewayUrl) ? PassportAiProtocolDefaults.LocalGatewayUrl : gatewayUrl.Trim();
+            if (!ShouldUseHostedGateway(normalizedGatewayUrl))
+            {
+                return CreateSessionRequest(
+                    resolvedWorkspaceRoot,
+                    identityId,
+                    deviceId,
+                    deviceKeyReferencePath,
+                    normalizedGatewayUrl,
+                    knowledgePackId,
+                    diagnosticsUploadOptIn);
+            }
+
+            var challenge = await RequestHostedChallengeAsync(
+                normalizedGatewayUrl,
+                identityId,
+                deviceId,
+                cancellationToken).ConfigureAwait(false);
+            if (!challenge.Succeeded || challenge.Challenge == null)
+            {
+                return Failed(challenge.Message);
+            }
+
+            return CreateSessionRequest(
+                resolvedWorkspaceRoot,
+                identityId,
+                deviceId,
+                deviceKeyReferencePath,
+                normalizedGatewayUrl,
+                knowledgePackId,
+                diagnosticsUploadOptIn,
+                challenge.Challenge);
+        }
+
         public PassportAiSessionResult CreateSessionRequest(
             string workspaceRoot,
             string identityId,
@@ -36,7 +96,8 @@ namespace ArchrealmsPassport.Windows.Services
             string deviceKeyReferencePath,
             string gatewayUrl,
             string knowledgePackId,
-            bool diagnosticsUploadOptIn)
+            bool diagnosticsUploadOptIn,
+            Dictionary<string, object?>? hostedChallenge = null)
         {
             try
             {
@@ -66,9 +127,14 @@ namespace ArchrealmsPassport.Windows.Services
                 var payloadPath = Path.Combine(requestRoot, "ai-session-request.payload.json");
                 var signaturePath = Path.Combine(requestRoot, "ai-session-request.sig");
                 var recordPath = Path.Combine(requestRoot, "ai-session-request.json");
-                var nonce = CreateToken();
                 var normalizedGatewayUrl = string.IsNullOrWhiteSpace(gatewayUrl) ? PassportAiProtocolDefaults.LocalGatewayUrl : gatewayUrl.Trim();
                 var normalizedKnowledgePackId = string.IsNullOrWhiteSpace(knowledgePackId) ? PassportAiProtocolDefaults.ApprovedKnowledgePackId : knowledgePackId.Trim();
+                var challenge = hostedChallenge ?? new Dictionary<string, object?>
+                {
+                    ["challenge_nonce"] = CreateToken(),
+                    ["audience"] = PassportAiProtocolDefaults.GatewayAudience,
+                    ["requested_scopes"] = new[] { "ai_guide" }
+                };
 
                 var record = new Dictionary<string, object?>
                 {
@@ -85,12 +151,7 @@ namespace ArchrealmsPassport.Windows.Services
                     ["device_id"] = deviceId.Trim(),
                     ["gateway_url"] = normalizedGatewayUrl,
                     ["approved_knowledge_pack_id"] = normalizedKnowledgePackId,
-                    ["challenge"] = new Dictionary<string, object?>
-                    {
-                        ["challenge_nonce"] = nonce,
-                        ["audience"] = PassportAiProtocolDefaults.GatewayAudience,
-                        ["requested_scopes"] = new[] { "ai_guide" }
-                    },
+                    ["challenge"] = challenge,
                     ["privacy"] = new Dictionary<string, object?>
                     {
                         ["diagnostics_upload_opt_in"] = diagnosticsUploadOptIn,
@@ -236,6 +297,76 @@ namespace ArchrealmsPassport.Windows.Services
             catch (Exception ex)
             {
                 return Failed("AI gateway session failed: " + ex.Message);
+            }
+        }
+
+        private async Task<HostedAiChallengeResult> RequestHostedChallengeAsync(
+            string gatewayUrl,
+            string identityId,
+            string deviceId,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                var payload = new Dictionary<string, object?>
+                {
+                    ["archrealms_identity_id"] = identityId.Trim(),
+                    ["device_id"] = deviceId.Trim(),
+                    ["release_lane"] = releaseLane.Lane,
+                    ["ledger_namespace"] = releaseLane.LedgerNamespace,
+                    ["policy_version"] = releaseLane.PolicyVersion,
+                    ["client_build"] = typeof(PassportAiGatewayService).Assembly.GetName().Version?.ToString() ?? "unknown",
+                    ["requested_scopes"] = new[] { "ai_guide" }
+                };
+
+                using var httpRequest = new HttpRequestMessage(HttpMethod.Post, BuildGatewayEndpoint(gatewayUrl, PassportAiProtocolDefaults.ChallengeEndpoint));
+                httpRequest.Content = new StringContent(JsonSerializer.Serialize(payload, JsonOptions), Encoding.UTF8, "application/json");
+                using var response = await httpClient.SendAsync(httpRequest, cancellationToken).ConfigureAwait(false);
+                var responseText = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                if (!response.IsSuccessStatusCode)
+                {
+                    return HostedAiChallengeResult.Failed("Hosted AI gateway rejected the challenge request: " + response.StatusCode);
+                }
+
+                using var responseDocument = JsonDocument.Parse(responseText);
+                var root = responseDocument.RootElement;
+                if (!ReadBoolean(root, "succeeded"))
+                {
+                    return HostedAiChallengeResult.Failed(ReadString(root, "message"));
+                }
+
+                var challengeId = ReadString(root, "challenge_id");
+                var nonce = ReadString(root, "challenge_nonce");
+                var audience = ReadString(root, "challenge_audience");
+                var expiresUtc = ReadString(root, "expires_utc");
+                var challengeRecordSha256 = ReadString(root, "challenge_record_sha256");
+                if (string.IsNullOrWhiteSpace(nonce) || !string.Equals(audience, PassportAiProtocolDefaults.GatewayAudience, StringComparison.Ordinal))
+                {
+                    return HostedAiChallengeResult.Failed("Hosted AI gateway returned an invalid challenge.");
+                }
+
+                var challenge = new Dictionary<string, object?>
+                {
+                    ["challenge_id"] = challengeId,
+                    ["challenge_nonce"] = nonce,
+                    ["audience"] = audience,
+                    ["expires_utc"] = expiresUtc,
+                    ["requested_scopes"] = new[] { "ai_guide" },
+                    ["challenge_record_sha256"] = challengeRecordSha256
+                };
+
+                if (root.TryGetProperty("challenge_record", out var challengeRecord)
+                    && challengeRecord.ValueKind == JsonValueKind.Object)
+                {
+                    challenge["challenge_record_type"] = ReadString(challengeRecord, "record_type");
+                    challenge["challenge_record_id"] = ReadString(challengeRecord, "record_id");
+                }
+
+                return HostedAiChallengeResult.Success(challenge);
+            }
+            catch (Exception ex)
+            {
+                return HostedAiChallengeResult.Failed("Hosted AI gateway challenge failed: " + ex.Message);
             }
         }
 
@@ -556,6 +687,32 @@ namespace ArchrealmsPassport.Windows.Services
                 Succeeded = false,
                 Message = message
             };
+        }
+
+        private sealed class HostedAiChallengeResult
+        {
+            private HostedAiChallengeResult(bool succeeded, string message, Dictionary<string, object?>? challenge)
+            {
+                Succeeded = succeeded;
+                Message = message;
+                Challenge = challenge;
+            }
+
+            public bool Succeeded { get; }
+
+            public string Message { get; }
+
+            public Dictionary<string, object?>? Challenge { get; }
+
+            public static HostedAiChallengeResult Success(Dictionary<string, object?> challenge)
+            {
+                return new HostedAiChallengeResult(true, "Hosted AI challenge received.", challenge);
+            }
+
+            public static HostedAiChallengeResult Failed(string message)
+            {
+                return new HostedAiChallengeResult(false, message, null);
+            }
         }
     }
 }
