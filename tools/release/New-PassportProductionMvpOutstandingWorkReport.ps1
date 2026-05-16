@@ -193,6 +193,35 @@ function Get-ActionCommandArray {
     return ,[string[]]$commands
 }
 
+function New-BlockerSummary {
+    param(
+        [string]$Title,
+        [string[]]$Failures = @(),
+        [object]$OperatorAction = $null
+    )
+
+    $parts = @()
+    $titleText = ConvertTo-ReportText -Value $Title
+    if (-not [string]::IsNullOrWhiteSpace($titleText)) {
+        $parts += $titleText
+    }
+
+    $firstFailure = @($Failures | ForEach-Object { ConvertTo-ReportText -Value $_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -First 1)
+    if ($firstFailure.Count -gt 0) {
+        $parts += "Failure: $($firstFailure[0])"
+    }
+
+    if ($null -ne $OperatorAction -and $OperatorAction.PSObject.Properties["action"]) {
+        $actionText = ConvertTo-ReportText -Value $OperatorAction.action
+        if (-not [string]::IsNullOrWhiteSpace($actionText)) {
+            $parts += "Next: $actionText"
+        }
+    }
+
+    $summary = ($parts | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join " "
+    return ConvertTo-ReportText -Value $summary
+}
+
 function New-Blocker {
     param(
         [string]$Id,
@@ -208,6 +237,7 @@ function New-Blocker {
         id = $Id
         category = $Category
         title = ConvertTo-ReportText -Value $Title
+        summary = New-BlockerSummary -Title $Title -Failures $Failures -OperatorAction $OperatorAction
         status = "blocked"
         source = $Source
         source_ids = @($SourceIds | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | ForEach-Object { [string]$_ })
@@ -1081,6 +1111,9 @@ if (-not [string]::IsNullOrWhiteSpace($MarkdownOutputPath)) {
     else {
         foreach ($blocker in @($blockers)) {
             $lines.Add("- ``$($blocker.id)`` [$($blocker.category)]: $($blocker.title)")
+            if (-not [string]::IsNullOrWhiteSpace([string]$blocker.summary)) {
+                $lines.Add("  - Summary: $($blocker.summary)")
+            }
             foreach ($failure in @($blocker.failures | Select-Object -First 3)) {
                 if (-not [string]::IsNullOrWhiteSpace([string]$failure)) {
                     $lines.Add("  - $failure")

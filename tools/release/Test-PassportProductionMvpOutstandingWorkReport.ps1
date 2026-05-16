@@ -408,7 +408,7 @@ if ($null -ne $report) {
             $seenBlockerIds[$blockerId] = $true
         }
 
-        foreach ($fieldName in @("category", "title", "source")) {
+        foreach ($fieldName in @("category", "title", "summary", "source")) {
             if ([string]::IsNullOrWhiteSpace([string]$blocker.$fieldName)) {
                 $blockerContractFailures += "blocker $blockerId is missing $fieldName."
             }
@@ -448,6 +448,9 @@ if ($null -ne $report) {
         foreach ($blocker in $blockers) {
             if ($markdown -notmatch [regex]::Escape([string]$blocker.id)) {
                 $markdownFailures += "Markdown does not include blocker id: $($blocker.id)"
+            }
+            if ($blocker.PSObject.Properties["summary"] -and -not [string]::IsNullOrWhiteSpace([string]$blocker.summary) -and $markdown -notmatch [regex]::Escape([string]$blocker.summary)) {
+                $markdownFailures += "Markdown does not include blocker summary: $($blocker.id)"
             }
         }
         foreach ($gate in $failedReadinessGates) {
