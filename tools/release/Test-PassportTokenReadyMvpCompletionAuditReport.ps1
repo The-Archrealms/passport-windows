@@ -616,6 +616,10 @@ foreach ($item in $checklist) {
         $itemFailures += "$id requirement is missing"
     }
 
+    if ([string]::IsNullOrWhiteSpace([string]$item.summary)) {
+        $itemFailures += "$id summary is missing"
+    }
+
     if ($allowedStatuses -notcontains [string]$item.status) {
         $itemFailures += "$id status is invalid: $($item.status)"
     }
@@ -808,6 +812,11 @@ if ($markdownExists) {
     foreach ($id in $requiredChecklistIds) {
         if ($markdown -notmatch [regex]::Escape($id)) {
             $markdownFailures += "Markdown does not include checklist id: $id"
+        }
+    }
+    foreach ($item in $checklist) {
+        if ($item.PSObject.Properties["summary"] -and -not [string]::IsNullOrWhiteSpace([string]$item.summary) -and $markdown -notmatch [regex]::Escape([string]$item.summary)) {
+            $markdownFailures += "Markdown does not include checklist summary: $($item.id)"
         }
     }
 

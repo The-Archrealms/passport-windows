@@ -199,6 +199,33 @@ function New-ManualAction {
     }
 }
 
+function New-AuditItemSummary {
+    param(
+        [string]$Requirement,
+        [string]$Status,
+        [string[]]$Blockers = @(),
+        [object[]]$OperatorActions = @()
+    )
+
+    $parts = @()
+    $requirementText = ConvertTo-AuditText -Value $Requirement
+    if (-not [string]::IsNullOrWhiteSpace($requirementText)) {
+        $parts += "$($Status): $requirementText"
+    }
+
+    $firstBlocker = @($Blockers | ForEach-Object { ConvertTo-AuditText -Value $_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -First 1)
+    if ($firstBlocker.Count -gt 0) {
+        $parts += "Blocker: $($firstBlocker[0])"
+    }
+
+    $firstAction = @($OperatorActions | Where-Object { $null -ne $_ -and $_.PSObject.Properties["action"] -and -not [string]::IsNullOrWhiteSpace([string]$_.action) } | Select-Object -First 1)
+    if ($firstAction.Count -gt 0) {
+        $parts += "Next: $(ConvertTo-AuditText -Value $firstAction[0].action)"
+    }
+
+    return ConvertTo-AuditText -Value (($parts | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join " ")
+}
+
 function New-AuditItem {
     param(
         [string]$Id,
@@ -217,6 +244,7 @@ function New-AuditItem {
         id = $Id
         source = $Source
         requirement = $Requirement
+        summary = New-AuditItemSummary -Requirement $Requirement -Status $Status -Blockers $Blockers -OperatorActions $OperatorActions
         status = $Status
         evidence_ids = @($EvidenceIds)
         coverage_check_ids = @($CoverageCheckIds | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
@@ -564,6 +592,9 @@ if (-not [string]::IsNullOrWhiteSpace($MarkdownOutputPath)) {
     $lines.Add("## Checklist")
     foreach ($item in $items) {
         $lines.Add("- ``$($item.id)`` [$($item.status)]: $($item.requirement)")
+        if (-not [string]::IsNullOrWhiteSpace([string]$item.summary)) {
+            $lines.Add("  - Summary: $($item.summary)")
+        }
         if (@($item.evidence_ids).Count -gt 0) {
             $lines.Add("  - Evidence: $((@($item.evidence_ids) -join ', '))")
         }
