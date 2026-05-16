@@ -835,6 +835,60 @@ $items += New-AuditItem `
     -ImplementationReady ($aiImplementationStatus -eq "passed")
 
 $items += New-AuditItem `
+    -Id "ard_ai_challenge_session_acceptance" `
+    -Source "Hosted Open-Weight AI ARD Acceptance Criteria" `
+    -Requirement "Passport can obtain an AI challenge, sign it with identity/device keys, reject expired/wrong-lane/revoked-device/invalid-signature challenges, and receive a short-lived AI session token separate from wallet keys." `
+    -Status $aiImplementationStatus `
+    -EvidenceIds @("pre_mvp_internal_verification") `
+    -CoverageCheckIds @("hosted_ai_targeted_tests", "windows_ai_gateway_targeted_tests") `
+    -CoverageEvidence (Get-CoverageEvidence -PreMvpReport $preMvp -CheckIds @("hosted_ai_targeted_tests", "windows_ai_gateway_targeted_tests")) `
+    -EvidenceNotes @("AI challenge, session, lane, revocation, signature, and wallet-key separation behavior is covered by hosted AI and Windows AI gateway targeted tests.")
+
+$items += New-AuditItem `
+    -Id "ard_ai_prompt_secret_rejection_acceptance" `
+    -Source "Hosted Open-Weight AI ARD Acceptance Criteria" `
+    -Requirement "Gateway rejects wallet-key material and recovery secrets in prompts where detectable." `
+    -Status $aiImplementationStatus `
+    -EvidenceIds @("pre_mvp_internal_verification") `
+    -CoverageCheckIds @("hosted_ai_targeted_tests", "windows_ai_gateway_targeted_tests") `
+    -CoverageEvidence (Get-CoverageEvidence -PreMvpReport $preMvp -CheckIds @("hosted_ai_targeted_tests", "windows_ai_gateway_targeted_tests")) `
+    -EvidenceNotes @("Secret-filtering and no-wallet-material prompt handling are covered by hosted AI and Windows AI gateway targeted tests.")
+
+$items += New-AuditItem `
+    -Id "ard_ai_knowledge_privacy_quota_acceptance" `
+    -Source "Hosted Open-Weight AI ARD Acceptance Criteria" `
+    -Requirement "Chat answers use approved knowledge packs with source references; private diagnostics require opt-in; raw prompt retention defaults to 30 days; quotas and rate limits are enforced." `
+    -Status $aiImplementationStatus `
+    -EvidenceIds @("pre_mvp_internal_verification") `
+    -CoverageCheckIds @("hosted_ai_targeted_tests", "windows_ai_gateway_targeted_tests", "open_weight_ai_runtime_deployment_validation") `
+    -CoverageEvidence (Get-CoverageEvidence -PreMvpReport $preMvp -CheckIds @("hosted_ai_targeted_tests", "windows_ai_gateway_targeted_tests", "open_weight_ai_runtime_deployment_validation")) `
+    -EvidenceNotes @("Approved knowledge, source references, diagnostics opt-in, retention defaults, quotas, rate limits, and runtime package validation are covered by targeted AI and runtime deployment checks.")
+
+$items += New-AuditItem `
+    -Id "ard_ai_no_authority_acceptance" `
+    -Source "Hosted Open-Weight AI ARD Acceptance Criteria" `
+    -Requirement "AI cannot trigger wallet, recovery, ledger, storage delivery, escrow, burn, registry authority, or admin actions." `
+    -Status $aiImplementationStatus `
+    -EvidenceIds @("pre_mvp_internal_verification") `
+    -CoverageCheckIds @("hosted_ai_targeted_tests", "windows_ai_gateway_targeted_tests") `
+    -CoverageEvidence (Get-CoverageEvidence -PreMvpReport $preMvp -CheckIds @("hosted_ai_targeted_tests", "windows_ai_gateway_targeted_tests")) `
+    -EvidenceNotes @("The hosted AI no-authority boundary is covered by hosted AI and Windows AI gateway targeted tests.")
+
+$items += New-AuditItem `
+    -Id "ard_ai_lane_runtime_probe_acceptance" `
+    -Source "Hosted Open-Weight AI ARD Acceptance Criteria" `
+    -Requirement "Staging and production use separate endpoints, logs, model artifacts, vector stores, and telemetry; the hosted gateway exposes non-secret runtime readiness status and an operator-protected non-mutating runtime probe for the approved model runtime." `
+    -Status $(if ($aiImplementationStatus -eq "passed" -and $aiBlockers.Count -eq 0) { "passed" } elseif ($aiImplementationStatus -eq "passed") { "partial" } else { $aiImplementationStatus }) `
+    -EvidenceIds @("pre_mvp_internal_verification", "production_mvp_readiness", "production_mvp_outstanding_work", "production_mvp_operator_input_matrix") `
+    -CoverageCheckIds $aiCoverageCheckIds `
+    -CoverageEvidence (Get-CoverageEvidence -PreMvpReport $preMvp -CheckIds $aiCoverageCheckIds) `
+    -EvidenceNotes @("Local lane/runtime status and probe contracts are validated; production release remains blocked until the approved open-weight runtime endpoint and live probe are provisioned.") `
+    -Blockers $aiBlockers `
+    -OperatorActions $aiActions `
+    -RemainingWorkType "ai_runtime_provisioning" `
+    -ImplementationReady ($aiImplementationStatus -eq "passed")
+
+$items += New-AuditItem `
     -Id "ard_release_legal_tax_accounting_custody_privacy_security" `
     -Source "ARD Release Gates" `
     -Requirement "Legal, tax, accounting, custody, privacy, and security reviews are complete for citizen-facing real ARCH and real CC." `

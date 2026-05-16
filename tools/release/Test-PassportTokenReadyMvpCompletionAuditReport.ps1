@@ -930,6 +930,11 @@ $requiredChecklistIds = @(
     "prd_required_legal_tax_accounting_custody_review",
     "prd_required_privacy_data_retention_decision",
     "prd_success_hosted_ai",
+    "ard_ai_challenge_session_acceptance",
+    "ard_ai_prompt_secret_rejection_acceptance",
+    "ard_ai_knowledge_privacy_quota_acceptance",
+    "ard_ai_no_authority_acceptance",
+    "ard_ai_lane_runtime_probe_acceptance",
     "ard_release_legal_tax_accounting_custody_privacy_security",
     "production_mvp_closeout"
 )
@@ -1010,6 +1015,11 @@ $requiredCoverageByChecklistId = @{
     prd_required_custody_recovery_decision = @("windows_identity_recovery_targeted_tests", "windows_wallet_key_targeted_tests", "core_wallet_binding_targeted_tests")
     prd_required_privacy_data_retention_decision = @("hosted_ai_targeted_tests", "windows_ai_gateway_targeted_tests", "open_weight_ai_runtime_deployment_validation")
     prd_success_hosted_ai = @("hosted_ai_targeted_tests", "windows_ai_gateway_targeted_tests", "open_weight_ai_runtime_deployment_validation")
+    ard_ai_challenge_session_acceptance = @("hosted_ai_targeted_tests", "windows_ai_gateway_targeted_tests")
+    ard_ai_prompt_secret_rejection_acceptance = @("hosted_ai_targeted_tests", "windows_ai_gateway_targeted_tests")
+    ard_ai_knowledge_privacy_quota_acceptance = @("hosted_ai_targeted_tests", "windows_ai_gateway_targeted_tests", "open_weight_ai_runtime_deployment_validation")
+    ard_ai_no_authority_acceptance = @("hosted_ai_targeted_tests", "windows_ai_gateway_targeted_tests")
+    ard_ai_lane_runtime_probe_acceptance = @("hosted_ai_targeted_tests", "windows_ai_gateway_targeted_tests", "open_weight_ai_runtime_deployment_validation")
 }
 
 $itemFailures = @()
