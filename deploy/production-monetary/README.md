@@ -12,6 +12,11 @@ The templates are operator inputs for the hosted API endpoints:
 - `POST /arch/genesis/manifests`
 - `POST /capacity/reports/cc`
 
+The ARCH genesis request must include the approved allocation policy,
+vesting/lock policy, treasury policy, and genesis ledger hash evidence. The CC
+capacity request must include the conservative issuance methodology, issuance
+authority, issuance record schema, and no-ARCH-creation validation evidence.
+
 Validate the template package:
 
 ```powershell

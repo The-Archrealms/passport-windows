@@ -292,9 +292,16 @@ public sealed class PassportConversionQuoteServiceTests
                     AccountId = accountId,
                     IdentityId = identityId,
                     WalletKeyId = walletKeyId,
+                    AllocationBucket = "community_genesis",
+                    VestingLockRuleId = "liquid_at_genesis",
                     AmountBaseUnits = amountBaseUnits
                 }
-            });
+            },
+            genesisAuthorityRecordSha256: Hash('a'),
+            allocationPolicySha256: Hash('b'),
+            vestingLockPolicySha256: Hash('c'),
+            treasuryPolicySha256: Hash('d'),
+            genesisLedgerHashSha256: Hash('e'));
         Assert.True(manifest.Succeeded, manifest.Message);
         return new Dictionary<string, string>
         {
@@ -302,5 +309,10 @@ public sealed class PassportConversionQuoteServiceTests
             ["arch_genesis_manifest_sha256"] = manifest.ManifestSha256,
             ["arch_genesis_allocation_id"] = allocationId
         };
+    }
+
+    private static string Hash(char value)
+    {
+        return new string(value, 64);
     }
 }

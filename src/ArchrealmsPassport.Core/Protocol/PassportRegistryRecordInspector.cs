@@ -50,7 +50,8 @@ public static class PassportRegistryRecordInspector
         ["blockchain_settlement_batch_record"] = new[] { "record_id", "created_utc", "effective_utc", "status", "settlement_batch_id", "settlement_epoch_id", "policy_version", "registrar_id", "target_settlement_layer", "source_handoff_record_ids", "participant_outputs", "chain_submission", "correction_record_ids", "dispute_record_ids", "summary" },
         ["blockchain_settlement_chain_evaluation"] = new[] { "record_id", "created_utc", "status", "candidate_chain", "finality", "cost_and_throughput", "contract_capability", "passport_read_only_access", "custody_and_authority", "legal_tax_treasury_review", "operational_risk", "decision", "release_gate_assessment", "summary" },
         ["blockchain_settlement_status_record"] = new[] { "record_id", "created_utc", "effective_utc", "status", "archrealms_identity_id", "node_id", "settlement_batch_id", "settlement_epoch_id", "source_settlement_batch_record_id", "chain_status", "participant_settlement", "summary" },
-        ["passport_cc_capacity_report"] = new[] { "record_id", "created_utc", "release_lane", "ledger_namespace", "policy_version", "service_class", "reporting_period_start_utc", "reporting_period_end_utc", "conservative_service_liability_capacity_base_units", "outstanding_cc_before_base_units", "max_issuance_base_units", "capacity_haircut_basis_points", "independent_volume_qualified", "thin_market_issuance_zero", "continuity_reserve_excluded", "operational_reserve_excluded", "affiliate_trade_exclusion_applied", "proof_history_haircut", "uptime_haircut", "retrieval_haircut", "repair_haircut", "concentration_haircut", "churn_haircut", "audit_confidence_haircut", "capacity_evidence_refs", "summary" },
+        ["passport_arch_genesis_manifest"] = new[] { "record_id", "created_utc", "release_lane", "ledger_namespace", "policy_version", "asset_code", "total_supply_base_units", "base_unit_precision", "allocation_total_base_units", "post_genesis_minting_allowed", "sealed", "genesis_authority_record_sha256", "allocation_policy_sha256", "vesting_lock_policy_sha256", "treasury_policy_sha256", "genesis_ledger_hash_sha256", "allocations", "summary" },
+        ["passport_cc_capacity_report"] = new[] { "record_id", "created_utc", "release_lane", "ledger_namespace", "policy_version", "service_class", "reporting_period_start_utc", "reporting_period_end_utc", "conservative_service_liability_capacity_base_units", "outstanding_cc_before_base_units", "max_issuance_base_units", "capacity_haircut_basis_points", "independent_volume_qualified", "thin_market_issuance_zero", "continuity_reserve_excluded", "operational_reserve_excluded", "affiliate_trade_exclusion_applied", "proof_history_haircut", "uptime_haircut", "retrieval_haircut", "repair_haircut", "concentration_haircut", "churn_haircut", "audit_confidence_haircut", "capacity_evidence_refs", "capacity_report_authority_record_sha256", "conservative_methodology_sha256", "issuance_authority_record_sha256", "issuance_record_schema_sha256", "no_arch_creation_validation_sha256", "summary" },
         ["device_credential_record"] = new[] { "record_id", "created_utc", "effective_utc", "status", "archrealms_identity_id", "device_id", "device_label", "device_class", "client_platform", "credential_origin", "public_key_algorithm", "public_key_format", "public_key_path", "public_key_sha256", "authorized_scopes", "attestation_refs", "summary" },
         ["device_revocation_record"] = new[] { "record_id", "created_utc", "effective_utc", "status", "archrealms_identity_id", "revoked_device_record_id", "device_id", "revocation_reason", "supersedes_credential_status", "summary" },
         ["passport_ledger_correction"] = new[] { "correction_id", "created_utc", "release_lane", "ledger_namespace", "policy_version", "account_id", "archrealms_identity_id", "wallet_key_id", "asset_code", "correction_event_type", "amount_base_units", "reason_code", "target_record_path", "target_record_sha256", "admin_authority_path", "admin_authority_sha256", "ledger_event_path", "ledger_event_sha256", "summary" },
@@ -308,6 +309,11 @@ public static class PassportRegistryRecordInspector
             ValidateCcCapacityReportRecord(root, validationFailures);
         }
 
+        if (string.Equals(recordType, PassportRecordTypes.ArchGenesisManifest, StringComparison.Ordinal))
+        {
+            ValidateArchGenesisManifestRecord(root, validationFailures);
+        }
+
         if (recordType.StartsWith("passport_storage_redemption", StringComparison.Ordinal))
         {
             ValidateStorageRedemptionRecord(root, recordType, validationFailures);
@@ -510,6 +516,113 @@ public static class PassportRegistryRecordInspector
         if (ReadStringArray(root, "capacity_evidence_refs").Length == 0)
         {
             validationFailures.Add("cc_capacity_policy:capacity_evidence_refs_required");
+        }
+
+        foreach (var hashField in new[]
+        {
+            "capacity_report_authority_record_sha256",
+            "conservative_methodology_sha256",
+            "issuance_authority_record_sha256",
+            "issuance_record_schema_sha256",
+            "no_arch_creation_validation_sha256"
+        })
+        {
+            if (!LooksLikeSha256(ReadString(root, hashField)))
+            {
+                validationFailures.Add("cc_capacity_policy:hash_evidence_invalid:" + hashField);
+            }
+        }
+    }
+
+    private static void ValidateArchGenesisManifestRecord(JsonElement root, List<string> validationFailures)
+    {
+        if (!string.Equals(ReadString(root, "asset_code"), PassportMonetaryProtocol.AssetArch, StringComparison.Ordinal))
+        {
+            validationFailures.Add("arch_genesis_policy:asset_code_must_be_arch");
+        }
+
+        var totalSupply = ReadInt64(root, "total_supply_base_units");
+        var allocationTotal = ReadInt64(root, "allocation_total_base_units");
+        if (totalSupply <= 0 || allocationTotal != totalSupply)
+        {
+            validationFailures.Add("arch_genesis_policy:allocation_total_must_equal_total_supply");
+        }
+
+        var baseUnitPrecision = ReadInt(root, "base_unit_precision");
+        if (baseUnitPrecision < 0 || baseUnitPrecision > 18)
+        {
+            validationFailures.Add("arch_genesis_policy:base_unit_precision_invalid");
+        }
+
+        if (ReadBool(root, "post_genesis_minting_allowed"))
+        {
+            validationFailures.Add("arch_genesis_policy:post_genesis_minting_forbidden");
+        }
+
+        if (!ReadBool(root, "sealed"))
+        {
+            validationFailures.Add("arch_genesis_policy:manifest_must_be_sealed");
+        }
+
+        foreach (var hashField in new[]
+        {
+            "genesis_authority_record_sha256",
+            "allocation_policy_sha256",
+            "vesting_lock_policy_sha256",
+            "treasury_policy_sha256",
+            "genesis_ledger_hash_sha256"
+        })
+        {
+            if (!LooksLikeSha256(ReadString(root, hashField)))
+            {
+                validationFailures.Add("arch_genesis_policy:hash_evidence_invalid:" + hashField);
+            }
+        }
+
+        if (!root.TryGetProperty("allocations", out var allocationsElement) || allocationsElement.ValueKind != JsonValueKind.Array)
+        {
+            validationFailures.Add("arch_genesis_policy:allocations_required");
+            return;
+        }
+
+        var allocationIds = new HashSet<string>(StringComparer.Ordinal);
+        long computedTotal = 0;
+        foreach (var allocation in allocationsElement.EnumerateArray())
+        {
+            if (allocation.ValueKind != JsonValueKind.Object)
+            {
+                validationFailures.Add("arch_genesis_policy:allocation_must_be_object");
+                continue;
+            }
+
+            var allocationId = ReadString(allocation, "allocation_id");
+            if (string.IsNullOrWhiteSpace(allocationId) || !allocationIds.Add(allocationId))
+            {
+                validationFailures.Add("arch_genesis_policy:allocation_id_invalid_or_duplicate");
+            }
+
+            foreach (var field in new[] { "account_id", "archrealms_identity_id", "wallet_key_id", "allocation_bucket", "vesting_lock_rule_id" })
+            {
+                if (string.IsNullOrWhiteSpace(ReadString(allocation, field)))
+                {
+                    validationFailures.Add("arch_genesis_policy:allocation_field_required:" + field);
+                }
+            }
+
+            var amount = ReadInt64(allocation, "amount_base_units");
+            if (amount <= 0)
+            {
+                validationFailures.Add("arch_genesis_policy:allocation_amount_positive_required");
+            }
+            else
+            {
+                computedTotal += amount;
+            }
+        }
+
+        if (computedTotal != totalSupply)
+        {
+            validationFailures.Add("arch_genesis_policy:allocation_sum_must_equal_total_supply");
         }
     }
 

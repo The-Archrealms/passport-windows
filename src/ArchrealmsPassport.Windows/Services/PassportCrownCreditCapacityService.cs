@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -32,7 +33,12 @@ namespace ArchrealmsPassport.Windows.Services
             bool independentVolumeQualified,
             bool thinMarketIssuanceZero,
             bool continuityReserveExcluded,
-            bool operationalReserveExcluded)
+            bool operationalReserveExcluded,
+            string capacityReportAuthorityRecordSha256 = "",
+            string conservativeMethodologySha256 = "",
+            string issuanceAuthorityRecordSha256 = "",
+            string issuanceRecordSchemaSha256 = "",
+            string noArchCreationValidationSha256 = "")
         {
             try
             {
@@ -65,6 +71,17 @@ namespace ArchrealmsPassport.Windows.Services
                 if (capacityHaircutBasisPoints < 0 || capacityHaircutBasisPoints > 10_000)
                 {
                     return Failed("Capacity haircut must be between 0 and 10000 basis points.");
+                }
+
+                var evidenceHashes = NormalizeEvidenceHashes(
+                    capacityReportAuthorityRecordSha256,
+                    conservativeMethodologySha256,
+                    issuanceAuthorityRecordSha256,
+                    issuanceRecordSchemaSha256,
+                    noArchCreationValidationSha256);
+                if (evidenceHashes == null)
+                {
+                    return Failed("Production CC capacity report requires authority, conservative methodology, issuance authority, issuance schema, and no-ARCH-creation validation hash evidence.");
                 }
 
                 var now = DateTime.UtcNow;
@@ -103,6 +120,11 @@ namespace ArchrealmsPassport.Windows.Services
                     ["churn_haircut"] = 0.0,
                     ["audit_confidence_haircut"] = 0.0,
                     ["capacity_evidence_refs"] = new[] { "local_capacity_report:" + timestamp + ":" + normalizedServiceClass },
+                    ["capacity_report_authority_record_sha256"] = evidenceHashes.Value.CapacityReportAuthorityRecordSha256,
+                    ["conservative_methodology_sha256"] = evidenceHashes.Value.ConservativeMethodologySha256,
+                    ["issuance_authority_record_sha256"] = evidenceHashes.Value.IssuanceAuthorityRecordSha256,
+                    ["issuance_record_schema_sha256"] = evidenceHashes.Value.IssuanceRecordSchemaSha256,
+                    ["no_arch_creation_validation_sha256"] = evidenceHashes.Value.NoArchCreationValidationSha256,
                     ["summary"] = "Conservative Crown Credit issuance-capacity report for Passport monetary ledger validation."
                 };
                 File.WriteAllText(reportPath, JsonSerializer.Serialize(report, JsonOptions), Encoding.UTF8);
@@ -196,6 +218,21 @@ namespace ArchrealmsPassport.Windows.Services
                     return Failed("The CC capacity report has no conservative service-liability capacity.");
                 }
 
+                foreach (var hashField in new[]
+                {
+                    "capacity_report_authority_record_sha256",
+                    "conservative_methodology_sha256",
+                    "issuance_authority_record_sha256",
+                    "issuance_record_schema_sha256",
+                    "no_arch_creation_validation_sha256"
+                })
+                {
+                    if (!LooksLikeSha256(ReadString(root, hashField)))
+                    {
+                        return Failed("The CC capacity report is missing required decision evidence: " + hashField + ".");
+                    }
+                }
+
                 return new PassportCrownCreditCapacityReportResult
                 {
                     Succeeded = true,
@@ -215,6 +252,41 @@ namespace ArchrealmsPassport.Windows.Services
         {
             var normalized = (serviceClass ?? string.Empty).Trim().ToLowerInvariant().Replace(" ", "_").Replace("-", "_");
             return string.IsNullOrWhiteSpace(normalized) ? "aggregate" : normalized;
+        }
+
+        private (string CapacityReportAuthorityRecordSha256, string ConservativeMethodologySha256, string IssuanceAuthorityRecordSha256, string IssuanceRecordSchemaSha256, string NoArchCreationValidationSha256)? NormalizeEvidenceHashes(
+            string capacityReportAuthorityRecordSha256,
+            string conservativeMethodologySha256,
+            string issuanceAuthorityRecordSha256,
+            string issuanceRecordSchemaSha256,
+            string noArchCreationValidationSha256)
+        {
+            var normalized = (
+                NormalizeHashEvidence(capacityReportAuthorityRecordSha256, "local-cc-capacity-report-authority"),
+                NormalizeHashEvidence(conservativeMethodologySha256, "local-cc-conservative-methodology"),
+                NormalizeHashEvidence(issuanceAuthorityRecordSha256, "local-cc-issuance-authority"),
+                NormalizeHashEvidence(issuanceRecordSchemaSha256, "local-cc-issuance-record-schema"),
+                NormalizeHashEvidence(noArchCreationValidationSha256, "local-cc-no-arch-creation-validation"));
+
+            if (releaseLane.ProductionLedger
+                && (!LooksLikeSha256(capacityReportAuthorityRecordSha256)
+                    || !LooksLikeSha256(conservativeMethodologySha256)
+                    || !LooksLikeSha256(issuanceAuthorityRecordSha256)
+                    || !LooksLikeSha256(issuanceRecordSchemaSha256)
+                    || !LooksLikeSha256(noArchCreationValidationSha256)))
+            {
+                return null;
+            }
+
+            return normalized;
+        }
+
+        private static string NormalizeHashEvidence(string value, string fallbackLabel)
+        {
+            var normalized = (value ?? string.Empty).Trim();
+            return LooksLikeSha256(normalized)
+                ? normalized.ToLowerInvariant()
+                : ComputeSha256(Encoding.UTF8.GetBytes(fallbackLabel));
         }
 
         private static string ResolveWorkspaceRelativePath(string workspaceRoot, string path)
@@ -240,6 +312,19 @@ namespace ArchrealmsPassport.Windows.Services
         private static bool ReadBool(JsonElement root, string propertyName)
         {
             return root.TryGetProperty(propertyName, out var property) && property.ValueKind == JsonValueKind.True;
+        }
+
+        private static string ReadString(JsonElement root, string propertyName)
+        {
+            return root.TryGetProperty(propertyName, out var property) && property.ValueKind == JsonValueKind.String
+                ? property.GetString() ?? string.Empty
+                : string.Empty;
+        }
+
+        private static bool LooksLikeSha256(string value)
+        {
+            var normalized = (value ?? string.Empty).Trim();
+            return normalized.Length == 64 && normalized.All(Uri.IsHexDigit);
         }
 
         private static string ComputeSha256(byte[] value)

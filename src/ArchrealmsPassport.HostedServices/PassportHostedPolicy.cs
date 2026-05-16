@@ -423,6 +423,14 @@ public static class PassportHostedPolicy
             return FailedRecord("Capacity report requires authority record hash evidence.");
         }
 
+        if (!LooksLikeSha256(request.ConservativeMethodologySha256)
+            || !LooksLikeSha256(request.IssuanceAuthorityRecordSha256)
+            || !LooksLikeSha256(request.IssuanceRecordSchemaSha256)
+            || !LooksLikeSha256(request.NoArchCreationValidationSha256))
+        {
+            return FailedRecord("Capacity report requires methodology, issuance authority, issuance schema, and no-ARCH-creation validation hash evidence.");
+        }
+
         var now = DateTimeOffset.UtcNow;
         var recordId = NewRecordId("cc-capacity-" + NormalizeSlug(request.ServiceClass));
         var record = new Dictionary<string, object?>
@@ -454,8 +462,19 @@ public static class PassportHostedPolicy
             ["concentration_haircut"] = 0.0,
             ["churn_haircut"] = 0.0,
             ["audit_confidence_haircut"] = 0.0,
-            ["capacity_evidence_refs"] = new[] { request.CapacityReportAuthorityRecordSha256.Trim().ToLowerInvariant() },
+            ["capacity_evidence_refs"] = new[]
+            {
+                request.CapacityReportAuthorityRecordSha256.Trim().ToLowerInvariant(),
+                request.ConservativeMethodologySha256.Trim().ToLowerInvariant(),
+                request.IssuanceAuthorityRecordSha256.Trim().ToLowerInvariant(),
+                request.IssuanceRecordSchemaSha256.Trim().ToLowerInvariant(),
+                request.NoArchCreationValidationSha256.Trim().ToLowerInvariant()
+            },
             ["capacity_report_authority_record_sha256"] = request.CapacityReportAuthorityRecordSha256.Trim().ToLowerInvariant(),
+            ["conservative_methodology_sha256"] = request.ConservativeMethodologySha256.Trim().ToLowerInvariant(),
+            ["issuance_authority_record_sha256"] = request.IssuanceAuthorityRecordSha256.Trim().ToLowerInvariant(),
+            ["issuance_record_schema_sha256"] = request.IssuanceRecordSchemaSha256.Trim().ToLowerInvariant(),
+            ["no_arch_creation_validation_sha256"] = request.NoArchCreationValidationSha256.Trim().ToLowerInvariant(),
             ["summary"] = "Hosted conservative Crown Credit issuance-capacity report."
         };
 
@@ -477,6 +496,14 @@ public static class PassportHostedPolicy
         if (!LooksLikeSha256(request.GenesisAuthorityRecordSha256))
         {
             return FailedRecord("ARCH genesis manifest requires authority record hash evidence.");
+        }
+
+        if (!LooksLikeSha256(request.AllocationPolicySha256)
+            || !LooksLikeSha256(request.VestingLockPolicySha256)
+            || !LooksLikeSha256(request.TreasuryPolicySha256)
+            || !LooksLikeSha256(request.GenesisLedgerHashSha256))
+        {
+            return FailedRecord("ARCH genesis manifest requires allocation policy, vesting/lock policy, treasury policy, and genesis ledger hash evidence.");
         }
 
         var allocations = request.Allocations.Select(NormalizeAllocation).ToArray();
@@ -514,13 +541,19 @@ public static class PassportHostedPolicy
             ["post_genesis_minting_allowed"] = false,
             ["sealed"] = true,
             ["genesis_authority_record_sha256"] = request.GenesisAuthorityRecordSha256.Trim().ToLowerInvariant(),
+            ["allocation_policy_sha256"] = request.AllocationPolicySha256.Trim().ToLowerInvariant(),
+            ["vesting_lock_policy_sha256"] = request.VestingLockPolicySha256.Trim().ToLowerInvariant(),
+            ["treasury_policy_sha256"] = request.TreasuryPolicySha256.Trim().ToLowerInvariant(),
+            ["genesis_ledger_hash_sha256"] = request.GenesisLedgerHashSha256.Trim().ToLowerInvariant(),
             ["allocations"] = allocations.Select(item => new Dictionary<string, object?>
             {
                 ["allocation_id"] = item.AllocationId,
                 ["account_id"] = item.AccountId,
                 ["archrealms_identity_id"] = item.IdentityId,
                 ["wallet_key_id"] = item.WalletKeyId,
-                ["amount_base_units"] = item.AmountBaseUnits
+                ["amount_base_units"] = item.AmountBaseUnits,
+                ["allocation_bucket"] = item.AllocationBucket,
+                ["vesting_lock_rule_id"] = item.VestingLockRuleId
             }).ToArray(),
             ["summary"] = "Hosted fixed-genesis ARCH manifest. The allocation total equals total supply and post-genesis minting is disabled."
         };
@@ -1429,7 +1462,9 @@ public static class PassportHostedPolicy
             AllocationId = NormalizeRequired(allocation.AllocationId, "allocation ID"),
             AccountId = NormalizeRequired(allocation.AccountId, "account ID"),
             IdentityId = NormalizeRequired(allocation.IdentityId, "identity ID"),
-            WalletKeyId = NormalizeRequired(allocation.WalletKeyId, "wallet key ID")
+            WalletKeyId = NormalizeRequired(allocation.WalletKeyId, "wallet key ID"),
+            AllocationBucket = NormalizeRequired(allocation.AllocationBucket, "allocation bucket"),
+            VestingLockRuleId = NormalizeRequired(allocation.VestingLockRuleId, "vesting lock rule ID")
         };
     }
 

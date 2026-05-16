@@ -11,5 +11,9 @@
   "thin_market_issuance_zero": false,
   "continuity_reserve_excluded": true,
   "operational_reserve_excluded": true,
-  "capacity_report_authority_record_sha256": "<64-hex-capacity-authority-record-sha256>"
+  "capacity_report_authority_record_sha256": "<64-hex-capacity-authority-record-sha256>",
+  "conservative_methodology_sha256": "<64-hex-conservative-methodology-sha256>",
+  "issuance_authority_record_sha256": "<64-hex-issuance-authority-record-sha256>",
+  "issuance_record_schema_sha256": "<64-hex-issuance-record-schema-sha256>",
+  "no_arch_creation_validation_sha256": "<64-hex-no-arch-creation-validation-sha256>"
 }

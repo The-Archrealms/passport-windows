@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "record_type": "passport_arch_genesis_manifest",
+  "record_id": "<record-id>",
+  "created_utc": "<YYYY-MM-DDTHH:MM:SSZ>",
+  "release_lane": "<release-lane>",
+  "ledger_namespace": "<ledger-namespace>",
+  "policy_version": "<policy-version>",
+  "asset_code": "ARCH",
+  "total_supply_base_units": 0,
+  "base_unit_precision": 18,
+  "allocation_total_base_units": 0,
+  "post_genesis_minting_allowed": false,
+  "sealed": true,
+  "genesis_authority_record_sha256": "<genesis-authority-record-sha256>",
+  "allocation_policy_sha256": "<allocation-policy-sha256>",
+  "vesting_lock_policy_sha256": "<vesting-lock-policy-sha256>",
+  "treasury_policy_sha256": "<treasury-policy-sha256>",
+  "genesis_ledger_hash_sha256": "<genesis-ledger-hash-sha256>",
+  "allocations": [
+    {
+      "allocation_id": "<allocation-id>",
+      "account_id": "<account-id>",
+      "archrealms_identity_id": "<archrealms-identity-id>",
+      "wallet_key_id": "<wallet-key-id>",
+      "allocation_bucket": "<allocation-bucket>",
+      "vesting_lock_rule_id": "<vesting-lock-rule-id>",
+      "amount_base_units": 0
+    }
+  ],
+  "summary": "Fixed-genesis ARCH manifest. No post-genesis minting is permitted and every allocation references a policy bucket and vesting/lock rule."
+}

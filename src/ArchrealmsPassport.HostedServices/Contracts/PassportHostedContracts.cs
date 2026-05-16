@@ -307,6 +307,18 @@ public sealed record PassportCcCapacityReportRequest
 
     [JsonPropertyName("capacity_report_authority_record_sha256")]
     public string CapacityReportAuthorityRecordSha256 { get; init; } = string.Empty;
+
+    [JsonPropertyName("conservative_methodology_sha256")]
+    public string ConservativeMethodologySha256 { get; init; } = string.Empty;
+
+    [JsonPropertyName("issuance_authority_record_sha256")]
+    public string IssuanceAuthorityRecordSha256 { get; init; } = string.Empty;
+
+    [JsonPropertyName("issuance_record_schema_sha256")]
+    public string IssuanceRecordSchemaSha256 { get; init; } = string.Empty;
+
+    [JsonPropertyName("no_arch_creation_validation_sha256")]
+    public string NoArchCreationValidationSha256 { get; init; } = string.Empty;
 }
 
 public sealed record PassportArchGenesisManifestRequest
@@ -331,6 +343,18 @@ public sealed record PassportArchGenesisManifestRequest
 
     [JsonPropertyName("genesis_authority_record_sha256")]
     public string GenesisAuthorityRecordSha256 { get; init; } = string.Empty;
+
+    [JsonPropertyName("allocation_policy_sha256")]
+    public string AllocationPolicySha256 { get; init; } = string.Empty;
+
+    [JsonPropertyName("vesting_lock_policy_sha256")]
+    public string VestingLockPolicySha256 { get; init; } = string.Empty;
+
+    [JsonPropertyName("treasury_policy_sha256")]
+    public string TreasuryPolicySha256 { get; init; } = string.Empty;
+
+    [JsonPropertyName("genesis_ledger_hash_sha256")]
+    public string GenesisLedgerHashSha256 { get; init; } = string.Empty;
 }
 
 public sealed record PassportArchGenesisAllocationRequest
@@ -349,6 +373,12 @@ public sealed record PassportArchGenesisAllocationRequest
 
     [JsonPropertyName("amount_base_units")]
     public long AmountBaseUnits { get; init; }
+
+    [JsonPropertyName("allocation_bucket")]
+    public string AllocationBucket { get; init; } = string.Empty;
+
+    [JsonPropertyName("vesting_lock_rule_id")]
+    public string VestingLockRuleId { get; init; } = string.Empty;
 }
 
 public sealed record PassportAdminAuthorityValidationRequest

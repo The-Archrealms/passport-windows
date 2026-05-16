@@ -139,6 +139,14 @@ function Test-ArchGenesisRequest {
     if ($RequireNoPlaceholders -and -not (Test-HexSha256 -Value ([string]$request.genesis_authority_record_sha256))) {
         $failures += "genesis_authority_record_sha256 must be a SHA-256 hex string"
     }
+    foreach ($field in @("allocation_policy_sha256", "vesting_lock_policy_sha256", "treasury_policy_sha256", "genesis_ledger_hash_sha256")) {
+        if ($RequireNoPlaceholders -and -not (Test-HexSha256 -Value ([string]$request.$field))) {
+            $failures += "$field must be a SHA-256 hex string"
+        }
+        elseif ([string]::IsNullOrWhiteSpace([string]$request.$field)) {
+            $failures += "$field is required"
+        }
+    }
 
     $allocations = @($request.allocations)
     if ($allocations.Count -eq 0) {
@@ -160,6 +168,11 @@ function Test-ArchGenesisRequest {
         }
 
         foreach ($field in @("account_id", "archrealms_identity_id", "wallet_key_id")) {
+            if ([string]::IsNullOrWhiteSpace([string]$allocation.$field)) {
+                $failures += "$field is required for allocation $allocationId"
+            }
+        }
+        foreach ($field in @("allocation_bucket", "vesting_lock_rule_id")) {
             if ([string]::IsNullOrWhiteSpace([string]$allocation.$field)) {
                 $failures += "$field is required for allocation $allocationId"
             }
@@ -225,6 +238,14 @@ function Test-CcCapacityRequest {
     }
     if ($RequireNoPlaceholders -and -not (Test-HexSha256 -Value ([string]$request.capacity_report_authority_record_sha256))) {
         $failures += "capacity_report_authority_record_sha256 must be a SHA-256 hex string"
+    }
+    foreach ($field in @("conservative_methodology_sha256", "issuance_authority_record_sha256", "issuance_record_schema_sha256", "no_arch_creation_validation_sha256")) {
+        if ($RequireNoPlaceholders -and -not (Test-HexSha256 -Value ([string]$request.$field))) {
+            $failures += "$field must be a SHA-256 hex string"
+        }
+        elseif ([string]::IsNullOrWhiteSpace([string]$request.$field)) {
+            $failures += "$field is required"
+        }
     }
 
     return New-Check -Id "cc_capacity_request_contract" -Passed ($failures.Count -eq 0) -Failures $failures -Evidence @{
@@ -292,7 +313,11 @@ $checks += Test-TextDocument -Id "readme_contract" -Path $readmePath -RequiredTe
     "ARCHREALMS_PASSPORT_CAPACITY_REPORT_ISSUER_ID",
     "ARCHREALMS_PASSPORT_ARCH_GENESIS_MANIFEST_ID",
     "POST /arch/genesis/manifests",
-    "POST /capacity/reports/cc"
+    "POST /capacity/reports/cc",
+    "allocation policy",
+    "vesting",
+    "treasury policy",
+    "no-ARCH-creation validation"
 )
 $checks += Test-TextDocument -Id "provisioning_record_contract" -Path $provisioningPath -RequiredText @(
     "ARCHREALMS_PASSPORT_CC_ISSUER_AUTHORITY_ID",
@@ -300,7 +325,11 @@ $checks += Test-TextDocument -Id "provisioning_record_contract" -Path $provision
     "ARCHREALMS_PASSPORT_ARCH_GENESIS_MANIFEST_ID",
     "ARCHREALMS_PASSPORT_PRODUCTION_LEDGER_NAMESPACE",
     "CC issuance cannot create ARCH",
-    "Thin-market or unqualified capacity authorizes zero CC issuance"
+    "Thin-market or unqualified capacity authorizes zero CC issuance",
+    "Allocation policy",
+    "Vesting or lock policy",
+    "Treasury policy",
+    "No-ARCH-creation validation"
 )
 $checks += Test-ArchGenesisRequest -Path $archGenesisPath
 $checks += Test-CcCapacityRequest -Path $ccCapacityPath

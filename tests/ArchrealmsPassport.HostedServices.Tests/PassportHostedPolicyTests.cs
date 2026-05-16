@@ -250,10 +250,15 @@ public sealed class PassportHostedPolicyTests
             ThinMarketIssuanceZero = false,
             ContinuityReserveExcluded = true,
             OperationalReserveExcluded = true,
-            CapacityReportAuthorityRecordSha256 = new string('c', 64)
+            CapacityReportAuthorityRecordSha256 = new string('c', 64),
+            ConservativeMethodologySha256 = new string('1', 64),
+            IssuanceAuthorityRecordSha256 = new string('2', 64),
+            IssuanceRecordSchemaSha256 = new string('3', 64),
+            NoArchCreationValidationSha256 = new string('4', 64)
         });
         Assert.True(accepted.Succeeded, accepted.Message);
         Assert.Equal("passport_cc_capacity_report", accepted.Record!["record_type"]);
+        Assert.Equal(new string('4', 64), accepted.Record["no_arch_creation_validation_sha256"]);
         var inspection = PassportRegistryRecordInspector.Inspect(JsonSerializer.SerializeToUtf8Bytes(accepted.Record, JsonOptions));
         Assert.True(inspection.IsEnvelopeValid, string.Join("; ", inspection.ValidationFailures));
 
@@ -270,7 +275,11 @@ public sealed class PassportHostedPolicyTests
             ThinMarketIssuanceZero = true,
             ContinuityReserveExcluded = true,
             OperationalReserveExcluded = true,
-            CapacityReportAuthorityRecordSha256 = new string('c', 64)
+            CapacityReportAuthorityRecordSha256 = new string('c', 64),
+            ConservativeMethodologySha256 = new string('1', 64),
+            IssuanceAuthorityRecordSha256 = new string('2', 64),
+            IssuanceRecordSchemaSha256 = new string('3', 64),
+            NoArchCreationValidationSha256 = new string('4', 64)
         });
         Assert.False(rejected.Succeeded);
         Assert.Contains("Thin-market", rejected.Message, StringComparison.OrdinalIgnoreCase);
@@ -287,6 +296,10 @@ public sealed class PassportHostedPolicyTests
             TotalSupplyBaseUnits = 1000,
             BaseUnitPrecision = 18,
             GenesisAuthorityRecordSha256 = new string('d', 64),
+            AllocationPolicySha256 = new string('5', 64),
+            VestingLockPolicySha256 = new string('6', 64),
+            TreasuryPolicySha256 = new string('7', 64),
+            GenesisLedgerHashSha256 = new string('8', 64),
             Allocations =
             [
                 new PassportArchGenesisAllocationRequest
@@ -295,12 +308,17 @@ public sealed class PassportHostedPolicyTests
                     AccountId = "account-1",
                     IdentityId = "identity-1",
                     WalletKeyId = "wallet-1",
-                    AmountBaseUnits = 1000
+                    AmountBaseUnits = 1000,
+                    AllocationBucket = "citizen-community",
+                    VestingLockRuleId = "locked-until-public-launch"
                 }
             ]
         });
         Assert.True(result.Succeeded, result.Message);
         Assert.Equal(false, result.Record!["post_genesis_minting_allowed"]);
+        Assert.Equal(new string('7', 64), result.Record["treasury_policy_sha256"]);
+        var inspection = PassportRegistryRecordInspector.Inspect(JsonSerializer.SerializeToUtf8Bytes(result.Record, JsonOptions));
+        Assert.True(inspection.IsEnvelopeValid, string.Join("; ", inspection.ValidationFailures));
 
         var rejected = PassportHostedPolicy.CreateArchGenesisManifest(new PassportArchGenesisManifestRequest
         {
@@ -310,6 +328,10 @@ public sealed class PassportHostedPolicyTests
             TotalSupplyBaseUnits = 1000,
             BaseUnitPrecision = 18,
             GenesisAuthorityRecordSha256 = new string('d', 64),
+            AllocationPolicySha256 = new string('5', 64),
+            VestingLockPolicySha256 = new string('6', 64),
+            TreasuryPolicySha256 = new string('7', 64),
+            GenesisLedgerHashSha256 = new string('8', 64),
             Allocations =
             [
                 new PassportArchGenesisAllocationRequest
@@ -318,7 +340,9 @@ public sealed class PassportHostedPolicyTests
                     AccountId = "account-1",
                     IdentityId = "identity-1",
                     WalletKeyId = "wallet-1",
-                    AmountBaseUnits = 999
+                    AmountBaseUnits = 999,
+                    AllocationBucket = "citizen-community",
+                    VestingLockRuleId = "locked-until-public-launch"
                 }
             ]
         });

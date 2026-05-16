@@ -25,6 +25,10 @@ namespace ArchrealmsPassport.Windows.Models
 
         public string WalletKeyId { get; set; } = string.Empty;
 
+        public string AllocationBucket { get; set; } = string.Empty;
+
+        public string VestingLockRuleId { get; set; } = string.Empty;
+
         public long AmountBaseUnits { get; set; }
     }
 }

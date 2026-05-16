@@ -320,6 +320,101 @@ public sealed class PassportRegistryRecordInspectorTests
     }
 
     [Fact]
+    public void ValidatesArchGenesisManifestPolicy()
+    {
+        var json = $$"""
+        {
+          "schema_version": 1,
+          "record_type": "passport_arch_genesis_manifest",
+          "record_id": "arch-genesis-1",
+          "created_utc": "2026-05-15T00:00:00Z",
+          "release_lane": "production-mvp",
+          "ledger_namespace": "archrealms-passport-production-mvp",
+          "policy_version": "passport-release-lanes-v1",
+          "asset_code": "ARCH",
+          "total_supply_base_units": 1000,
+          "base_unit_precision": 18,
+          "allocation_total_base_units": 1000,
+          "post_genesis_minting_allowed": false,
+          "sealed": true,
+          "genesis_authority_record_sha256": "{{Hash('a')}}",
+          "allocation_policy_sha256": "{{Hash('b')}}",
+          "vesting_lock_policy_sha256": "{{Hash('c')}}",
+          "treasury_policy_sha256": "{{Hash('d')}}",
+          "genesis_ledger_hash_sha256": "{{Hash('e')}}",
+          "allocations": [
+            {
+              "allocation_id": "allocation-1",
+              "account_id": "account-1",
+              "archrealms_identity_id": "identity-1",
+              "wallet_key_id": "wallet-1",
+              "allocation_bucket": "community_genesis",
+              "vesting_lock_rule_id": "liquid_at_genesis",
+              "amount_base_units": 1000
+            }
+          ],
+          "summary": "Valid genesis."
+        }
+        """;
+
+        var inspection = PassportRegistryRecordInspector.Inspect(Encoding.UTF8.GetBytes(json));
+
+        Assert.True(inspection.IsRecord);
+        Assert.True(inspection.IsEnvelopeValid, string.Join("; ", inspection.ValidationFailures));
+    }
+
+    [Fact]
+    public void ReportsArchGenesisManifestPolicyFailures()
+    {
+        var json = """
+        {
+          "schema_version": 1,
+          "record_type": "passport_arch_genesis_manifest",
+          "record_id": "arch-genesis-1",
+          "created_utc": "2026-05-15T00:00:00Z",
+          "release_lane": "production-mvp",
+          "ledger_namespace": "archrealms-passport-production-mvp",
+          "policy_version": "passport-release-lanes-v1",
+          "asset_code": "CC",
+          "total_supply_base_units": 1000,
+          "base_unit_precision": 19,
+          "allocation_total_base_units": 500,
+          "post_genesis_minting_allowed": true,
+          "sealed": false,
+          "genesis_authority_record_sha256": "not-a-hash",
+          "allocation_policy_sha256": "not-a-hash",
+          "vesting_lock_policy_sha256": "not-a-hash",
+          "treasury_policy_sha256": "not-a-hash",
+          "genesis_ledger_hash_sha256": "not-a-hash",
+          "allocations": [
+            {
+              "allocation_id": "allocation-1",
+              "account_id": "account-1",
+              "archrealms_identity_id": "identity-1",
+              "wallet_key_id": "wallet-1",
+              "amount_base_units": 500
+            }
+          ],
+          "summary": "Invalid genesis."
+        }
+        """;
+
+        var inspection = PassportRegistryRecordInspector.Inspect(Encoding.UTF8.GetBytes(json));
+
+        Assert.True(inspection.IsRecord);
+        Assert.False(inspection.IsEnvelopeValid);
+        Assert.Contains("arch_genesis_policy:asset_code_must_be_arch", inspection.ValidationFailures);
+        Assert.Contains("arch_genesis_policy:allocation_total_must_equal_total_supply", inspection.ValidationFailures);
+        Assert.Contains("arch_genesis_policy:base_unit_precision_invalid", inspection.ValidationFailures);
+        Assert.Contains("arch_genesis_policy:post_genesis_minting_forbidden", inspection.ValidationFailures);
+        Assert.Contains("arch_genesis_policy:manifest_must_be_sealed", inspection.ValidationFailures);
+        Assert.Contains("arch_genesis_policy:hash_evidence_invalid:genesis_authority_record_sha256", inspection.ValidationFailures);
+        Assert.Contains("arch_genesis_policy:allocation_field_required:allocation_bucket", inspection.ValidationFailures);
+        Assert.Contains("arch_genesis_policy:allocation_field_required:vesting_lock_rule_id", inspection.ValidationFailures);
+        Assert.Contains("arch_genesis_policy:allocation_sum_must_equal_total_supply", inspection.ValidationFailures);
+    }
+
+    [Fact]
     public void ReportsStorageRedemptionPolicyFailures()
     {
         var json = """
@@ -496,5 +591,10 @@ public sealed class PassportRegistryRecordInspectorTests
 
         Assert.True(inspection.IsEnvelopeValid);
         Assert.Equal("passport_test_record", inspection.RecordType);
+    }
+
+    private static string Hash(char value)
+    {
+        return new string(value, 64);
     }
 }

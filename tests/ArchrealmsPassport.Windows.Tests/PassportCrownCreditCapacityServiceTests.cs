@@ -25,7 +25,12 @@ public sealed class PassportCrownCreditCapacityServiceTests
             independentVolumeQualified: true,
             thinMarketIssuanceZero: false,
             continuityReserveExcluded: true,
-            operationalReserveExcluded: true);
+            operationalReserveExcluded: true,
+            capacityReportAuthorityRecordSha256: Hash('a'),
+            conservativeMethodologySha256: Hash('b'),
+            issuanceAuthorityRecordSha256: Hash('c'),
+            issuanceRecordSchemaSha256: Hash('d'),
+            noArchCreationValidationSha256: Hash('e'));
         Assert.True(report.Succeeded, report.Message);
         Assert.True(File.Exists(report.ReportPath));
         var inspection = PassportRegistryRecordInspector.Inspect(File.ReadAllBytes(report.ReportPath), report.ReportPath);
@@ -60,7 +65,12 @@ public sealed class PassportCrownCreditCapacityServiceTests
             independentVolumeQualified: true,
             thinMarketIssuanceZero: true,
             continuityReserveExcluded: true,
-            operationalReserveExcluded: true);
+            operationalReserveExcluded: true,
+            capacityReportAuthorityRecordSha256: Hash('a'),
+            conservativeMethodologySha256: Hash('b'),
+            issuanceAuthorityRecordSha256: Hash('c'),
+            issuanceRecordSchemaSha256: Hash('d'),
+            noArchCreationValidationSha256: Hash('e'));
         Assert.True(report.Succeeded, report.Message);
 
         var validation = service.ValidateIssuance(
@@ -74,5 +84,10 @@ public sealed class PassportCrownCreditCapacityServiceTests
 
         Assert.False(validation.Succeeded);
         Assert.Contains("thin-market", validation.Message, System.StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string Hash(char value)
+    {
+        return new string(value, 64);
     }
 }

@@ -26,5 +26,10 @@
   "churn_haircut": 0.0,
   "audit_confidence_haircut": 0.0,
   "capacity_evidence_refs": [],
+  "capacity_report_authority_record_sha256": "<capacity-report-authority-record-sha256>",
+  "conservative_methodology_sha256": "<conservative-methodology-sha256>",
+  "issuance_authority_record_sha256": "<issuance-authority-record-sha256>",
+  "issuance_record_schema_sha256": "<issuance-record-schema-sha256>",
+  "no_arch_creation_validation_sha256": "<no-arch-creation-validation-sha256>",
   "summary": "Conservative CC service-liability capacity report. Thin or unqualified markets cannot expand issuance capacity."
 }

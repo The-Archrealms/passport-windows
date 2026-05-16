@@ -27,7 +27,12 @@ namespace ArchrealmsPassport.Windows.Services
             string workspaceRoot,
             long totalSupplyBaseUnits,
             int baseUnitPrecision,
-            IEnumerable<PassportArchGenesisAllocation> allocations)
+            IEnumerable<PassportArchGenesisAllocation> allocations,
+            string genesisAuthorityRecordSha256 = "",
+            string allocationPolicySha256 = "",
+            string vestingLockPolicySha256 = "",
+            string treasuryPolicySha256 = "",
+            string genesisLedgerHashSha256 = "")
         {
             try
             {
@@ -64,6 +69,17 @@ namespace ArchrealmsPassport.Windows.Services
                     return Failed("ARCH genesis allocation IDs must be unique.");
                 }
 
+                var evidenceHashes = NormalizeEvidenceHashes(
+                    genesisAuthorityRecordSha256,
+                    allocationPolicySha256,
+                    vestingLockPolicySha256,
+                    treasuryPolicySha256,
+                    genesisLedgerHashSha256);
+                if (evidenceHashes == null)
+                {
+                    return Failed("Production ARCH genesis manifest requires authority, allocation policy, vesting/lock policy, treasury policy, and genesis ledger hash evidence.");
+                }
+
                 var timestamp = DateTime.UtcNow.ToString("yyyyMMddTHHmmssZ");
                 var createdUtc = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
                 var manifestRoot = Path.Combine(resolvedWorkspaceRoot, "records", "passport", "monetary", "arch-genesis");
@@ -85,12 +101,19 @@ namespace ArchrealmsPassport.Windows.Services
                     ["allocation_total_base_units"] = allocationTotal,
                     ["post_genesis_minting_allowed"] = false,
                     ["sealed"] = true,
+                    ["genesis_authority_record_sha256"] = evidenceHashes.Value.GenesisAuthorityRecordSha256,
+                    ["allocation_policy_sha256"] = evidenceHashes.Value.AllocationPolicySha256,
+                    ["vesting_lock_policy_sha256"] = evidenceHashes.Value.VestingLockPolicySha256,
+                    ["treasury_policy_sha256"] = evidenceHashes.Value.TreasuryPolicySha256,
+                    ["genesis_ledger_hash_sha256"] = evidenceHashes.Value.GenesisLedgerHashSha256,
                     ["allocations"] = normalizedAllocations.Select(item => new Dictionary<string, object?>
                     {
                         ["allocation_id"] = item.AllocationId,
                         ["account_id"] = item.AccountId,
                         ["archrealms_identity_id"] = item.IdentityId,
                         ["wallet_key_id"] = item.WalletKeyId,
+                        ["allocation_bucket"] = item.AllocationBucket,
+                        ["vesting_lock_rule_id"] = item.VestingLockRuleId,
                         ["amount_base_units"] = item.AmountBaseUnits
                     }).ToArray(),
                     ["summary"] = "Fixed-genesis ARCH manifest. The allocation total equals total supply and post-genesis minting is disabled."
@@ -188,6 +211,21 @@ namespace ArchrealmsPassport.Windows.Services
                     return Failed("ARCH genesis manifest allocation total must equal fixed total supply.");
                 }
 
+                foreach (var hashField in new[]
+                {
+                    "genesis_authority_record_sha256",
+                    "allocation_policy_sha256",
+                    "vesting_lock_policy_sha256",
+                    "treasury_policy_sha256",
+                    "genesis_ledger_hash_sha256"
+                })
+                {
+                    if (!LooksLikeSha256(ReadString(root, hashField)))
+                    {
+                        return Failed("ARCH genesis manifest is missing required decision evidence: " + hashField + ".");
+                    }
+                }
+
                 if (!root.TryGetProperty("allocations", out var allocations) || allocations.ValueKind != JsonValueKind.Array)
                 {
                     return Failed("ARCH genesis manifest has no allocations.");
@@ -203,6 +241,8 @@ namespace ArchrealmsPassport.Windows.Services
                     if (!string.Equals(ReadString(allocation, "account_id"), accountId.Trim(), StringComparison.Ordinal)
                         || !string.Equals(ReadString(allocation, "archrealms_identity_id"), identityId.Trim(), StringComparison.Ordinal)
                         || !string.Equals(ReadString(allocation, "wallet_key_id"), walletKeyId.Trim(), StringComparison.Ordinal)
+                        || string.IsNullOrWhiteSpace(ReadString(allocation, "allocation_bucket"))
+                        || string.IsNullOrWhiteSpace(ReadString(allocation, "vesting_lock_rule_id"))
                         || ReadInt64(allocation, "amount_base_units") != amountBaseUnits)
                     {
                         return Failed("ARCH genesis allocation evidence does not match the ledger event.");
@@ -237,6 +277,8 @@ namespace ArchrealmsPassport.Windows.Services
                     AccountId = NormalizeRequired(allocation.AccountId, "account ID"),
                     IdentityId = NormalizeRequired(allocation.IdentityId, "identity ID"),
                     WalletKeyId = NormalizeRequired(allocation.WalletKeyId, "wallet key ID"),
+                    AllocationBucket = NormalizeRequired(allocation.AllocationBucket, "allocation bucket"),
+                    VestingLockRuleId = NormalizeRequired(allocation.VestingLockRuleId, "vesting lock rule ID"),
                     AmountBaseUnits = allocation.AmountBaseUnits
                 };
 
@@ -258,6 +300,47 @@ namespace ArchrealmsPassport.Windows.Services
             }
 
             return normalized;
+        }
+
+        private (string GenesisAuthorityRecordSha256, string AllocationPolicySha256, string VestingLockPolicySha256, string TreasuryPolicySha256, string GenesisLedgerHashSha256)? NormalizeEvidenceHashes(
+            string genesisAuthorityRecordSha256,
+            string allocationPolicySha256,
+            string vestingLockPolicySha256,
+            string treasuryPolicySha256,
+            string genesisLedgerHashSha256)
+        {
+            var normalized = (
+                NormalizeHashEvidence(genesisAuthorityRecordSha256, "local-arch-genesis-authority"),
+                NormalizeHashEvidence(allocationPolicySha256, "local-arch-allocation-policy"),
+                NormalizeHashEvidence(vestingLockPolicySha256, "local-arch-vesting-lock-policy"),
+                NormalizeHashEvidence(treasuryPolicySha256, "local-arch-treasury-policy"),
+                NormalizeHashEvidence(genesisLedgerHashSha256, "local-arch-genesis-ledger"));
+
+            if (releaseLane.ProductionLedger
+                && (!LooksLikeSha256(genesisAuthorityRecordSha256)
+                    || !LooksLikeSha256(allocationPolicySha256)
+                    || !LooksLikeSha256(vestingLockPolicySha256)
+                    || !LooksLikeSha256(treasuryPolicySha256)
+                    || !LooksLikeSha256(genesisLedgerHashSha256)))
+            {
+                return null;
+            }
+
+            return normalized;
+        }
+
+        private static string NormalizeHashEvidence(string value, string fallbackLabel)
+        {
+            var normalized = (value ?? string.Empty).Trim();
+            return LooksLikeSha256(normalized)
+                ? normalized.ToLowerInvariant()
+                : ComputeSha256(Encoding.UTF8.GetBytes(fallbackLabel));
+        }
+
+        private static bool LooksLikeSha256(string value)
+        {
+            var normalized = (value ?? string.Empty).Trim();
+            return normalized.Length == 64 && normalized.All(Uri.IsHexDigit);
         }
 
         private static string ResolveWorkspaceRelativePath(string workspaceRoot, string path)

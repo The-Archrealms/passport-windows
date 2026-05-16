@@ -621,7 +621,12 @@ public sealed class PassportMonetaryLedgerServiceTests
             independentVolumeQualified: true,
             thinMarketIssuanceZero: false,
             continuityReserveExcluded: true,
-            operationalReserveExcluded: true);
+            operationalReserveExcluded: true,
+            capacityReportAuthorityRecordSha256: Hash('a'),
+            conservativeMethodologySha256: Hash('b'),
+            issuanceAuthorityRecordSha256: Hash('c'),
+            issuanceRecordSchemaSha256: Hash('d'),
+            noArchCreationValidationSha256: Hash('e'));
         Assert.True(capacity.Succeeded, capacity.Message);
         return new Dictionary<string, string>
         {
@@ -651,9 +656,16 @@ public sealed class PassportMonetaryLedgerServiceTests
                     AccountId = accountId,
                     IdentityId = identityId,
                     WalletKeyId = walletKeyId,
+                    AllocationBucket = "community_genesis",
+                    VestingLockRuleId = "liquid_at_genesis",
                     AmountBaseUnits = amountBaseUnits
                 }
-            });
+            },
+            genesisAuthorityRecordSha256: Hash('a'),
+            allocationPolicySha256: Hash('b'),
+            vestingLockPolicySha256: Hash('c'),
+            treasuryPolicySha256: Hash('d'),
+            genesisLedgerHashSha256: Hash('e'));
         Assert.True(manifest.Succeeded, manifest.Message);
         return new Dictionary<string, string>
         {
@@ -783,5 +795,10 @@ public sealed class PassportMonetaryLedgerServiceTests
             "test_role_bootstrap");
         Assert.True(requesterRole.Succeeded, requesterRole.Message);
         Assert.True(approverRole.Succeeded, approverRole.Message);
+    }
+
+    private static string Hash(char value)
+    {
+        return new string(value, 64);
     }
 }

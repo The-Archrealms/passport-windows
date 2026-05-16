@@ -32,6 +32,14 @@
 ## Approval Evidence
 
 - Genesis authority record SHA-256: `<64-hex-genesis-authority-record-sha256>`
+- Allocation policy SHA-256: `<64-hex-allocation-policy-sha256>`
+- Vesting or lock policy SHA-256: `<64-hex-vesting-lock-policy-sha256>`
+- Treasury policy SHA-256: `<64-hex-treasury-policy-sha256>`
+- Genesis ledger hash SHA-256: `<64-hex-genesis-ledger-hash-sha256>`
 - Capacity report authority record SHA-256: `<64-hex-capacity-authority-record-sha256>`
+- Conservative methodology SHA-256: `<64-hex-conservative-methodology-sha256>`
+- Issuance authority record SHA-256: `<64-hex-issuance-authority-record-sha256>`
+- Issuance record schema SHA-256: `<64-hex-issuance-record-schema-sha256>`
+- No-ARCH-creation validation SHA-256: `<64-hex-no-arch-creation-validation-sha256>`
 - Crown monetary authority signoff ID: `<signoff-id>`
 - Production release approval ID: `<release-approval-id>`
