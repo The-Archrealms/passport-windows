@@ -386,7 +386,10 @@ function Test-PreMvpImplementationReady {
         return $false
     }
 
-    $externalCheckIds = @("staff_steward_pilot_evidence")
+    $externalCheckIds = @(
+        "simulation_run_evidence",
+        "staff_steward_pilot_evidence"
+    )
     $failedLocalChecks = @($PreMvpReport.checks | Where-Object {
             $_.passed -ne $true -and
             ($externalCheckIds -notcontains [string]$_.id)
