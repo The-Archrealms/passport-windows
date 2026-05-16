@@ -530,7 +530,20 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
             if (-not [string]::IsNullOrWhiteSpace($name) -and $matrixMarkdown -notmatch [regex]::Escape($name)) {
                 $matrixMarkdownFailures += "operator input matrix Markdown is missing environment variable: $name"
             }
-            foreach ($value in @([string]$item.input_kind, [string]$item.sensitivity, [string]$item.validation_hint)) {
+            $metadataValues = @(
+                [string]$item.input_kind,
+                [string]$item.sensitivity,
+                [string]$item.validation_hint,
+                [string]$item.template_gate
+            )
+            foreach ($source in @(Get-ObjectArray -Object $item -Name "sources")) {
+                $metadataValues += [string]$source
+            }
+            if ($item.PSObject.Properties["template_required"] -and $null -ne $item.template_required) {
+                $metadataValues += ([bool]$item.template_required).ToString().ToLowerInvariant()
+            }
+
+            foreach ($value in $metadataValues) {
                 if (-not [string]::IsNullOrWhiteSpace($value) -and $matrixMarkdown -notmatch [regex]::Escape($value)) {
                     $matrixMarkdownFailures += "operator input matrix Markdown is missing environment variable metadata for $name`: $value"
                 }

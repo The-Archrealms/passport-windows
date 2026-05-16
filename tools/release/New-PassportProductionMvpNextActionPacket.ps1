@@ -286,11 +286,14 @@ $matrixMarkdown.Add("")
 
 $matrixMarkdown.Add("## Environment Variables")
 $matrixMarkdown.Add("")
-Add-MarkdownRow -Lines $matrixMarkdown -Cells @("Variable", "Kind", "Sensitivity", "Secret store", "Validation", "Readiness gates", "Missing text")
-Add-MarkdownRow -Lines $matrixMarkdown -Cells @("---", "---", "---", "---", "---", "---", "---")
+Add-MarkdownRow -Lines $matrixMarkdown -Cells @("Variable", "Sources", "Template gate", "Required", "Kind", "Sensitivity", "Secret store", "Validation", "Readiness gates", "Missing text")
+Add-MarkdownRow -Lines $matrixMarkdown -Cells @("---", "---", "---", "---", "---", "---", "---", "---", "---", "---")
 foreach ($item in $environmentVariables) {
     Add-MarkdownRow -Lines $matrixMarkdown -Cells @(
         [string]$item.name,
+        (Join-StringArray -Values (Get-ObjectArray -Object $item -Name "sources")),
+        [string]$item.template_gate,
+        $(if ($null -ne $item.PSObject.Properties["template_required"] -and $null -ne $item.template_required) { ([bool]$item.template_required).ToString().ToLowerInvariant() } else { "" }),
         [string]$item.input_kind,
         [string]$item.sensitivity,
         ([bool]$item.requires_secret_store).ToString().ToLowerInvariant(),

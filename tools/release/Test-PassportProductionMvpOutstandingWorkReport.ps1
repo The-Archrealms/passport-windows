@@ -235,6 +235,26 @@ function Get-ExpectedEnvironmentVariableSensitivity {
     return "configuration"
 }
 
+function Get-ProductionMvpEnvironmentTemplateVariables {
+    $templateScriptPath = Resolve-RepoPath -Path "tools\release\New-PassportProductionMvpEnvironmentTemplate.ps1"
+    if (-not (Test-Path -LiteralPath $templateScriptPath -PathType Leaf)) {
+        return @()
+    }
+
+    try {
+        $json = (& $templateScriptPath -Format Json -BlankUnconfiguredValues 2>$null | Out-String).Trim()
+        if ([string]::IsNullOrWhiteSpace($json)) {
+            return @()
+        }
+
+        $template = $json | ConvertFrom-Json
+        return @(Get-ObjectArray -Object $template -Name "variables")
+    }
+    catch {
+        return @()
+    }
+}
+
 function Get-OperatorCommandScriptPath {
     param([string]$Command)
 
@@ -449,6 +469,29 @@ if ($null -ne $report) {
     $checks += New-Check -Id "summary_counts" -Passed ($countFailures.Count -eq 0) -Failures $countFailures
 
     $environmentMetadataFailures = @()
+    $templateVariables = @(Get-ProductionMvpEnvironmentTemplateVariables)
+    $templateVariableMap = @{}
+    foreach ($templateVariable in $templateVariables) {
+        $templateName = [string]$templateVariable.name
+        if (-not [string]::IsNullOrWhiteSpace($templateName)) {
+            $templateVariableMap[$templateName] = $templateVariable
+        }
+    }
+
+    $environmentVariableMap = @{}
+    foreach ($item in $environmentVariables) {
+        $itemName = [string]$item.name
+        if (-not [string]::IsNullOrWhiteSpace($itemName)) {
+            $environmentVariableMap[$itemName] = $item
+        }
+    }
+
+    foreach ($templateName in @($templateVariableMap.Keys | Sort-Object)) {
+        if (-not $environmentVariableMap.ContainsKey($templateName)) {
+            $environmentMetadataFailures += "environment variable matrix is missing template variable $templateName."
+        }
+    }
+
     foreach ($item in $environmentVariables) {
         $name = [string]$item.name
         if ([string]::IsNullOrWhiteSpace($name)) {
@@ -456,7 +499,24 @@ if ($null -ne $report) {
             continue
         }
 
-        $expectedKind = Get-ExpectedEnvironmentVariableInputKind -Name $name
+        $templateVariable = $(if ($templateVariableMap.ContainsKey($name)) { $templateVariableMap[$name] } else { $null })
+        $isTemplateVariable = $null -ne $templateVariable
+        $templateSecret = $isTemplateVariable -and [bool]$templateVariable.secret
+
+        $sources = @(Get-ObjectArray -Object $item -Name "sources")
+        if ($sources.Count -eq 0) {
+            $environmentMetadataFailures += "environment variable $name has no sources."
+        }
+
+        if ($isTemplateVariable -and $sources -notcontains "production_environment_template") {
+            $environmentMetadataFailures += "environment variable $name is a template variable but lacks production_environment_template source."
+        }
+
+        if ((Get-ObjectArray -Object $item -Name "readiness_gate_ids").Count -gt 0 -and $sources -notcontains "readiness_missing_text") {
+            $environmentMetadataFailures += "environment variable $name has readiness gates but lacks readiness_missing_text source."
+        }
+
+        $expectedKind = $(if ($templateSecret) { "secret" } else { Get-ExpectedEnvironmentVariableInputKind -Name $name })
         $actualKind = if ($item.PSObject.Properties["input_kind"]) { [string]$item.input_kind } else { "" }
         if ($actualKind -ne $expectedKind) {
             $environmentMetadataFailures += "environment variable $name input_kind is '$actualKind', expected '$expectedKind'."
@@ -480,11 +540,42 @@ if ($null -ne $report) {
             $environmentMetadataFailures += "environment variable $name is missing validation_hint."
         }
 
-        if ((Get-ObjectArray -Object $item -Name "readiness_gate_ids").Count -eq 0) {
-            $environmentMetadataFailures += "environment variable $name has no readiness_gate_ids."
+        if ($sources -contains "readiness_missing_text") {
+            if ((Get-ObjectArray -Object $item -Name "readiness_gate_ids").Count -eq 0) {
+                $environmentMetadataFailures += "environment variable $name has readiness_missing_text source but no readiness_gate_ids."
+            }
+            if ((Get-ObjectArray -Object $item -Name "missing_texts").Count -eq 0) {
+                $environmentMetadataFailures += "environment variable $name has readiness_missing_text source but no missing_texts."
+            }
         }
-        if ((Get-ObjectArray -Object $item -Name "missing_texts").Count -eq 0) {
-            $environmentMetadataFailures += "environment variable $name has no missing_texts."
+
+        if ($isTemplateVariable) {
+            foreach ($propertyName in @("template_gate", "template_required", "template_secret", "template_description")) {
+                if (-not $item.PSObject.Properties[$propertyName]) {
+                    $environmentMetadataFailures += "environment variable $name is missing template metadata property $propertyName."
+                }
+            }
+
+            if ([string]$item.template_gate -ne [string]$templateVariable.gate) {
+                $environmentMetadataFailures += "environment variable $name template_gate does not match the environment template."
+            }
+            if ([bool]$item.template_required -ne [bool]$templateVariable.required) {
+                $environmentMetadataFailures += "environment variable $name template_required does not match the environment template."
+            }
+            if ([bool]$item.template_secret -ne [bool]$templateVariable.secret) {
+                $environmentMetadataFailures += "environment variable $name template_secret does not match the environment template."
+            }
+            if ([string]::IsNullOrWhiteSpace([string]$item.template_description)) {
+                $environmentMetadataFailures += "environment variable $name is missing template_description."
+            }
+            if ([bool]$templateVariable.secret -and -not [bool]$item.requires_secret_store) {
+                $environmentMetadataFailures += "secret template variable $name must require a secret store."
+            }
+            foreach ($forbiddenProperty in @("value", "example")) {
+                if ($item.PSObject.Properties[$forbiddenProperty]) {
+                    $environmentMetadataFailures += "environment variable $name must not expose template $forbiddenProperty in the operator matrix."
+                }
+            }
         }
     }
     $checks += New-Check -Id "environment_variable_metadata_contract" -Passed ($environmentMetadataFailures.Count -eq 0) -Failures $environmentMetadataFailures -Evidence ([pscustomobject][ordered]@{ environment_variable_count = $environmentVariables.Count })

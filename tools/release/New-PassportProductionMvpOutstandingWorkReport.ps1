@@ -208,19 +208,100 @@ function Get-EnvironmentVariableValidationHint {
 }
 
 function New-EnvironmentVariableRecord {
-    param([string]$Name)
+    param(
+        [string]$Name,
+        [object]$TemplateVariable = $null
+    )
 
     $inputKind = Get-EnvironmentVariableInputKind -Name $Name
     $sensitivity = Get-EnvironmentVariableSensitivity -Name $Name -InputKind $inputKind
+    $templateSecret = $false
+    if ($null -ne $TemplateVariable -and $TemplateVariable.PSObject.Properties["secret"]) {
+        $templateSecret = [bool]$TemplateVariable.secret
+    }
+
+    if ($templateSecret) {
+        $inputKind = "secret"
+        $sensitivity = "secret"
+    }
 
     return [pscustomobject][ordered]@{
         name = $Name
+        sources = @()
         input_kind = $inputKind
         sensitivity = $sensitivity
         requires_secret_store = ($sensitivity -eq "secret")
         validation_hint = Get-EnvironmentVariableValidationHint -InputKind $inputKind -Sensitivity $sensitivity
+        template_gate = $(if ($null -ne $TemplateVariable) { [string]$TemplateVariable.gate } else { "" })
+        template_required = $(if ($null -ne $TemplateVariable) { [bool]$TemplateVariable.required } else { $null })
+        template_secret = $(if ($null -ne $TemplateVariable) { [bool]$TemplateVariable.secret } else { $null })
+        template_description = $(if ($null -ne $TemplateVariable) { [string]$TemplateVariable.description } else { "" })
         readiness_gate_ids = @()
         missing_texts = @()
+    }
+}
+
+function Add-EnvironmentVariableSource {
+    param(
+        [object]$Record,
+        [string]$Source
+    )
+
+    if ($null -eq $Record -or [string]::IsNullOrWhiteSpace($Source)) {
+        return
+    }
+
+    if (@($Record.sources) -notcontains $Source) {
+        $Record.sources = @($Record.sources + $Source)
+    }
+}
+
+function Set-EnvironmentVariableTemplateMetadata {
+    param(
+        [object]$Record,
+        [object]$TemplateVariable
+    )
+
+    if ($null -eq $Record -or $null -eq $TemplateVariable) {
+        return
+    }
+
+    $Record.template_gate = [string]$TemplateVariable.gate
+    $Record.template_required = [bool]$TemplateVariable.required
+    $Record.template_secret = [bool]$TemplateVariable.secret
+    $Record.template_description = [string]$TemplateVariable.description
+
+    if ([bool]$TemplateVariable.secret) {
+        $Record.input_kind = "secret"
+        $Record.sensitivity = "secret"
+        $Record.requires_secret_store = $true
+        $Record.validation_hint = Get-EnvironmentVariableValidationHint -InputKind "secret" -Sensitivity "secret"
+    }
+
+    Add-EnvironmentVariableSource -Record $Record -Source "production_environment_template"
+}
+
+function Get-ProductionMvpEnvironmentTemplateVariables {
+    $templateScriptPath = Resolve-RepoPath -Path "tools\release\New-PassportProductionMvpEnvironmentTemplate.ps1"
+    if (-not (Test-Path -LiteralPath $templateScriptPath -PathType Leaf)) {
+        return @()
+    }
+
+    try {
+        $json = (& $templateScriptPath -Format Json -BlankUnconfiguredValues 2>$null | Out-String).Trim()
+        if ([string]::IsNullOrWhiteSpace($json)) {
+            return @()
+        }
+
+        $template = $json | ConvertFrom-Json
+        if ($null -eq $template -or -not $template.PSObject.Properties["variables"]) {
+            return @()
+        }
+
+        return @($template.variables)
+    }
+    catch {
+        return @()
     }
 }
 
@@ -1102,6 +1183,20 @@ if ($null -ne $releaseEvidence -and $releaseEvidence.PSObject.Properties["checks
 }
 
 $environmentVariableMap = @{}
+$templateEnvironmentVariables = @(Get-ProductionMvpEnvironmentTemplateVariables)
+foreach ($templateVariable in $templateEnvironmentVariables) {
+    $templateName = [string]$templateVariable.name
+    if ([string]::IsNullOrWhiteSpace($templateName)) {
+        continue
+    }
+
+    if (-not $environmentVariableMap.ContainsKey($templateName)) {
+        $environmentVariableMap[$templateName] = New-EnvironmentVariableRecord -Name $templateName -TemplateVariable $templateVariable
+    }
+
+    Set-EnvironmentVariableTemplateMetadata -Record $environmentVariableMap[$templateName] -TemplateVariable $templateVariable
+}
+
 $reportReferenceRefreshMap = @{}
 $readinessEvidenceItems = @()
 foreach ($gate in $failedReadinessGates) {
@@ -1121,6 +1216,7 @@ foreach ($gate in $failedReadinessGates) {
             }
 
             $record = $environmentVariableMap[$envName]
+            Add-EnvironmentVariableSource -Record $record -Source "readiness_missing_text"
             if (@($record.readiness_gate_ids) -notcontains [string]$gate.id) {
                 $record.readiness_gate_ids = @($record.readiness_gate_ids + [string]$gate.id)
             }
