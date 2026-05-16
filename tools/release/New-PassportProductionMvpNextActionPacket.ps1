@@ -185,6 +185,8 @@ function New-CommandGroupRecords {
                 $groupsByCommand[$command] = [ordered]@{
                     command = $command
                     phase_order = [int]$action.phase_order
+                    earliest_phase_order = [int]$action.phase_order
+                    latest_phase_order = [int]$action.phase_order
                     phases = New-Object System.Collections.Generic.List[string]
                     action_ids = New-Object System.Collections.Generic.List[string]
                     action_titles = New-Object System.Collections.Generic.List[string]
@@ -194,7 +196,11 @@ function New-CommandGroupRecords {
             }
 
             $entry = $groupsByCommand[$command]
-            if ([int]$action.phase_order -lt [int]$entry.phase_order) {
+            if ([int]$action.phase_order -lt [int]$entry.earliest_phase_order) {
+                $entry.earliest_phase_order = [int]$action.phase_order
+            }
+            if ([int]$action.phase_order -gt [int]$entry.latest_phase_order) {
+                $entry.latest_phase_order = [int]$action.phase_order
                 $entry.phase_order = [int]$action.phase_order
             }
             Add-UniqueString -List $entry.phases -Value ([string]$action.phase)
@@ -211,18 +217,20 @@ function New-CommandGroupRecords {
 
     $index = 0
     return @($groupsByCommand.Values |
-        Sort-Object @{ Expression = "phase_order"; Ascending = $true }, @{ Expression = { [string]$_.command }; Ascending = $true } |
+        Sort-Object @{ Expression = { [int]$_["latest_phase_order"] }; Ascending = $true }, @{ Expression = { [int]$_["earliest_phase_order"] }; Ascending = $true }, @{ Expression = { [string]$_["command"] }; Ascending = $true } |
         ForEach-Object {
             $index += 1
             [pscustomobject][ordered]@{
                 sequence = $index
-                command = [string]$_.command
-                phase_order = [int]$_.phase_order
-                phases = @($_.phases)
-                action_ids = @($_.action_ids)
-                action_titles = @($_.action_titles)
-                blocker_ids = @($_.blocker_ids)
-                placeholder_tokens = @($_.placeholder_tokens)
+                command = [string]$_["command"]
+                phase_order = [int]$_["phase_order"]
+                earliest_phase_order = [int]$_["earliest_phase_order"]
+                latest_phase_order = [int]$_["latest_phase_order"]
+                phases = @($_["phases"])
+                action_ids = @($_["action_ids"])
+                action_titles = @($_["action_titles"])
+                blocker_ids = @($_["blocker_ids"])
+                placeholder_tokens = @($_["placeholder_tokens"])
             }
         })
 }
@@ -337,6 +345,7 @@ else {
         $markdown.Add("### Step $($group.sequence)")
         $markdown.Add("")
         $markdown.Add("- Phases: $((@($group.phases) -join ', '))")
+        $markdown.Add("- Phase order window: $($group.earliest_phase_order)-$($group.latest_phase_order)")
         $markdown.Add("- Actions covered: $((@($group.action_ids) -join ', '))")
         $markdown.Add("- Blockers covered: $((@($group.blocker_ids) -join ', '))")
         if (@($group.placeholder_tokens).Count -gt 0) {
@@ -479,6 +488,7 @@ if ($commandGroups.Count -gt 0) {
     foreach ($group in $commandGroups) {
         $commandLines.Add("# Step $($group.sequence)")
         $commandLines.Add("# Phases: $((@($group.phases) -join ', '))")
+        $commandLines.Add("# Phase order window: $($group.earliest_phase_order)-$($group.latest_phase_order)")
         $commandLines.Add("# Actions: $((@($group.action_ids) -join ', '))")
         $commandLines.Add("# Blockers: $((@($group.blocker_ids) -join ', '))")
         if (@($group.placeholder_tokens).Count -gt 0) {

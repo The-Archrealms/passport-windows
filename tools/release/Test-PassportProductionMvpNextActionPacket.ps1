@@ -439,6 +439,7 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
 
     $dedupeCommandsSeen = @{}
     $expectedSequence = 1
+    $previousLatestPhaseOrder = -1
     foreach ($group in $deduplicatedCommands) {
         $groupCommand = [string]$group.command
         if ([string]::IsNullOrWhiteSpace($groupCommand)) {
@@ -455,6 +456,22 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
             $commandSequenceFailures += "deduplicated command group has unexpected sequence $($group.sequence), expected $expectedSequence."
         }
         $expectedSequence += 1
+
+        if (-not $group.PSObject.Properties["earliest_phase_order"]) {
+            $commandSequenceFailures += "deduplicated command group is missing earliest_phase_order."
+        }
+        if (-not $group.PSObject.Properties["latest_phase_order"]) {
+            $commandSequenceFailures += "deduplicated command group is missing latest_phase_order."
+        }
+        if ($group.PSObject.Properties["earliest_phase_order"] -and $group.PSObject.Properties["latest_phase_order"]) {
+            if ([int]$group.earliest_phase_order -gt [int]$group.latest_phase_order) {
+                $commandSequenceFailures += "deduplicated command group has earliest_phase_order greater than latest_phase_order."
+            }
+            if ([int]$group.latest_phase_order -lt $previousLatestPhaseOrder) {
+                $commandSequenceFailures += "deduplicated command sequence is not sorted by latest_phase_order at command: $groupCommand"
+            }
+            $previousLatestPhaseOrder = [int]$group.latest_phase_order
+        }
 
         if (@(Get-ObjectArray -Object $group -Name "action_ids").Count -eq 0) {
             $commandSequenceFailures += "deduplicated command group is missing action_ids."
@@ -592,7 +609,7 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
             $markdownFailures += "Markdown is missing fenced PowerShell command blocks."
         }
         foreach ($group in @(Get-ObjectArray -Object $plan -Name "deduplicated_operator_commands")) {
-            foreach ($value in @([string]$group.command, [string]"Step $($group.sequence)")) {
+            foreach ($value in @([string]$group.command, [string]"Step $($group.sequence)", [string]"$($group.earliest_phase_order)-$($group.latest_phase_order)")) {
                 if (-not [string]::IsNullOrWhiteSpace($value) -and $markdown -notmatch [regex]::Escape($value)) {
                     $markdownFailures += "Markdown is missing deduplicated command metadata: $value"
                 }
