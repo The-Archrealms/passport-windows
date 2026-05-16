@@ -128,11 +128,11 @@ function Get-EnvironmentVariableNames {
 function Get-EnvironmentVariableInputKind {
     param([string]$Name)
 
-    if ($Name -match "(?i)(API_KEY|TOKEN|SECRET|PASSWORD|PRIVATE_KEY|PFX)") {
-        return "secret"
-    }
     if ($Name -match "(?i)(SHA256|HASH)$|_SHA256$|_HASH$") {
         return "digest"
+    }
+    if ($Name -match "(?i)(API_KEY|SECRET|PASSWORD|PRIVATE_KEY|PFX|(^|_)TOKEN($|_))") {
+        return "secret"
     }
     if ($Name -match "(?i)THUMBPRINT") {
         return "certificate_thumbprint"

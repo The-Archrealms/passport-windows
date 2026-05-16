@@ -345,11 +345,11 @@ function Test-OperatorPlaceholderRecords {
 function Get-ExpectedEnvironmentVariableInputKind {
     param([string]$Name)
 
-    if ($Name -match "(?i)(API_KEY|TOKEN|SECRET|PASSWORD|PRIVATE_KEY|PFX)") {
-        return "secret"
-    }
     if ($Name -match "(?i)(SHA256|HASH)$|_SHA256$|_HASH$") {
         return "digest"
+    }
+    if ($Name -match "(?i)(API_KEY|SECRET|PASSWORD|PRIVATE_KEY|PFX|(^|_)TOKEN($|_))") {
+        return "secret"
     }
     if ($Name -match "(?i)THUMBPRINT") {
         return "certificate_thumbprint"
@@ -745,6 +745,43 @@ if ($null -ne $report) {
         }
     }
     $checks += New-Check -Id "environment_variable_metadata_contract" -Passed ($environmentMetadataFailures.Count -eq 0) -Failures $environmentMetadataFailures -Evidence ([pscustomobject][ordered]@{ environment_variable_count = $environmentVariables.Count })
+
+    $classificationFailures = @()
+    $classificationExpectations = @(
+        [pscustomobject][ordered]@{
+            name = "ARCHREALMS_PASSPORT_AI_MAX_OUTPUT_TOKENS"
+            input_kind = "operator_value"
+            sensitivity = "restricted_operational"
+            requires_secret_store = $false
+        },
+        [pscustomobject][ordered]@{
+            name = "ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY_SHA256"
+            input_kind = "digest"
+            sensitivity = "integrity_metadata"
+            requires_secret_store = $false
+        }
+    )
+    foreach ($expectation in $classificationExpectations) {
+        $item = $environmentVariableMap[[string]$expectation.name]
+        if ($null -eq $item) {
+            $classificationFailures += "environment variable $($expectation.name) is missing from the operator input matrix."
+            continue
+        }
+
+        foreach ($propertyName in @("input_kind", "sensitivity", "requires_secret_store")) {
+            $actual = if ($item.PSObject.Properties[$propertyName]) { $item.$propertyName } else { $null }
+            $expected = $expectation.$propertyName
+            if ($propertyName -eq "requires_secret_store") {
+                if ([bool]$actual -ne [bool]$expected) {
+                    $classificationFailures += "environment variable $($expectation.name) $propertyName is '$actual', expected '$expected'."
+                }
+            }
+            elseif ([string]$actual -ne [string]$expected) {
+                $classificationFailures += "environment variable $($expectation.name) $propertyName is '$actual', expected '$expected'."
+            }
+        }
+    }
+    $checks += New-Check -Id "environment_variable_classification_regressions" -Passed ($classificationFailures.Count -eq 0) -Failures $classificationFailures -Evidence ([pscustomobject][ordered]@{ expectation_count = $classificationExpectations.Count })
 
     $commandRecords = New-Object System.Collections.Generic.List[object]
     foreach ($gate in $failedReadinessGates) {
