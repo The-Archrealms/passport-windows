@@ -268,6 +268,7 @@ $staffPilotReportPath = Resolve-RepoPath -Path "artifacts\release\pre-mvp-staff-
 $staffPilotReportGenerationOutputPath = Join-Path $resolvedOutput "pilot-report-generation-output.json"
 $staffPilotReportValidationPath = Join-Path $resolvedOutput "pilot-report-validation-report.json"
 $finalPreMvpReportPath = Resolve-RepoPath -Path "artifacts\release\pre-mvp-internal-verification-report.json"
+$pilotWorkspaceLaunchPath = Join-Path $resolvedOutput "pilot-workspace-launch.json"
 
 $simulationHashExpression = if ($simulationReport.exists) { $simulationReport.sha256 } else { "<simulation-run-report-sha256>" }
 $staffPilotHashPlaceholder = "<staff-steward-pilot-report-sha256>"
@@ -297,6 +298,33 @@ $runbookLines = @(
     "3. Confirm no citizen production ARCH, production CC, Crown reserve balance, citizen production account history, or production service-liability record is created.",
     "4. Confirm no citizen production tokens are used in any pilot step.",
     "5. Review the production readiness blockers in the issue-review record before signing the pilot.",
+    "",
+    "## Open The Pilot Workspace",
+    "",
+    "Use this helper on the Crown-owned pilot machine to open the runbook, open the evidence folder, launch the internal-verification Passport artifact, and write a workspace-launch report. This helper is not a passing pilot report and does not replace participant signoff.",
+    "",
+    '```powershell',
+    ".\tools\release\Start-PassportPreMvpStaffStewardPilot.ps1 ``",
+    "  -HandoffRoot `"$resolvedOutput`" ``",
+    "  -PilotId `"$PilotId`" ``",
+    "  -PilotOwner `"$PilotOwner`" ``",
+    "  -OutputPath `"$pilotWorkspaceLaunchPath`" ``",
+    "  -Force",
+    '```',
+    "",
+    "For non-interactive preparation without opening windows or launching Passport:",
+    "",
+    '```powershell',
+    ".\tools\release\Start-PassportPreMvpStaffStewardPilot.ps1 ``",
+    "  -HandoffRoot `"$resolvedOutput`" ``",
+    "  -PilotId `"$PilotId`" ``",
+    "  -PilotOwner `"$PilotOwner`" ``",
+    "  -OutputPath `"$pilotWorkspaceLaunchPath`" ``",
+    "  -SkipOpenRunbook ``",
+    "  -SkipOpenEvidenceFolder ``",
+    "  -SkipLaunchPassport ``",
+    "  -Force",
+    '```',
     "",
     "## Optional Dry-Run Evidence",
     "",
@@ -395,6 +423,7 @@ foreach ($path in @(
 
 $handoffFiles = @(
     (Get-FileRecord -Id "operator_runbook" -Path $runbookPath),
+    (Get-FileRecord -Id "pilot_workspace_launcher_script" -Path (Join-Path $scriptRoot "Start-PassportPreMvpStaffStewardPilot.ps1")),
     (Get-FileRecord -Id "pilot_evidence_template_validation_report" -Path $templateValidationPath),
     (Get-FileRecord -Id "pilot_evidence_final_validation_preview_report" -Path $finalPreviewValidationPath)
 )
