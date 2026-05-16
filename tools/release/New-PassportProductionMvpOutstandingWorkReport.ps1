@@ -391,6 +391,97 @@ function Get-ActionCommandArray {
     return ,[string[]]$commands
 }
 
+function Get-OperatorPlaceholderInputKind {
+    param([string]$Name)
+
+    if ($Name -match "(?i)(SHA256|HASH)$") {
+        return "digest"
+    }
+    if ($Name -match "(?i)^controlled-.*packet-root$") {
+        return "controlled_packet_root"
+    }
+    if ($Name -match "(?i)^filled-.*root$") {
+        return "filled_evidence_root"
+    }
+    if ($Name -match "(?i)(ROOT|PATH)$") {
+        return "filesystem_path"
+    }
+    if ($Name -match "(?i)(ENV|ENVIRONMENT)") {
+        return "environment_file"
+    }
+
+    return "operator_value"
+}
+
+function Get-OperatorPlaceholderValidationHint {
+    param(
+        [string]$Name,
+        [string]$InputKind
+    )
+
+    switch ($InputKind) {
+        "digest" { return "Replace with a lowercase 64-character SHA-256 digest that matches the referenced generated artifact." }
+        "controlled_packet_root" { return "Replace with the controlled production provisioning packet root after it passes Test-PassportProductionProvisioningPacket.ps1 -RequireNoPlaceholders." }
+        "filled_evidence_root" { return "Replace with the filled evidence or provisioning packet root after its owning validator passes with -RequireNoPlaceholders." }
+        "filesystem_path" { return "Replace with an existing absolute or repo-relative filesystem path approved for the production lane." }
+        "environment_file" { return "Replace with the approved environment file path for the target release lane." }
+        default { return "Replace with the approved production-lane operator value before running the command." }
+    }
+}
+
+function Get-CommandPlaceholders {
+    param([string[]]$Commands = @())
+
+    $recordsByName = [ordered]@{}
+    for ($index = 0; $index -lt @($Commands).Count; $index++) {
+        $command = [string](@($Commands)[$index])
+        if ([string]::IsNullOrWhiteSpace($command)) {
+            continue
+        }
+
+        foreach ($match in [regex]::Matches($command, "<([A-Za-z0-9][A-Za-z0-9_.:-]*)>")) {
+            $token = [string]$match.Value
+            $name = [string]$match.Groups[1].Value
+            if ([string]::IsNullOrWhiteSpace($name) -or $name -eq "redacted") {
+                continue
+            }
+
+            if (-not $recordsByName.Contains($name)) {
+                $inputKind = Get-OperatorPlaceholderInputKind -Name $name
+                $recordsByName[$name] = [ordered]@{
+                    token = $token
+                    name = $name
+                    input_kind = $inputKind
+                    required = $true
+                    validation_hint = Get-OperatorPlaceholderValidationHint -Name $name -InputKind $inputKind
+                    command_indexes = New-Object System.Collections.Generic.List[int]
+                    occurrence_count = 0
+                }
+            }
+
+            $record = $recordsByName[$name]
+            if (-not $record.command_indexes.Contains([int]$index)) {
+                $record.command_indexes.Add([int]$index)
+            }
+            $record.occurrence_count = [int]$record.occurrence_count + 1
+        }
+    }
+
+    $items = foreach ($record in $recordsByName.Values) {
+        [pscustomobject][ordered]@{
+            token = [string]$record.token
+            name = [string]$record.name
+            input_kind = [string]$record.input_kind
+            required = [bool]$record.required
+            validation_hint = [string]$record.validation_hint
+            command_indexes = @($record.command_indexes)
+            occurrence_count = [int]$record.occurrence_count
+        }
+    }
+
+    return @($items | Sort-Object @{ Expression = "name"; Ascending = $true })
+}
+
 function New-BlockerSummary {
     param(
         [string]$Title,
@@ -432,6 +523,7 @@ function New-Blocker {
     )
 
     $actionCommands = Get-ActionCommandArray -Action $OperatorAction
+    $actionPlaceholders = Get-CommandPlaceholders -Commands $actionCommands
 
     return [pscustomobject][ordered]@{
         id = $Id
@@ -446,10 +538,12 @@ function New-Blocker {
         operator_action_title = $(if ($null -ne $OperatorAction -and $OperatorAction.PSObject.Properties["title"]) { [string]$OperatorAction.title } else { "" })
         operator_action = $(if ($null -ne $OperatorAction -and $OperatorAction.PSObject.Properties["action"]) { [string]$OperatorAction.action } else { "" })
         operator_action_commands = @($actionCommands)
+        operator_action_placeholders = @($actionPlaceholders)
         next_action_id = $(if ($null -ne $OperatorAction -and $OperatorAction.PSObject.Properties["id"]) { [string]$OperatorAction.id } else { "" })
         next_action_title = $(if ($null -ne $OperatorAction -and $OperatorAction.PSObject.Properties["title"]) { [string]$OperatorAction.title } else { "" })
         next_action = $(if ($null -ne $OperatorAction -and $OperatorAction.PSObject.Properties["action"]) { [string]$OperatorAction.action } else { "" })
         next_action_commands = @($actionCommands)
+        next_action_placeholders = @($actionPlaceholders)
     }
 }
 
@@ -551,6 +645,7 @@ function New-NextActionPlan {
             title = [string]$entry.title
             action = [string]$entry.action
             commands = @($entry.commands)
+            operator_placeholders = @(Get-CommandPlaceholders -Commands @($entry.commands))
             blocker_ids = @($entry.blocker_ids)
             operator_input_required = (@($entry.blocker_ids).Count -gt 0)
             required_operator_input_count = @($entry.external_blocker_ids).Count
@@ -1361,6 +1456,10 @@ foreach ($check in $failedReleaseEvidenceChecks) {
 $nextActionPlan = New-NextActionPlan -Blockers $blockers
 $readinessEvidenceItemCommandCount = @($readinessEvidenceItems | Where-Object { @($_.operator_action_commands).Count -gt 0 }).Count
 $releaseEvidenceItemCommandCount = @($releaseEvidenceItems | Where-Object { @($_.operator_action_commands).Count -gt 0 }).Count
+$operatorPlaceholderCount = (@($nextActionPlan | ForEach-Object { @($_.operator_placeholders).Count }) | Measure-Object -Sum).Sum
+if ($null -eq $operatorPlaceholderCount) {
+    $operatorPlaceholderCount = 0
+}
 
 $contractFailures = @()
 foreach ($item in @($readinessEvidenceItems)) {
@@ -1382,10 +1481,22 @@ foreach ($item in @($blockers)) {
     if ($item.operator_action_commands -isnot [array]) {
         $contractFailures += "blockers operator_action_commands must serialize as an array for $($item.id)."
     }
+
+    if ($item.operator_action_placeholders -isnot [array]) {
+        $contractFailures += "blockers operator_action_placeholders must serialize as an array for $($item.id)."
+    }
+
+    if ($item.next_action_placeholders -isnot [array]) {
+        $contractFailures += "blockers next_action_placeholders must serialize as an array for $($item.id)."
+    }
 }
 foreach ($item in @($nextActionPlan)) {
     if ($item.commands -isnot [array]) {
         $contractFailures += "next_action_plan commands must serialize as an array for $($item.id)."
+    }
+
+    if ($item.operator_placeholders -isnot [array]) {
+        $contractFailures += "next_action_plan operator_placeholders must serialize as an array for $($item.id)."
     }
 
     if ($item.blocker_ids -isnot [array]) {
@@ -1426,6 +1537,7 @@ $report = [pscustomobject][ordered]@{
         closeout_failure_count = $closeoutFailures.Count
         blocker_count = $blockers.Count
         next_action_count = $nextActionPlan.Count
+        operator_placeholder_count = [int]$operatorPlaceholderCount
         failed_readiness_gate_count = $failedReadinessGates.Count
         failed_provisioning_check_count = $failedProvisioningChecks.Count
         failed_provisioning_child_check_count = [int]$failedProvisioningChildCheckCount
@@ -1476,6 +1588,7 @@ if (-not [string]::IsNullOrWhiteSpace($MarkdownOutputPath)) {
     $lines.Add("- App commit: $($report.app_commit)")
     $lines.Add("- Ready for production testing: $($report.ready_for_production_testing.ToString().ToLowerInvariant())")
     $lines.Add("- Blockers: $($blockers.Count)")
+    $lines.Add("- Operator command placeholders: $([int]$operatorPlaceholderCount)")
     $lines.Add("- Failed readiness gates: $($failedReadinessGates.Count)")
     $lines.Add("- Failed provisioning checks: $($failedProvisioningChecks.Count)")
     $lines.Add("- Failed provisioning child checks: $failedProvisioningChildCheckCount")
@@ -1529,6 +1642,11 @@ if (-not [string]::IsNullOrWhiteSpace($MarkdownOutputPath)) {
                     $lines.Add("  - Command: ``$command``")
                 }
             }
+            foreach ($placeholder in @($item.operator_placeholders)) {
+                if (-not [string]::IsNullOrWhiteSpace([string]$placeholder.token)) {
+                    $lines.Add("  - Placeholder: ``$($placeholder.token)`` ($($placeholder.input_kind)) - $($placeholder.validation_hint)")
+                }
+            }
         }
     }
 
@@ -1562,6 +1680,11 @@ if (-not [string]::IsNullOrWhiteSpace($MarkdownOutputPath)) {
             foreach ($command in @($blocker.operator_action_commands | Select-Object -First 2)) {
                 if (-not [string]::IsNullOrWhiteSpace($command)) {
                     $lines.Add("  - Next command: ``$command``")
+                }
+            }
+            foreach ($placeholder in @($blocker.next_action_placeholders)) {
+                if (-not [string]::IsNullOrWhiteSpace([string]$placeholder.token)) {
+                    $lines.Add("  - Placeholder: ``$($placeholder.token)`` ($($placeholder.input_kind)) - $($placeholder.validation_hint)")
                 }
             }
         }
@@ -1721,6 +1844,7 @@ $result = [pscustomobject][ordered]@{
     failed_provisioning_check_count = $failedProvisioningChecks.Count
     failed_provisioning_child_check_count = [int]$failedProvisioningChildCheckCount
     failed_release_evidence_check_count = $failedReleaseEvidenceChecks.Count
+    operator_placeholder_count = [int]$operatorPlaceholderCount
     required_environment_variable_count = $requiredEnvironmentVariables.Count
     report_reference_refresh_count = $reportReferenceRefreshes.Count
     required_readiness_evidence_item_count = $readinessEvidenceItems.Count

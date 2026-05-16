@@ -316,6 +316,8 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
     $sourceActions = @(Get-ObjectArray -Object $sourceReport -Name "next_action_plan")
     $packetActions = @(Get-ObjectArray -Object $plan -Name "actions")
     $sourceBlockers = @(Get-ObjectArray -Object $sourceReport -Name "blockers")
+    $sourceOperatorPlaceholderCount = (@($sourceActions | ForEach-Object { @(Get-ObjectArray -Object $_ -Name "operator_placeholders").Count }) | Measure-Object -Sum).Sum
+    if ($null -eq $sourceOperatorPlaceholderCount) { $sourceOperatorPlaceholderCount = 0 }
 
     $sourceFailures = @()
     if ([string]$manifest.source_report.sha256 -ne $sourceHash) {
@@ -333,11 +335,17 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
     if ([int]$plan.source_report.next_action_count -ne $sourceActions.Count) {
         $sourceFailures += "plan next_action_count does not match source report next_action_plan count."
     }
+    if ([int]$plan.source_report.operator_placeholder_count -ne [int]$sourceOperatorPlaceholderCount) {
+        $sourceFailures += "plan operator_placeholder_count does not match source report next_action_plan operator placeholders."
+    }
     if ([int]$plan.source_report.blocker_count -ne $sourceBlockers.Count) {
         $sourceFailures += "plan blocker_count does not match source report blocker count."
     }
     if ([int]$manifest.source_report.next_action_count -ne $sourceActions.Count) {
         $sourceFailures += "manifest next_action_count does not match source report next_action_plan count."
+    }
+    if ([int]$manifest.source_report.operator_placeholder_count -ne [int]$sourceOperatorPlaceholderCount) {
+        $sourceFailures += "manifest operator_placeholder_count does not match source report next_action_plan operator placeholders."
     }
     $checks += New-Check -Id "source_report_linkage" -Passed ($sourceFailures.Count -eq 0) -Failures $sourceFailures -Evidence ([pscustomobject][ordered]@{ source_report_sha256 = $sourceHash; action_count = $sourceActions.Count; blocker_count = $sourceBlockers.Count })
 
@@ -385,6 +393,10 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
             if ((Join-ArrayForCompare -Values $packetArray) -ne (Join-ArrayForCompare -Values $sourceArray)) {
                 $actionFailures += "packet action $id array mismatch: $arrayName"
             }
+        }
+
+        if ((Convert-ForCompare -Value @(Get-ObjectArray -Object $packetAction -Name "operator_placeholders")) -ne (Convert-ForCompare -Value @(Get-ObjectArray -Object $sourceAction -Name "operator_placeholders"))) {
+            $actionFailures += "packet action $id operator_placeholders mismatch."
         }
     }
     $checks += New-Check -Id "action_plan_matches_source" -Passed ($actionFailures.Count -eq 0) -Failures $actionFailures -Evidence ([pscustomobject][ordered]@{ action_count = $packetActions.Count })
@@ -514,6 +526,13 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
                     $markdownFailures += "Markdown is missing command for $($packetAction.id): $command"
                 }
             }
+            foreach ($placeholder in @(Get-ObjectArray -Object $packetAction -Name "operator_placeholders")) {
+                foreach ($value in @([string]$placeholder.token, [string]$placeholder.input_kind, [string]$placeholder.validation_hint)) {
+                    if (-not [string]::IsNullOrWhiteSpace($value) -and $markdown -notmatch [regex]::Escape($value)) {
+                        $markdownFailures += "Markdown is missing placeholder metadata for $($packetAction.id): $value"
+                    }
+                }
+            }
         }
         $checks += New-Check -Id "markdown_coverage" -Passed ($markdownFailures.Count -eq 0) -Failures $markdownFailures
     }
@@ -584,6 +603,13 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
             }
         }
         foreach ($packetAction in $packetActions) {
+            foreach ($placeholder in @(Get-ObjectArray -Object $packetAction -Name "operator_placeholders")) {
+                foreach ($value in @([string]$placeholder.token, [string]$placeholder.input_kind, [string]$placeholder.validation_hint)) {
+                    if (-not [string]::IsNullOrWhiteSpace($value) -and $commandText -notmatch [regex]::Escape($value)) {
+                        $commandFailures += "operator command checklist is missing placeholder metadata for $($packetAction.id): $value"
+                    }
+                }
+            }
             foreach ($command in @(Get-ObjectArray -Object $packetAction -Name "commands")) {
                 if ($commandText -notmatch [regex]::Escape("# $command")) {
                     $commandFailures += "operator command checklist is missing commented command for $($packetAction.id): $command"

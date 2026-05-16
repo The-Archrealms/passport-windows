@@ -104,6 +104,7 @@ function New-ActionRecord {
         title = [string]$Item.title
         action = [string]$Item.action
         commands = @(Get-ObjectArray -Object $Item -Name "commands" | ForEach-Object { [string]$_ })
+        operator_placeholders = @(Get-ObjectArray -Object $Item -Name "operator_placeholders")
         blocker_ids = @(Get-ObjectArray -Object $Item -Name "blocker_ids" | ForEach-Object { [string]$_ })
         operator_input_required = $(if ($Item.PSObject.Properties["operator_input_required"]) { [bool]$Item.operator_input_required } else { $false })
         required_operator_input_count = $(if ($Item.PSObject.Properties["required_operator_input_count"]) { [int]$Item.required_operator_input_count } else { 0 })
@@ -184,6 +185,10 @@ $releaseEvidenceItems = @(Get-ObjectArray -Object $matrix -Name "release_evidenc
 $sourceCommit = Get-SourceCommit
 $sourceReportHash = Get-Sha256Hex -Path $resolvedReportPath
 $sourceReportAppCommit = if ($report.PSObject.Properties["app_commit"]) { [string]$report.app_commit } else { "" }
+$operatorPlaceholderCount = (@($actions | ForEach-Object { @($_.operator_placeholders).Count }) | Measure-Object -Sum).Sum
+if ($null -eq $operatorPlaceholderCount) {
+    $operatorPlaceholderCount = 0
+}
 
 $sourceReportRecord = [pscustomobject][ordered]@{
     path = $resolvedReportPath
@@ -192,6 +197,7 @@ $sourceReportRecord = [pscustomobject][ordered]@{
     ready_for_production_testing = [bool]$report.ready_for_production_testing
     blocker_count = $blockers.Count
     next_action_count = $actions.Count
+    operator_placeholder_count = [int]$operatorPlaceholderCount
 }
 
 $plan = [pscustomobject][ordered]@{
@@ -234,6 +240,7 @@ $markdown.Add("- Source report SHA-256: ``$sourceReportHash``")
 $markdown.Add("- Ready for production testing: $(([bool]$report.ready_for_production_testing).ToString().ToLowerInvariant())")
 $markdown.Add("- Blockers: $($blockers.Count)")
 $markdown.Add("- Action items: $($actions.Count)")
+$markdown.Add("- Operator placeholders: $([int]$operatorPlaceholderCount)")
 $markdown.Add("")
 
 if ($actions.Count -eq 0) {
@@ -255,6 +262,12 @@ else {
         $markdown.Add("- Operator input required: $(([bool]$action.operator_input_required).ToString().ToLowerInvariant())")
         $markdown.Add("- External blocker count: $($action.required_operator_input_count)")
         $markdown.Add("- Blocked by external actor: $(([bool]$action.blocked_by_external_actor).ToString().ToLowerInvariant())")
+        if (@($action.operator_placeholders).Count -gt 0) {
+            $markdown.Add("- Placeholders:")
+            foreach ($placeholder in @($action.operator_placeholders)) {
+                $markdown.Add("  - ``$($placeholder.token)`` ($($placeholder.input_kind)): $($placeholder.validation_hint)")
+            }
+        }
         if (@($action.categories).Count -gt 0) {
             $markdown.Add("- Categories: $((@($action.categories) -join ', '))")
         }
@@ -354,6 +367,9 @@ foreach ($action in $actions) {
     $commandLines.Add("# Operator input required: $(([bool]$action.operator_input_required).ToString().ToLowerInvariant())")
     $commandLines.Add("# External blocker count: $($action.required_operator_input_count)")
     $commandLines.Add("# Blocked by external actor: $(([bool]$action.blocked_by_external_actor).ToString().ToLowerInvariant())")
+    foreach ($placeholder in @($action.operator_placeholders)) {
+        $commandLines.Add("# Placeholder: $($placeholder.token) [$($placeholder.input_kind)] $($placeholder.validation_hint)")
+    }
     foreach ($command in @($action.commands)) {
         $commandLines.Add("# $command")
     }
@@ -373,6 +389,7 @@ $manifest = [pscustomobject][ordered]@{
         ready_for_production_testing = [bool]$report.ready_for_production_testing
         blocker_count = $blockers.Count
         next_action_count = $actions.Count
+        operator_placeholder_count = [int]$operatorPlaceholderCount
         environment_variable_count = $environmentVariables.Count
         readiness_evidence_item_count = $readinessEvidenceItems.Count
         provisioning_evidence_file_count = $provisioningEvidenceFiles.Count
@@ -405,6 +422,7 @@ $result = [pscustomobject][ordered]@{
     operator_commands_sha256 = Get-Sha256Hex -Path $commandsPath
     action_count = $actions.Count
     blocker_count = $blockers.Count
+    operator_placeholder_count = [int]$operatorPlaceholderCount
 }
 
 $result | ConvertTo-Json -Depth 12

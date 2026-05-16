@@ -179,6 +179,169 @@ function Read-ObjectInt {
     return [int]$Object.$Name
 }
 
+function Get-ExpectedOperatorPlaceholderInputKind {
+    param([string]$Name)
+
+    if ($Name -match "(?i)(SHA256|HASH)$") {
+        return "digest"
+    }
+    if ($Name -match "(?i)^controlled-.*packet-root$") {
+        return "controlled_packet_root"
+    }
+    if ($Name -match "(?i)^filled-.*root$") {
+        return "filled_evidence_root"
+    }
+    if ($Name -match "(?i)(ROOT|PATH)$") {
+        return "filesystem_path"
+    }
+    if ($Name -match "(?i)(ENV|ENVIRONMENT)") {
+        return "environment_file"
+    }
+
+    return "operator_value"
+}
+
+function Get-ExpectedOperatorPlaceholderValidationHint {
+    param(
+        [string]$Name,
+        [string]$InputKind
+    )
+
+    switch ($InputKind) {
+        "digest" { return "Replace with a lowercase 64-character SHA-256 digest that matches the referenced generated artifact." }
+        "controlled_packet_root" { return "Replace with the controlled production provisioning packet root after it passes Test-PassportProductionProvisioningPacket.ps1 -RequireNoPlaceholders." }
+        "filled_evidence_root" { return "Replace with the filled evidence or provisioning packet root after its owning validator passes with -RequireNoPlaceholders." }
+        "filesystem_path" { return "Replace with an existing absolute or repo-relative filesystem path approved for the production lane." }
+        "environment_file" { return "Replace with the approved environment file path for the target release lane." }
+        default { return "Replace with the approved production-lane operator value before running the command." }
+    }
+}
+
+function Get-CommandPlaceholders {
+    param([string[]]$Commands = @())
+
+    $recordsByName = [ordered]@{}
+    for ($index = 0; $index -lt @($Commands).Count; $index++) {
+        $command = [string](@($Commands)[$index])
+        if ([string]::IsNullOrWhiteSpace($command)) {
+            continue
+        }
+
+        foreach ($match in [regex]::Matches($command, "<([A-Za-z0-9][A-Za-z0-9_.:-]*)>")) {
+            $token = [string]$match.Value
+            $name = [string]$match.Groups[1].Value
+            if ([string]::IsNullOrWhiteSpace($name) -or $name -eq "redacted") {
+                continue
+            }
+
+            if (-not $recordsByName.Contains($name)) {
+                $inputKind = Get-ExpectedOperatorPlaceholderInputKind -Name $name
+                $recordsByName[$name] = [ordered]@{
+                    token = $token
+                    name = $name
+                    input_kind = $inputKind
+                    required = $true
+                    validation_hint = Get-ExpectedOperatorPlaceholderValidationHint -Name $name -InputKind $inputKind
+                    command_indexes = New-Object System.Collections.Generic.List[int]
+                    occurrence_count = 0
+                }
+            }
+
+            $record = $recordsByName[$name]
+            if (-not $record.command_indexes.Contains([int]$index)) {
+                $record.command_indexes.Add([int]$index)
+            }
+            $record.occurrence_count = [int]$record.occurrence_count + 1
+        }
+    }
+
+    $items = foreach ($record in $recordsByName.Values) {
+        [pscustomobject][ordered]@{
+            token = [string]$record.token
+            name = [string]$record.name
+            input_kind = [string]$record.input_kind
+            required = [bool]$record.required
+            validation_hint = [string]$record.validation_hint
+            command_indexes = @($record.command_indexes)
+            occurrence_count = [int]$record.occurrence_count
+        }
+    }
+
+    return @($items | Sort-Object @{ Expression = "name"; Ascending = $true })
+}
+
+function Join-IntArrayForCompare {
+    param([object[]]$Values)
+
+    return (@($Values | ForEach-Object { [int]$_ }) -join ",")
+}
+
+function Test-OperatorPlaceholderRecords {
+    param(
+        [string]$Scope,
+        [string[]]$Commands = @(),
+        [object[]]$Records = @()
+    )
+
+    $failures = @()
+    $expectedRecords = @(Get-CommandPlaceholders -Commands $Commands)
+    $actualRecords = @($Records)
+
+    if ($actualRecords.Count -ne $expectedRecords.Count) {
+        $failures += "$Scope placeholder count mismatch: expected $($expectedRecords.Count), found $($actualRecords.Count)."
+    }
+
+    $actualByName = @{}
+    foreach ($actual in $actualRecords) {
+        $name = [string]$actual.name
+        if ([string]::IsNullOrWhiteSpace($name)) {
+            $failures += "$Scope placeholder record is missing name."
+            continue
+        }
+        if ($actualByName.ContainsKey($name)) {
+            $failures += "$Scope has duplicate placeholder record: $name"
+            continue
+        }
+        $actualByName[$name] = $actual
+    }
+
+    foreach ($expected in $expectedRecords) {
+        $name = [string]$expected.name
+        if (-not $actualByName.ContainsKey($name)) {
+            $failures += "$Scope missing placeholder record: $name"
+            continue
+        }
+
+        $actual = $actualByName[$name]
+        foreach ($field in @("token", "input_kind", "validation_hint")) {
+            if ([string]$actual.$field -ne [string]$expected.$field) {
+                $failures += "$Scope placeholder $name field mismatch: $field"
+            }
+        }
+        if (-not $actual.PSObject.Properties["required"] -or [bool]$actual.required -ne [bool]$expected.required) {
+            $failures += "$Scope placeholder $name required flag mismatch."
+        }
+        if (-not $actual.PSObject.Properties["occurrence_count"] -or [int]$actual.occurrence_count -ne [int]$expected.occurrence_count) {
+            $failures += "$Scope placeholder $name occurrence_count mismatch."
+        }
+
+        $actualIndexes = @(Get-ObjectArray -Object $actual -Name "command_indexes")
+        $expectedIndexes = @(Get-ObjectArray -Object $expected -Name "command_indexes")
+        if ((Join-IntArrayForCompare -Values $actualIndexes) -ne (Join-IntArrayForCompare -Values $expectedIndexes)) {
+            $failures += "$Scope placeholder $name command_indexes mismatch."
+        }
+    }
+
+    foreach ($actual in $actualRecords) {
+        $name = [string]$actual.name
+        if (-not [string]::IsNullOrWhiteSpace($name) -and -not (@($expectedRecords | ForEach-Object { [string]$_.name }) -contains $name)) {
+            $failures += "$Scope includes stale placeholder record not present in commands: $name"
+        }
+    }
+
+    return $failures
+}
+
 function Get-ExpectedEnvironmentVariableInputKind {
     param([string]$Name)
 
@@ -463,8 +626,11 @@ if ($null -ne $report) {
 
     $readinessEvidenceItemsWithCommands = @($readinessEvidenceItems | Where-Object { (Get-ObjectArray -Object $_ -Name "operator_action_commands").Count -gt 0 }).Count
     $releaseEvidenceItemsWithCommands = @($releaseEvidenceItems | Where-Object { (Get-ObjectArray -Object $_ -Name "operator_action_commands").Count -gt 0 }).Count
+    $operatorPlaceholderCount = (@($nextActionPlan | ForEach-Object { @(Get-ObjectArray -Object $_ -Name "operator_placeholders").Count }) | Measure-Object -Sum).Sum
+    if ($null -eq $operatorPlaceholderCount) { $operatorPlaceholderCount = 0 }
     if ((Read-ObjectInt -Object $summary -Name "required_readiness_evidence_item_command_count") -ne $readinessEvidenceItemsWithCommands) { $countFailures += "required_readiness_evidence_item_command_count does not match readiness evidence items with commands." }
     if ((Read-ObjectInt -Object $summary -Name "required_release_evidence_item_command_count") -ne $releaseEvidenceItemsWithCommands) { $countFailures += "required_release_evidence_item_command_count does not match release evidence items with commands." }
+    if ((Read-ObjectInt -Object $summary -Name "operator_placeholder_count") -ne [int]$operatorPlaceholderCount) { $countFailures += "operator_placeholder_count does not match next_action_plan operator placeholders." }
 
     $checks += New-Check -Id "summary_counts" -Passed ($countFailures.Count -eq 0) -Failures $countFailures
 
@@ -755,6 +921,8 @@ if ($null -ne $report) {
         }
         $operatorCommands = @(Get-ObjectArray -Object $blocker -Name "operator_action_commands" | ForEach-Object { [string]$_ })
         $nextActionCommands = @(Get-ObjectArray -Object $blocker -Name "next_action_commands" | ForEach-Object { [string]$_ })
+        $operatorPlaceholders = @(Get-ObjectArray -Object $blocker -Name "operator_action_placeholders")
+        $nextActionPlaceholders = @(Get-ObjectArray -Object $blocker -Name "next_action_placeholders")
         if ($nextActionCommands.Count -eq 0) {
             $blockerContractFailures += "blocker $blockerId lacks next_action_commands."
         }
@@ -763,6 +931,8 @@ if ($null -ne $report) {
                 $blockerContractFailures += "blocker $blockerId next_action_commands is missing operator command: $operatorCommand"
             }
         }
+        $blockerContractFailures += Test-OperatorPlaceholderRecords -Scope "blocker $blockerId operator_action_placeholders" -Commands $operatorCommands -Records $operatorPlaceholders
+        $blockerContractFailures += Test-OperatorPlaceholderRecords -Scope "blocker $blockerId next_action_placeholders" -Commands $nextActionCommands -Records $nextActionPlaceholders
     }
     if (-not [bool]$report.ready_for_production_testing -and $blockers.Count -eq 0) {
         $blockerContractFailures += "ready_for_production_testing=false but blockers is empty."
@@ -812,6 +982,10 @@ if ($null -ne $report) {
         if ($commands.Count -eq 0) {
             $nextActionPlanFailures += "next_action_plan $itemId lacks commands."
         }
+        if (-not $item.PSObject.Properties["operator_placeholders"]) {
+            $nextActionPlanFailures += "next_action_plan $itemId is missing operator_placeholders."
+        }
+        $nextActionPlanFailures += Test-OperatorPlaceholderRecords -Scope "next_action_plan $itemId operator_placeholders" -Commands $commands -Records @(Get-ObjectArray -Object $item -Name "operator_placeholders")
 
         $itemBlockerIds = @(Get-ObjectArray -Object $item -Name "blocker_ids" | ForEach-Object { [string]$_ })
         if ($itemBlockerIds.Count -eq 0) {
@@ -932,6 +1106,13 @@ if ($null -ne $report) {
                     $markdownFailures += "Markdown does not include next_action_plan command: $($item.id)"
                 }
             }
+            foreach ($placeholder in @(Get-ObjectArray -Object $item -Name "operator_placeholders")) {
+                foreach ($value in @([string]$placeholder.token, [string]$placeholder.input_kind, [string]$placeholder.validation_hint)) {
+                    if (-not [string]::IsNullOrWhiteSpace($value) -and $markdown -notmatch [regex]::Escape($value)) {
+                        $markdownFailures += "Markdown does not include next_action_plan placeholder metadata: $($item.id)"
+                    }
+                }
+            }
         }
         foreach ($blocker in $blockers) {
             if ($markdown -notmatch [regex]::Escape([string]$blocker.id)) {
@@ -946,6 +1127,13 @@ if ($null -ne $report) {
             foreach ($command in @(Get-ObjectArray -Object $blocker -Name "next_action_commands")) {
                 if (-not [string]::IsNullOrWhiteSpace([string]$command) -and $markdown -notmatch [regex]::Escape([string]$command)) {
                     $markdownFailures += "Markdown does not include blocker next_action command: $($blocker.id)"
+                }
+            }
+            foreach ($placeholder in @(Get-ObjectArray -Object $blocker -Name "next_action_placeholders")) {
+                foreach ($value in @([string]$placeholder.token, [string]$placeholder.input_kind, [string]$placeholder.validation_hint)) {
+                    if (-not [string]::IsNullOrWhiteSpace($value) -and $markdown -notmatch [regex]::Escape($value)) {
+                        $markdownFailures += "Markdown does not include blocker placeholder metadata: $($blocker.id)"
+                    }
                 }
             }
         }
