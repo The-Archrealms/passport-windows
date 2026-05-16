@@ -226,6 +226,22 @@ function New-AuditItemSummary {
     return ConvertTo-AuditText -Value (($parts | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join " ")
 }
 
+function Get-PrimaryOperatorAction {
+    param([object[]]$OperatorActions = @())
+
+    $actions = @($OperatorActions | Where-Object {
+            $null -ne $_ -and
+            $_.PSObject.Properties["action"] -and
+            -not [string]::IsNullOrWhiteSpace([string]$_.action)
+        } | Select-Object -First 1)
+
+    if ($actions.Count -eq 0) {
+        return $null
+    }
+
+    return $actions[0]
+}
+
 function New-AuditItem {
     param(
         [string]$Id,
@@ -240,12 +256,22 @@ function New-AuditItem {
         [object[]]$OperatorActions = @()
     )
 
+    $primaryAction = Get-PrimaryOperatorAction -OperatorActions $OperatorActions
+    $nextActionCommands = @()
+    if ($null -ne $primaryAction -and $primaryAction.PSObject.Properties["commands"]) {
+        $nextActionCommands = @($primaryAction.commands | ForEach-Object { ConvertTo-AuditText -Value $_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    }
+
     return [pscustomobject][ordered]@{
         id = $Id
         source = $Source
         requirement = $Requirement
         summary = New-AuditItemSummary -Requirement $Requirement -Status $Status -Blockers $Blockers -OperatorActions $OperatorActions
         status = $Status
+        next_action_id = $(if ($null -ne $primaryAction -and $primaryAction.PSObject.Properties["id"]) { ConvertTo-AuditText -Value $primaryAction.id } else { "" })
+        next_action_title = $(if ($null -ne $primaryAction -and $primaryAction.PSObject.Properties["title"]) { ConvertTo-AuditText -Value $primaryAction.title } else { "" })
+        next_action = $(if ($null -ne $primaryAction) { ConvertTo-AuditText -Value $primaryAction.action } else { "" })
+        next_action_commands = @($nextActionCommands)
         evidence_ids = @($EvidenceIds)
         coverage_check_ids = @($CoverageCheckIds | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
         coverage_evidence = @($CoverageEvidence)
@@ -594,6 +620,12 @@ if (-not [string]::IsNullOrWhiteSpace($MarkdownOutputPath)) {
         $lines.Add("- ``$($item.id)`` [$($item.status)]: $($item.requirement)")
         if (-not [string]::IsNullOrWhiteSpace([string]$item.summary)) {
             $lines.Add("  - Summary: $($item.summary)")
+        }
+        if (-not [string]::IsNullOrWhiteSpace([string]$item.next_action)) {
+            $lines.Add("  - Next action: $($item.next_action)")
+        }
+        foreach ($command in @($item.next_action_commands | Select-Object -First 2)) {
+            $lines.Add("  - Next action command: ``$command``")
         }
         if (@($item.evidence_ids).Count -gt 0) {
             $lines.Add("  - Evidence: $((@($item.evidence_ids) -join ', '))")

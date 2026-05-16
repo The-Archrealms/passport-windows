@@ -740,12 +740,74 @@ foreach ($item in $checklist) {
         }
     }
 
+    $nextActionCommands = Get-ObjectArray -Object $item -Name "next_action_commands"
+    foreach ($nextActionCommand in $nextActionCommands) {
+        if ([string]::IsNullOrWhiteSpace([string]$nextActionCommand)) {
+            $itemFailures += "$id next_action_commands includes a blank command"
+            continue
+        }
+
+        $scriptPath = Get-OperatorCommandScriptPath -Command ([string]$nextActionCommand)
+        if ([string]::IsNullOrWhiteSpace($scriptPath)) {
+            $itemFailures += "$id next_action_commands entry must include a PowerShell -File script path: $nextActionCommand"
+            continue
+        }
+
+        $normalizedScriptPath = $scriptPath -replace '/', '\'
+        if ($normalizedScriptPath -notmatch '^tools\\release\\[^\\]+\.ps1$') {
+            $itemFailures += "$id next_action_commands entry must target a tools\release PowerShell script: $nextActionCommand"
+            continue
+        }
+
+        $resolvedScriptPath = Resolve-RepoPath -Path $scriptPath
+        if (-not (Test-Path -LiteralPath $resolvedScriptPath -PathType Leaf)) {
+            $itemFailures += "$id next_action_commands entry references a missing script: $scriptPath"
+        }
+    }
+
+    $primaryOperatorActions = @($operatorActions | Where-Object {
+            $null -ne $_ -and
+            $_.PSObject.Properties["action"] -and
+            -not [string]::IsNullOrWhiteSpace([string]$_.action)
+        } | Select-Object -First 1)
+
+    if ($primaryOperatorActions.Count -gt 0) {
+        $primaryOperatorAction = $primaryOperatorActions[0]
+        if ([string]$item.next_action -ne [string]$primaryOperatorAction.action) {
+            $itemFailures += "$id next_action does not match the primary operator action"
+        }
+        if ($primaryOperatorAction.PSObject.Properties["id"] -and [string]$item.next_action_id -ne [string]$primaryOperatorAction.id) {
+            $itemFailures += "$id next_action_id does not match the primary operator action id"
+        }
+        if ($primaryOperatorAction.PSObject.Properties["title"] -and [string]$item.next_action_title -ne [string]$primaryOperatorAction.title) {
+            $itemFailures += "$id next_action_title does not match the primary operator action title"
+        }
+
+        $primaryCommands = @(Get-ObjectArray -Object $primaryOperatorAction -Name "commands" | ForEach-Object { [string]$_ })
+        $nextCommands = @($nextActionCommands | ForEach-Object { [string]$_ })
+        foreach ($primaryCommand in $primaryCommands) {
+            if ($nextCommands -notcontains $primaryCommand) {
+                $itemFailures += "$id next_action_commands is missing primary operator command: $primaryCommand"
+            }
+        }
+    }
+    elseif (-not [string]::IsNullOrWhiteSpace([string]$item.next_action)) {
+        $itemFailures += "$id has next_action but no primary operator action"
+    }
+
     if ([string]$item.status -ne "passed") {
         if ($operatorActions.Count -eq 0) {
             $itemFailures += "$id is not passed but has no operator actions"
         }
         elseif ($operatorCommandCount -eq 0) {
             $itemFailures += "$id is not passed but has no operator action commands"
+        }
+
+        if ([string]::IsNullOrWhiteSpace([string]$item.next_action)) {
+            $itemFailures += "$id is not passed but has no next_action"
+        }
+        if ($nextActionCommands.Count -eq 0) {
+            $itemFailures += "$id is not passed but has no next_action_commands"
         }
     }
 }
@@ -830,6 +892,12 @@ if ($markdownExists) {
         }
 
         $itemBlock = $itemMatch.Value
+        if ($itemBlock -notmatch '(?m)^\s+- Next action: ') {
+            $markdownActionFailures += "Markdown block does not include a Next action line for non-passed item: $itemId"
+        }
+        if ($itemBlock -notmatch '(?m)^\s+- Next action command: ') {
+            $markdownActionFailures += "Markdown block does not include a Next action command line for non-passed item: $itemId"
+        }
         if ($itemBlock -notmatch '(?m)^\s+- Next: ') {
             $markdownActionFailures += "Markdown block does not include a Next line for non-passed item: $itemId"
         }
