@@ -189,6 +189,7 @@ $manifest = [pscustomobject][ordered]@{
         "Fill every bracketed placeholder in the copied provisioning documents.",
         "Complete canary-readiness evidence after the allowlisted CanaryMvp lane has run, validate the packet with Test-PassportCanaryMvpReadinessEvidencePacket.ps1, then validate readiness with Test-PassportCanaryMvpReadiness.ps1.",
         "Run Test-PassportProductionProvisioningPacket.ps1 -PacketRoot <packet-root> -RequireNoPlaceholders before loading values into the ProductionMvp readiness environment.",
+        "Run Test-PassportProductionProvisioningPacket.ps1 -PacketRoot <packet-root> -RequireNoPlaceholders -CreateHostedMonetaryRecords -MonetaryHostedApiBaseUrl <production-hosted-api-base-url> -MonetaryOperatorKeyFile <approved-operator-key-file> after monetary authority approval to create hosted ARCH genesis and CC capacity records.",
         "Run live probes only after approved production endpoints and authority records exist."
     )
 }

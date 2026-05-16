@@ -828,7 +828,8 @@ $readinessActionMap = @{
         -Title "Configure issuer, capacity, genesis, and ledger IDs" `
         -Action "Approve and load the CC issuer authority ID, capacity report issuer ID, ARCH genesis manifest ID, and production ledger namespace." `
         -Commands @(
-            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportProductionMonetaryProvisioning.ps1 -ProductionMonetaryPath <filled-production-monetary-root> -RequireNoPlaceholders"
+            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportProductionMonetaryProvisioning.ps1 -ProductionMonetaryPath <filled-production-monetary-root> -RequireNoPlaceholders",
+            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportProductionProvisioningPacket.ps1 -PacketRoot <controlled-production-packet-root> -RequireNoPlaceholders -CreateHostedMonetaryRecords -MonetaryHostedApiBaseUrl <production-hosted-api-base-url> -MonetaryOperatorKeyFile <approved-operator-key-file>"
         )
     open_weight_ai_runtime = New-Action `
         -Id "open_weight_ai_runtime" `
@@ -914,9 +915,10 @@ $provisioningActionMap = @{
     production_monetary_provisioning = New-Action `
         -Id "production_monetary_provisioning" `
         -Title "Fill production monetary provisioning" `
-        -Action "Fill issuer/capacity/genesis provisioning, ARCH genesis request, and CC capacity request records." `
+        -Action "Fill issuer/capacity/genesis provisioning, ARCH genesis request, and CC capacity request records, then create the hosted monetary registry records from the controlled packet." `
         -Commands @(
-            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportProductionMonetaryProvisioning.ps1 -ProductionMonetaryPath <filled-production-monetary-root> -RequireNoPlaceholders"
+            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportProductionMonetaryProvisioning.ps1 -ProductionMonetaryPath <filled-production-monetary-root> -RequireNoPlaceholders",
+            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportProductionProvisioningPacket.ps1 -PacketRoot <controlled-production-packet-root> -RequireNoPlaceholders -CreateHostedMonetaryRecords -MonetaryHostedApiBaseUrl <production-hosted-api-base-url> -MonetaryOperatorKeyFile <approved-operator-key-file>"
         )
 }
 
@@ -933,7 +935,8 @@ $releaseEvidenceActionMap = @{
         -Title "Validate filled production provisioning" `
         -Action "Fill the controlled production provisioning packet and validate it with no placeholders." `
         -Commands @(
-            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportProductionProvisioningPacket.ps1 -PacketRoot <controlled-production-packet-root> -RequireNoPlaceholders"
+            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportProductionProvisioningPacket.ps1 -PacketRoot <controlled-production-packet-root> -RequireNoPlaceholders",
+            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportProductionProvisioningPacket.ps1 -PacketRoot <controlled-production-packet-root> -RequireNoPlaceholders -CreateHostedMonetaryRecords -MonetaryHostedApiBaseUrl <production-hosted-api-base-url> -MonetaryOperatorKeyFile <approved-operator-key-file>"
         )
     reviewable_for_signoff = New-Action `
         -Id "reviewable_for_signoff" `

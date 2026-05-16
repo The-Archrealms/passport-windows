@@ -57,6 +57,14 @@ param(
 
     [switch]$CreateHostedMonetaryRecords,
 
+    [string]$MonetaryHostedApiBaseUrl = $env:PASSPORT_WINDOWS_PRODUCTION_MVP_API_BASE_URL,
+
+    [string]$MonetaryOperatorKeyEnvironmentVariable = "ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY",
+
+    [string]$MonetaryOperatorKeyFile = "",
+
+    [int]$MonetaryEndpointTimeoutSeconds = 20,
+
     [switch]$NoFail
 )
 
@@ -95,7 +103,8 @@ function Invoke-ValidationScript {
         [string]$Description,
         [string]$ScriptRelativePath,
         [string[]]$Arguments,
-        [string]$ReportRelativePath
+        [string]$ReportRelativePath,
+        [hashtable]$EnvironmentVariables = @{}
     )
 
     $powershell = Get-Command powershell -ErrorAction Stop
@@ -129,6 +138,11 @@ function Invoke-ValidationScript {
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError = $true
     $psi.UseShellExecute = $false
+    foreach ($entry in $EnvironmentVariables.GetEnumerator()) {
+        if (-not [string]::IsNullOrWhiteSpace([string]$entry.Key) -and $null -ne $entry.Value) {
+            $psi.Environment[[string]$entry.Key] = [string]$entry.Value
+        }
+    }
 
     $process = [System.Diagnostics.Process]::Start($psi)
     $stdout = $process.StandardOutput.ReadToEnd()
@@ -176,6 +190,7 @@ function Invoke-ValidationScript {
             child_schema = if ($childReport -and $childReport.PSObject.Properties["schema"]) { [string]$childReport.schema } else { "" }
             child_passed = if ($childReport -and $childReport.PSObject.Properties["passed"]) { [bool]$childReport.passed } else { $false }
             child_failed_check_count = if ($childReport -and $childReport.PSObject.Properties["failed_check_count"]) { [int]$childReport.failed_check_count } else { $null }
+            environment_overrides = @($EnvironmentVariables.Keys)
         }
     }
 }
@@ -197,6 +212,42 @@ function Add-SwitchArgument {
     }
 
     return @($normalized)
+}
+
+function Add-ValueArgument {
+    param(
+        [string[]]$Arguments,
+        [string]$Name,
+        [string]$Value
+    )
+
+    $normalized = @()
+    if ($Arguments) {
+        $normalized += @($Arguments | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($Value)) {
+        return @($normalized + @($Name, $Value))
+    }
+
+    return @($normalized)
+}
+
+function Get-MonetaryOperatorKey {
+    if (-not [string]::IsNullOrWhiteSpace($MonetaryOperatorKeyFile)) {
+        $resolvedKeyFile = Resolve-RepoPath -Path $MonetaryOperatorKeyFile
+        if (-not (Test-Path -LiteralPath $resolvedKeyFile -PathType Leaf)) {
+            throw "MonetaryOperatorKeyFile was not found: $resolvedKeyFile"
+        }
+
+        return (Get-Content -LiteralPath $resolvedKeyFile -Raw).Trim()
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($MonetaryOperatorKeyEnvironmentVariable)) {
+        return [Environment]::GetEnvironmentVariable($MonetaryOperatorKeyEnvironmentVariable)
+    }
+
+    return ""
 }
 
 if (-not [string]::IsNullOrWhiteSpace($PacketRoot)) {
@@ -335,12 +386,40 @@ $checks += Invoke-ValidationScript `
 
 $monetaryArgs = @("-ProductionMonetaryPath", $ProductionMonetaryPath) + $placeholderArgs
 $monetaryArgs = Add-SwitchArgument -Arguments $monetaryArgs -Name "-CreateHostedRecords" -Enabled ([bool]$CreateHostedMonetaryRecords)
+$monetaryEnvironment = @{}
+$monetaryOperatorKeyConfigured = $false
+$monetaryOperatorKeySource = "not requested"
+if ($CreateHostedMonetaryRecords) {
+    if ($MonetaryEndpointTimeoutSeconds -le 0) {
+        throw "MonetaryEndpointTimeoutSeconds must be greater than zero."
+    }
+
+    $monetaryArgs = Add-ValueArgument -Arguments $monetaryArgs -Name "-HostedApiBaseUrl" -Value $MonetaryHostedApiBaseUrl
+    $monetaryArgs = Add-ValueArgument -Arguments $monetaryArgs -Name "-EndpointTimeoutSeconds" -Value ([string]$MonetaryEndpointTimeoutSeconds)
+
+    $monetaryOperatorKey = Get-MonetaryOperatorKey
+    $monetaryOperatorKeyConfigured = -not [string]::IsNullOrWhiteSpace($monetaryOperatorKey)
+    if (-not [string]::IsNullOrWhiteSpace($MonetaryOperatorKeyFile)) {
+        $monetaryOperatorKeySource = "file"
+    }
+    elseif (-not [string]::IsNullOrWhiteSpace($MonetaryOperatorKeyEnvironmentVariable)) {
+        $monetaryOperatorKeySource = "environment"
+    }
+    else {
+        $monetaryOperatorKeySource = "missing"
+    }
+
+    if ($monetaryOperatorKeyConfigured) {
+        $monetaryEnvironment["ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY"] = $monetaryOperatorKey
+    }
+}
 $checks += Invoke-ValidationScript `
     -Id "production_monetary_provisioning" `
     -Description "ARCH genesis, Crown Credit capacity, issuer authority, and production ledger namespace provisioning packet is reviewable." `
     -ScriptRelativePath "tools\release\Test-PassportProductionMonetaryProvisioning.ps1" `
     -Arguments $monetaryArgs `
-    -ReportRelativePath (Join-Path $childReportRoot "production-monetary-provisioning-validation-report.json")
+    -ReportRelativePath (Join-Path $childReportRoot "production-monetary-provisioning-validation-report.json") `
+    -EnvironmentVariables $monetaryEnvironment
 
 $failed = @($checks | Where-Object { -not $_.passed })
 $report = [pscustomobject][ordered]@{
@@ -354,6 +433,10 @@ $report = [pscustomobject][ordered]@{
     probe_managed_signing_endpoint = [bool]$ProbeManagedSigningEndpoint
     probe_ai_runtime = [bool]$ProbeAiRuntime
     create_hosted_monetary_records = [bool]$CreateHostedMonetaryRecords
+    monetary_hosted_api_base_url_configured = -not [string]::IsNullOrWhiteSpace($MonetaryHostedApiBaseUrl)
+    monetary_operator_key_configured = [bool]$monetaryOperatorKeyConfigured
+    monetary_operator_key_source = $monetaryOperatorKeySource
+    monetary_endpoint_timeout_seconds = [int]$MonetaryEndpointTimeoutSeconds
     passed = $failed.Count -eq 0
     failed_check_count = $failed.Count
     checks = $checks
