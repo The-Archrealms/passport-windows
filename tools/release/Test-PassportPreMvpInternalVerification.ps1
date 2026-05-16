@@ -986,11 +986,11 @@ else {
     $checks += New-ToolCheck `
         -Id "production_mvp_outstanding_work_report_validation" `
         -Description "Production MVP outstanding-work reporting summarizes closeout, readiness, provisioning, and release-evidence blockers without exposing secrets." `
-        -Result (Invoke-Tool -FilePath "powershell" -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "tools\release\Test-PassportProductionMvpOutstandingWorkReport.ps1", "-UseGeneratedFixture"))
+        -Result (Invoke-Tool -FilePath "powershell" -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "tools\release\Test-PassportProductionMvpOutstandingWorkReport.ps1", "-UseGeneratedFixture", "-OutputPath", "artifacts\release\production-mvp-outstanding-work-fixture-validation-report.json"))
     $checks += New-ToolCheck `
         -Id "production_mvp_next_action_packet_validation" `
         -Description "Production MVP next-action packet generation creates a validated operator handoff from the outstanding-work blocker plan." `
-        -Result (Invoke-Tool -FilePath "powershell" -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "tools\release\Test-PassportProductionMvpNextActionPacket.ps1", "-UseGeneratedFixture"))
+        -Result (Invoke-Tool -FilePath "powershell" -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "tools\release\Test-PassportProductionMvpNextActionPacket.ps1", "-UseGeneratedFixture", "-OutputPath", "artifacts\release\production-mvp-next-action-packet-fixture-validation-report.json"))
     $checks += New-ToolCheck `
         -Id "token_ready_mvp_completion_audit_report_validation" `
         -Description "Token-Ready MVP completion audit maps PRD success criteria and ARD release gates to concrete evidence files without depending on the still-running pre-MVP report." `

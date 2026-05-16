@@ -683,6 +683,28 @@ foreach ($sourceId in $requiredSourceFileIds) {
     $checks += New-Check -Id "source_file_$sourceId" -Passed ($sourceFailures.Count -eq 0) -Failures $sourceFailures -Evidence $source
 }
 
+$sourceFreshnessFailures = @()
+foreach ($sourceId in $requiredSourceFileIds) {
+    $source = Get-SourceFile -Report $report -Id $sourceId
+    if ($null -eq $source) {
+        continue
+    }
+
+    $resolvedSourcePath = Resolve-RepoPath -Path ([string]$source.path)
+    if ([string]::IsNullOrWhiteSpace($resolvedSourcePath) -or -not (Test-Path -LiteralPath $resolvedSourcePath -PathType Leaf)) {
+        continue
+    }
+
+    $currentSourceSha = Get-Sha256Hex -Path $resolvedSourcePath
+    $reportedSourceSha = [string]$source.sha256
+    if ($reportedSourceSha -ne $currentSourceSha) {
+        $sourceFreshnessFailures += "$sourceId SHA-256 $reportedSourceSha does not match current file SHA-256 $currentSourceSha."
+    }
+}
+$checks += New-Check -Id "source_file_freshness" -Passed ($sourceFreshnessFailures.Count -eq 0) -Failures $sourceFreshnessFailures -Evidence ([pscustomobject][ordered]@{
+    source_ids = $requiredSourceFileIds
+})
+
 $commitSourceIds = @(
     "production_mvp_outstanding_work",
     "production_mvp_next_action_packet_manifest",
