@@ -286,11 +286,15 @@ $matrixMarkdown.Add("")
 
 $matrixMarkdown.Add("## Environment Variables")
 $matrixMarkdown.Add("")
-Add-MarkdownRow -Lines $matrixMarkdown -Cells @("Variable", "Readiness gates", "Missing text")
-Add-MarkdownRow -Lines $matrixMarkdown -Cells @("---", "---", "---")
+Add-MarkdownRow -Lines $matrixMarkdown -Cells @("Variable", "Kind", "Sensitivity", "Secret store", "Validation", "Readiness gates", "Missing text")
+Add-MarkdownRow -Lines $matrixMarkdown -Cells @("---", "---", "---", "---", "---", "---", "---")
 foreach ($item in $environmentVariables) {
     Add-MarkdownRow -Lines $matrixMarkdown -Cells @(
         [string]$item.name,
+        [string]$item.input_kind,
+        [string]$item.sensitivity,
+        ([bool]$item.requires_secret_store).ToString().ToLowerInvariant(),
+        [string]$item.validation_hint,
         (Join-StringArray -Values (Get-ObjectArray -Object $item -Name "readiness_gate_ids")),
         (Join-StringArray -Values (Get-ObjectArray -Object $item -Name "missing_texts"))
     )

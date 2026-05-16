@@ -125,6 +125,105 @@ function Get-EnvironmentVariableNames {
     return @($names | Select-Object -Unique)
 }
 
+function Get-EnvironmentVariableInputKind {
+    param([string]$Name)
+
+    if ($Name -match "(?i)(API_KEY|TOKEN|SECRET|PASSWORD|PRIVATE_KEY|PFX)") {
+        return "secret"
+    }
+    if ($Name -match "(?i)(SHA256|HASH)$|_SHA256$|_HASH$") {
+        return "digest"
+    }
+    if ($Name -match "(?i)THUMBPRINT") {
+        return "certificate_thumbprint"
+    }
+    if ($Name -match "(?i)(URL|BASE_URL|ENDPOINT|DESTINATION)$") {
+        return "endpoint_url"
+    }
+    if ($Name -match "(?i)(URI|RUNBOOK_URI|POLICY_URI)$") {
+        return "document_uri"
+    }
+    if ($Name -match "(?i)(APPROVAL_ID|SIGNOFF_ID|LICENSE_APPROVAL_ID)$") {
+        return "approval_id"
+    }
+    if ($Name -match "(?i)(ISSUER_ID|MANIFEST_ID|AUTHORITY_ID|KEY_ID|MODEL_ID|VECTOR_STORE_ID)$") {
+        return "authority_or_resource_id"
+    }
+    if ($Name -match "(?i)(PROVIDER|CUSTODY|MODE)$") {
+        return "provider_or_mode"
+    }
+    if ($Name -match "(?i)(ROOT|PATH|NAMESPACE)$") {
+        return "storage_or_namespace"
+    }
+    if ($Name -match "(?i)OWNER$") {
+        return "owner_contact"
+    }
+
+    return "operator_value"
+}
+
+function Get-EnvironmentVariableSensitivity {
+    param(
+        [string]$Name,
+        [string]$InputKind
+    )
+
+    if ($InputKind -eq "secret") {
+        return "secret"
+    }
+    if ($InputKind -in @("digest", "approval_id", "certificate_thumbprint")) {
+        return "integrity_metadata"
+    }
+    if ($Name -match "(?i)(SIGNING|KEY|CUSTODY|AUTHORITY|ISSUER|LEDGER|STORAGE|AI|TELEMETRY|INCIDENT)") {
+        return "restricted_operational"
+    }
+
+    return "configuration"
+}
+
+function Get-EnvironmentVariableValidationHint {
+    param(
+        [string]$InputKind,
+        [string]$Sensitivity
+    )
+
+    switch ($InputKind) {
+        "secret" { return "Resolve from the approved secret store; do not commit or paste the value into evidence." }
+        "digest" { return "Verify it is a lowercase 64-character SHA-256 digest and matches the referenced artifact." }
+        "certificate_thumbprint" { return "Verify it matches the production signing certificate thumbprint in the controlled certificate store." }
+        "endpoint_url" { return "Verify it is an HTTPS endpoint owned by the production lane and reachable from the Passport client." }
+        "document_uri" { return "Verify it resolves to the approved runbook, policy, or evidence document for the production lane." }
+        "approval_id" { return "Verify it references a signed approval record from the required accountable owner." }
+        "authority_or_resource_id" { return "Verify it maps to an approved production authority, key, model, manifest, or resource record." }
+        "provider_or_mode" { return "Verify it is one of the approved production providers or operating modes for this lane." }
+        "storage_or_namespace" { return "Verify it points to the approved production storage root, path, or ledger namespace." }
+        "owner_contact" { return "Verify it identifies the accountable owner or escalation contact for the production lane." }
+        default {
+            if ($Sensitivity -eq "restricted_operational") {
+                return "Verify the value is approved for the production lane and recorded in the operator handoff."
+            }
+            return "Verify the value is non-empty and matches the production lane configuration."
+        }
+    }
+}
+
+function New-EnvironmentVariableRecord {
+    param([string]$Name)
+
+    $inputKind = Get-EnvironmentVariableInputKind -Name $Name
+    $sensitivity = Get-EnvironmentVariableSensitivity -Name $Name -InputKind $inputKind
+
+    return [pscustomobject][ordered]@{
+        name = $Name
+        input_kind = $inputKind
+        sensitivity = $sensitivity
+        requires_secret_store = ($sensitivity -eq "secret")
+        validation_hint = Get-EnvironmentVariableValidationHint -InputKind $inputKind -Sensitivity $sensitivity
+        readiness_gate_ids = @()
+        missing_texts = @()
+    }
+}
+
 function New-FileRecord {
     param(
         [string]$Id,
@@ -1018,11 +1117,7 @@ foreach ($gate in $failedReadinessGates) {
         $envNames = @(Get-EnvironmentVariableNames -Text ([string]$missing))
         foreach ($envName in $envNames) {
             if (-not $environmentVariableMap.ContainsKey($envName)) {
-                $environmentVariableMap[$envName] = [pscustomobject][ordered]@{
-                    name = $envName
-                    readiness_gate_ids = @()
-                    missing_texts = @()
-                }
+                $environmentVariableMap[$envName] = New-EnvironmentVariableRecord -Name $envName
             }
 
             $record = $environmentVariableMap[$envName]

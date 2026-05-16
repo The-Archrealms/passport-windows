@@ -179,6 +179,62 @@ function Read-ObjectInt {
     return [int]$Object.$Name
 }
 
+function Get-ExpectedEnvironmentVariableInputKind {
+    param([string]$Name)
+
+    if ($Name -match "(?i)(API_KEY|TOKEN|SECRET|PASSWORD|PRIVATE_KEY|PFX)") {
+        return "secret"
+    }
+    if ($Name -match "(?i)(SHA256|HASH)$|_SHA256$|_HASH$") {
+        return "digest"
+    }
+    if ($Name -match "(?i)THUMBPRINT") {
+        return "certificate_thumbprint"
+    }
+    if ($Name -match "(?i)(URL|BASE_URL|ENDPOINT|DESTINATION)$") {
+        return "endpoint_url"
+    }
+    if ($Name -match "(?i)(URI|RUNBOOK_URI|POLICY_URI)$") {
+        return "document_uri"
+    }
+    if ($Name -match "(?i)(APPROVAL_ID|SIGNOFF_ID|LICENSE_APPROVAL_ID)$") {
+        return "approval_id"
+    }
+    if ($Name -match "(?i)(ISSUER_ID|MANIFEST_ID|AUTHORITY_ID|KEY_ID|MODEL_ID|VECTOR_STORE_ID)$") {
+        return "authority_or_resource_id"
+    }
+    if ($Name -match "(?i)(PROVIDER|CUSTODY|MODE)$") {
+        return "provider_or_mode"
+    }
+    if ($Name -match "(?i)(ROOT|PATH|NAMESPACE)$") {
+        return "storage_or_namespace"
+    }
+    if ($Name -match "(?i)OWNER$") {
+        return "owner_contact"
+    }
+
+    return "operator_value"
+}
+
+function Get-ExpectedEnvironmentVariableSensitivity {
+    param(
+        [string]$Name,
+        [string]$InputKind
+    )
+
+    if ($InputKind -eq "secret") {
+        return "secret"
+    }
+    if ($InputKind -in @("digest", "approval_id", "certificate_thumbprint")) {
+        return "integrity_metadata"
+    }
+    if ($Name -match "(?i)(SIGNING|KEY|CUSTODY|AUTHORITY|ISSUER|LEDGER|STORAGE|AI|TELEMETRY|INCIDENT)") {
+        return "restricted_operational"
+    }
+
+    return "configuration"
+}
+
 function Get-OperatorCommandScriptPath {
     param([string]$Command)
 
@@ -391,6 +447,47 @@ if ($null -ne $report) {
     if ((Read-ObjectInt -Object $summary -Name "required_release_evidence_item_command_count") -ne $releaseEvidenceItemsWithCommands) { $countFailures += "required_release_evidence_item_command_count does not match release evidence items with commands." }
 
     $checks += New-Check -Id "summary_counts" -Passed ($countFailures.Count -eq 0) -Failures $countFailures
+
+    $environmentMetadataFailures = @()
+    foreach ($item in $environmentVariables) {
+        $name = [string]$item.name
+        if ([string]::IsNullOrWhiteSpace($name)) {
+            $environmentMetadataFailures += "environment variable record has an empty name."
+            continue
+        }
+
+        $expectedKind = Get-ExpectedEnvironmentVariableInputKind -Name $name
+        $actualKind = if ($item.PSObject.Properties["input_kind"]) { [string]$item.input_kind } else { "" }
+        if ($actualKind -ne $expectedKind) {
+            $environmentMetadataFailures += "environment variable $name input_kind is '$actualKind', expected '$expectedKind'."
+        }
+
+        $expectedSensitivity = Get-ExpectedEnvironmentVariableSensitivity -Name $name -InputKind $expectedKind
+        $actualSensitivity = if ($item.PSObject.Properties["sensitivity"]) { [string]$item.sensitivity } else { "" }
+        if ($actualSensitivity -ne $expectedSensitivity) {
+            $environmentMetadataFailures += "environment variable $name sensitivity is '$actualSensitivity', expected '$expectedSensitivity'."
+        }
+
+        if (-not $item.PSObject.Properties["requires_secret_store"]) {
+            $environmentMetadataFailures += "environment variable $name is missing requires_secret_store."
+        }
+        elseif ([bool]$item.requires_secret_store -ne ($expectedSensitivity -eq "secret")) {
+            $environmentMetadataFailures += "environment variable $name requires_secret_store does not match its sensitivity."
+        }
+
+        $validationHint = if ($item.PSObject.Properties["validation_hint"]) { [string]$item.validation_hint } else { "" }
+        if ([string]::IsNullOrWhiteSpace($validationHint)) {
+            $environmentMetadataFailures += "environment variable $name is missing validation_hint."
+        }
+
+        if ((Get-ObjectArray -Object $item -Name "readiness_gate_ids").Count -eq 0) {
+            $environmentMetadataFailures += "environment variable $name has no readiness_gate_ids."
+        }
+        if ((Get-ObjectArray -Object $item -Name "missing_texts").Count -eq 0) {
+            $environmentMetadataFailures += "environment variable $name has no missing_texts."
+        }
+    }
+    $checks += New-Check -Id "environment_variable_metadata_contract" -Passed ($environmentMetadataFailures.Count -eq 0) -Failures $environmentMetadataFailures -Evidence ([pscustomobject][ordered]@{ environment_variable_count = $environmentVariables.Count })
 
     $commandRecords = New-Object System.Collections.Generic.List[object]
     foreach ($gate in $failedReadinessGates) {

@@ -530,6 +530,11 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
             if (-not [string]::IsNullOrWhiteSpace($name) -and $matrixMarkdown -notmatch [regex]::Escape($name)) {
                 $matrixMarkdownFailures += "operator input matrix Markdown is missing environment variable: $name"
             }
+            foreach ($value in @([string]$item.input_kind, [string]$item.sensitivity, [string]$item.validation_hint)) {
+                if (-not [string]::IsNullOrWhiteSpace($value) -and $matrixMarkdown -notmatch [regex]::Escape($value)) {
+                    $matrixMarkdownFailures += "operator input matrix Markdown is missing environment variable metadata for $name`: $value"
+                }
+            }
         }
         foreach ($item in @(Get-ObjectArray -Object $matrix -Name "readiness_evidence_items")) {
             $id = [string]$item.readiness_gate_id
