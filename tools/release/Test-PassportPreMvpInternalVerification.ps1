@@ -123,6 +123,75 @@ function New-ToolCheck {
         -Evidence $Result
 }
 
+function Resolve-RepoPath {
+    param([string]$Path)
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        return ""
+    }
+
+    if ([System.IO.Path]::IsPathRooted($Path)) {
+        return [System.IO.Path]::GetFullPath($Path)
+    }
+
+    return [System.IO.Path]::GetFullPath((Join-Path $repoRoot $Path))
+}
+
+function New-ExpectedValidationFailureCheck {
+    param(
+        [string]$Id,
+        [string]$Description,
+        [object]$Result,
+        [string]$ReportPath,
+        [string]$ExpectedFailedCheckId
+    )
+
+    $failures = @()
+    if ($Result.exit_code -ne 0) {
+        $failures += "$Id exited with code $($Result.exit_code)."
+    }
+
+    $resolvedReportPath = Resolve-RepoPath -Path $ReportPath
+    $validationReport = $null
+    if ([string]::IsNullOrWhiteSpace($resolvedReportPath) -or -not (Test-Path -LiteralPath $resolvedReportPath -PathType Leaf)) {
+        $failures += "$Id did not write expected validation report: $resolvedReportPath"
+    }
+    else {
+        try {
+            $validationReport = Get-Content -LiteralPath $resolvedReportPath -Raw | ConvertFrom-Json
+        }
+        catch {
+            $failures += "$Id validation report could not be parsed: $resolvedReportPath"
+        }
+    }
+
+    if ($null -ne $validationReport) {
+        if ($validationReport.passed -eq $true) {
+            $failures += "$Id expected validation report to fail, but it passed."
+        }
+
+        $expectedFailedChecks = @($validationReport.checks | Where-Object {
+            [string]$_.id -eq $ExpectedFailedCheckId -and $_.passed -ne $true
+        })
+        if ($expectedFailedChecks.Count -eq 0) {
+            $failures += "$Id expected failed check was not present: $ExpectedFailedCheckId"
+        }
+    }
+
+    return New-Check `
+        -Id $Id `
+        -Description $Description `
+        -Passed ($failures.Count -eq 0) `
+        -Failures $failures `
+        -Evidence ([pscustomobject][ordered]@{
+            command = $Result.command
+            exit_code = $Result.exit_code
+            output_excerpt = $Result.output_excerpt
+            report_path = $resolvedReportPath
+            expected_failed_check_id = $ExpectedFailedCheckId
+        })
+}
+
 function Get-ManifestLane {
     param([string]$Path)
 
@@ -999,6 +1068,13 @@ else {
         -Id "token_ready_mvp_completion_audit_complete_fixture_validation" `
         -Description "Token-Ready MVP completion audit complete-state fixture validates that RequireComplete passes only with complete source evidence." `
         -Result (Invoke-Tool -FilePath "powershell" -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "tools\release\Test-PassportTokenReadyMvpCompletionAuditReport.ps1", "-UseGeneratedFixture", "-Generate", "-RequireComplete"))
+    $completionAuditFixtureRejectionPath = "artifacts\release\token-ready-mvp-completion-audit-fixture-real-mode-negative-validation-report.json"
+    $checks += New-ExpectedValidationFailureCheck `
+        -Id "token_ready_mvp_completion_audit_fixture_rejection_validation" `
+        -Description "Token-Ready MVP completion audit rejects generated fixture source files when validated in real audit mode." `
+        -Result (Invoke-Tool -FilePath "powershell" -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "tools\release\Test-PassportTokenReadyMvpCompletionAuditReport.ps1", "-ReportPath", "artifacts\release\token-ready-mvp-completion-audit-fixture\token-ready-mvp-completion-audit-report.json", "-MarkdownPath", "artifacts\release\token-ready-mvp-completion-audit-fixture\token-ready-mvp-completion-audit-report.md", "-OutputPath", $completionAuditFixtureRejectionPath, "-NoFail")) `
+        -ReportPath $completionAuditFixtureRejectionPath `
+        -ExpectedFailedCheckId "source_file_not_fixture"
     $checks += New-ToolCheck `
         -Id "staff_steward_pilot_handoff_validation" `
         -Description "Staff/steward pilot handoff generation and fail-closed validation are exercised before the external pilot evidence gate can be closed." `
@@ -1184,7 +1260,7 @@ $requirements = @(
     New-Requirement -Id "production_release_evidence_packet" -Description "The production release evidence packet can be generated without serializing environment secrets and can summarize readiness blockers for signoff." -CheckIds @("production_release_evidence_packet_validation") -Checks $checks -Evidence "Release evidence validator uses synthetic fixtures to exercise packet generation, report copying, SHA-256 recording, environment-value redaction, and blocking-gate summary output."
     New-Requirement -Id "production_mvp_closeout" -Description "The filled production provisioning packet and ProductionMvp readiness report have a single fail-closed closeout path before production packaging." -CheckIds @("production_mvp_closeout_validation", "production_mvp_closeout_failure_handoff_validation") -Checks $checks -Evidence "Production closeout validation exercises the final orchestration that validates provisioning, verifies readiness, generates redacted release evidence, requires release evidence to be ready before packaging, and emits a validated outstanding-work plus next-action handoff with operator input matrix when closeout fails."
     New-Requirement -Id "production_mvp_outstanding_work_report" -Description "Operators can generate a concise redacted report and next-action handoff packet for remaining ProductionMvp closeout, readiness, provisioning, and release-evidence blockers." -CheckIds @("production_mvp_outstanding_work_report_validation", "production_mvp_next_action_packet_validation") -Checks $checks -Evidence "Outstanding-work report validation uses synthetic fixtures to verify blocker grouping, operator actions, secret-free JSON/Markdown output, summary counts, Markdown coverage, and command paths against real release scripts. Next-action packet validation verifies a JSON/Markdown/operator-command handoff and standalone operator input matrix against the source blocker plan."
-    New-Requirement -Id "token_ready_mvp_completion_audit_report" -Description "Operators can generate and validate a prompt-to-artifact completion audit mapping PRD success criteria and ARD release gates to concrete evidence and blockers." -CheckIds @("token_ready_mvp_completion_audit_report_validation", "token_ready_mvp_completion_audit_complete_fixture_validation") -Checks $checks -Evidence "Completion audit validation exercises the generator/validator contract with generated fixtures to avoid a self-reference on the still-running pre-MVP report; the post-run completion audit validates real source evidence files, required checklist IDs, status counts, completion_ready consistency, operator action commands, Markdown Next/Command coverage, and RequireComplete behavior."
+    New-Requirement -Id "token_ready_mvp_completion_audit_report" -Description "Operators can generate and validate a prompt-to-artifact completion audit mapping PRD success criteria and ARD release gates to concrete evidence and blockers." -CheckIds @("token_ready_mvp_completion_audit_report_validation", "token_ready_mvp_completion_audit_complete_fixture_validation", "token_ready_mvp_completion_audit_fixture_rejection_validation") -Checks $checks -Evidence "Completion audit validation exercises the generator/validator contract with generated fixtures to avoid a self-reference on the still-running pre-MVP report; the post-run completion audit validates real source evidence files, required checklist IDs, status counts, completion_ready consistency, operator action commands, Markdown Next/Command coverage, RequireComplete behavior, and rejection of fixture source files in real audit mode."
     New-Requirement -Id "staff_steward_pilot_handoff" -Description "The staff/steward pilot has an operator handoff that generates a packet, runbook, manifest, and fail-closed validation before the real pilot evidence is accepted." -CheckIds @("staff_steward_pilot_handoff_validation") -Checks $checks -Evidence "Pilot handoff validation generates the staff/steward evidence packet, proves template validation passes, proves final validation fails closed with placeholders, and records the exact commands for report generation and pre-MVP rerun."
     New-Requirement -Id "staff_steward_pilot_dry_run" -Description "The staff/steward pilot has a dry-run evidence helper that records scenario coverage references without substituting for human/steward signoff." -CheckIds @("staff_steward_pilot_dry_run_validation") -Checks $checks -Evidence "Pilot dry-run validation generates a supporting evidence report, verifies scenario coverage references, verifies no-production boundary flags, and confirms the report cannot be treated as the passing staff/steward pilot."
     New-Requirement -Id "staff_steward_pilot_report_validator" -Description "The final staff/steward pilot report has a standalone validator before it is used to close the pre-MVP external evidence gate." -CheckIds @("staff_steward_pilot_report_validation") -Checks $checks -Evidence "Pilot report validation verifies the report schema, SHA-256, confirmations, hashed evidence files, and filled pilot evidence packet content without accepting dry-run evidence as final signoff."
