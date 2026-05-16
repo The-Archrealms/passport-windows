@@ -36,6 +36,21 @@ function Get-Sha256Hex {
     return (Get-FileHash -Algorithm SHA256 -LiteralPath $Path).Hash.ToLowerInvariant()
 }
 
+function Get-CurrentCommit {
+    Push-Location $repoRoot
+    try {
+        $commit = (& git rev-parse --short HEAD 2>$null)
+        if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($commit)) {
+            return ([string]$commit).Trim()
+        }
+    }
+    finally {
+        Pop-Location
+    }
+
+    return ""
+}
+
 function Read-JsonFile {
     param([string]$Path)
 
@@ -194,6 +209,7 @@ $markdownPath = Join-Path $resolvedPacketRoot "next-action-plan.md"
 $commandsPath = Join-Path $resolvedPacketRoot "operator-commands.ps1"
 $matrixPath = Join-Path $resolvedPacketRoot "operator-input-matrix.json"
 $matrixMarkdownPath = Join-Path $resolvedPacketRoot "operator-input-matrix.md"
+$currentCommit = Get-CurrentCommit
 
 $checks = @()
 if ($UseGeneratedFixture) {
@@ -257,8 +273,46 @@ else {
     $checks += New-Check -Id "source_report_schema" -Passed $false -Failures @("outstanding-work report could not be parsed")
 }
 
+$commitFailures = @()
+if ([string]::IsNullOrWhiteSpace($currentCommit)) {
+    $commitFailures += "current git commit could not be resolved."
+}
+
+$commitDocuments = @(
+    [pscustomobject]@{ name = "manifest"; document = $manifest },
+    [pscustomobject]@{ name = "next-action plan"; document = $plan },
+    [pscustomobject]@{ name = "operator input matrix"; document = $matrix }
+)
+
+foreach ($entry in $commitDocuments) {
+    if ($null -eq $entry.document) {
+        continue
+    }
+
+    $documentCommit = if ($entry.document.PSObject.Properties["app_commit"]) { [string]$entry.document.app_commit } else { "" }
+    if ($documentCommit -notmatch '^[0-9a-f]{7,40}$') {
+        $commitFailures += "$($entry.name) app_commit is missing or invalid."
+    }
+    elseif (-not [string]::IsNullOrWhiteSpace($currentCommit) -and $documentCommit -ne $currentCommit) {
+        $commitFailures += "$($entry.name) app_commit $documentCommit does not match current app commit $currentCommit."
+    }
+}
+
+if ($null -ne $sourceReport) {
+    $sourceReportCommit = if ($sourceReport.PSObject.Properties["app_commit"]) { [string]$sourceReport.app_commit } else { "" }
+    if ($sourceReportCommit -notmatch '^[0-9a-f]{7,40}$') {
+        $commitFailures += "outstanding-work source report app_commit is missing or invalid."
+    }
+    elseif (-not [string]::IsNullOrWhiteSpace($currentCommit) -and $sourceReportCommit -ne $currentCommit) {
+        $commitFailures += "outstanding-work source report app_commit $sourceReportCommit does not match current app commit $currentCommit."
+    }
+}
+
+$checks += New-Check -Id "app_commit_freshness" -Passed ($commitFailures.Count -eq 0) -Failures $commitFailures -Evidence ([pscustomobject][ordered]@{ current_app_commit = $currentCommit })
+
 if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
     $sourceHash = Get-Sha256Hex -Path $resolvedOutstandingWorkReportPath
+    $sourceReportCommit = if ($sourceReport.PSObject.Properties["app_commit"]) { [string]$sourceReport.app_commit } else { "" }
     $sourceActions = @(Get-ObjectArray -Object $sourceReport -Name "next_action_plan")
     $packetActions = @(Get-ObjectArray -Object $plan -Name "actions")
     $sourceBlockers = @(Get-ObjectArray -Object $sourceReport -Name "blockers")
@@ -269,6 +323,12 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
     }
     if ([string]$plan.source_report.sha256 -ne $sourceHash) {
         $sourceFailures += "plan source report SHA-256 does not match actual source report."
+    }
+    if ([string]$manifest.source_report.app_commit -ne $sourceReportCommit) {
+        $sourceFailures += "manifest source report app_commit does not match actual source report app_commit."
+    }
+    if ([string]$plan.source_report.app_commit -ne $sourceReportCommit) {
+        $sourceFailures += "plan source report app_commit does not match actual source report app_commit."
     }
     if ([int]$plan.source_report.next_action_count -ne $sourceActions.Count) {
         $sourceFailures += "plan next_action_count does not match source report next_action_plan count."
@@ -361,6 +421,9 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
         $matrixFailures = @()
         if ([string]$matrix.source_report.sha256 -ne $sourceHash) {
             $matrixFailures += "operator input matrix source report SHA-256 does not match actual source report."
+        }
+        if ([string]$matrix.source_report.app_commit -ne $sourceReportCommit) {
+            $matrixFailures += "operator input matrix source report app_commit does not match actual source report app_commit."
         }
         if ([int]$matrix.summary.environment_variable_count -ne $sourceEnvironmentVariables.Count) {
             $matrixFailures += "operator input matrix environment variable count does not match source report."
@@ -510,6 +573,7 @@ $validation = [pscustomobject][ordered]@{
     schema = "archrealms.passport.production_mvp_next_action_packet_validation.v1"
     created_utc = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
     repo_root = $repoRoot
+    app_commit = $currentCommit
     packet_root = $resolvedPacketRoot
     outstanding_work_report_path = $resolvedOutstandingWorkReportPath
     manifest_path = $manifestPath

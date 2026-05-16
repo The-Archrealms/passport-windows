@@ -49,6 +49,21 @@ function Get-Sha256Hex {
     return (Get-FileHash -Algorithm SHA256 -LiteralPath $Path).Hash.ToLowerInvariant()
 }
 
+function Get-CurrentCommit {
+    Push-Location $repoRoot
+    try {
+        $commit = (& git rev-parse --short HEAD 2>$null)
+        if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($commit)) {
+            return ([string]$commit).Trim()
+        }
+    }
+    finally {
+        Pop-Location
+    }
+
+    return ""
+}
+
 function Read-JsonFile {
     param([string]$Path)
 
@@ -121,6 +136,7 @@ function New-CompletionAuditFixture {
     $fixtureRoot = Resolve-RepoPath -Path "artifacts\release\token-ready-mvp-completion-audit-fixture"
     New-Item -ItemType Directory -Force -Path $fixtureRoot | Out-Null
     $createdUtc = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
+    $fixtureAppCommit = Get-CurrentCommit
 
     $preMvpPath = Join-Path $fixtureRoot "pre-mvp-internal-verification-report.json"
     $stagingPath = Join-Path $fixtureRoot "staging-readiness-report.json"
@@ -240,9 +256,12 @@ function New-CompletionAuditFixture {
     })
 
     Write-JsonFile -Path $outstandingPath -Value ([pscustomobject][ordered]@{
-        schema = "archrealms.passport.production_mvp_outstanding_work.v1"
+        schema = "archrealms.passport.production_mvp_outstanding_work_report.v1"
         created_utc = $createdUtc
+        app_commit = $fixtureAppCommit
         ready_for_production_testing = $true
+        blockers = @()
+        next_action_plan = @()
         failed_readiness_gates = @()
         failed_provisioning_checks = @()
         failed_release_evidence_checks = @()
@@ -253,16 +272,28 @@ function New-CompletionAuditFixture {
             failed_closeout_count = 0
         }
     })
+    $sourceReportRecord = [pscustomobject][ordered]@{
+        path = $outstandingPath
+        sha256 = Get-Sha256Hex -Path $outstandingPath
+        app_commit = $fixtureAppCommit
+        ready_for_production_testing = $true
+        blocker_count = 0
+        next_action_count = 0
+    }
 
     Write-JsonFile -Path $nextActionPlanPath -Value ([pscustomobject][ordered]@{
         schema = "archrealms.passport.production_mvp_next_action_plan.v1"
         created_utc = $createdUtc
+        app_commit = $fixtureAppCommit
+        source_report = $sourceReportRecord
         actions = @()
     })
     Set-Content -LiteralPath $nextActionPlanMarkdownPath -Value "# Production MVP Next Action Plan`n`nNo next actions are required by the complete-state fixture." -Encoding UTF8
     Write-JsonFile -Path $operatorInputMatrixPath -Value ([pscustomobject][ordered]@{
         schema = "archrealms.passport.production_mvp_operator_input_matrix.v1"
         created_utc = $createdUtc
+        app_commit = $fixtureAppCommit
+        source_report = $sourceReportRecord
         summary = [pscustomobject][ordered]@{
             environment_variable_count = 0
             report_reference_refresh_count = 0
@@ -281,11 +312,14 @@ function New-CompletionAuditFixture {
     Write-JsonFile -Path $nextActionManifestPath -Value ([pscustomobject][ordered]@{
         schema = "archrealms.passport.production_mvp_next_action_packet_manifest.v1"
         created_utc = $createdUtc
+        app_commit = $fixtureAppCommit
+        source_report = $sourceReportRecord
         generated_files = @()
     })
     Write-JsonFile -Path $nextActionValidationPath -Value ([pscustomobject][ordered]@{
         schema = "archrealms.passport.production_mvp_next_action_packet_validation.v1"
         created_utc = $createdUtc
+        app_commit = $fixtureAppCommit
         passed = $true
         failed_check_count = 0
         manifest_path = $nextActionManifestPath
@@ -547,6 +581,7 @@ $resolvedProductionMvpNextActionPacketValidationReportPath = Resolve-RepoPath -P
 $resolvedReportPath = Resolve-RepoPath -Path $ReportPath
 $resolvedMarkdownPath = Resolve-RepoPath -Path $MarkdownPath
 $resolvedOutputPath = Resolve-RepoPath -Path $OutputPath
+$currentCommit = Get-CurrentCommit
 
 if ($UseGeneratedFixture) {
     $fixture = New-CompletionAuditFixture
@@ -601,6 +636,16 @@ $preMvpReport = Read-JsonFile -Path $resolvedPreMvpInternalVerificationReportPat
 $checks += Add-Check -Id "schema" -Condition ($null -ne $report -and [string]$report.schema -eq "archrealms.passport.token_ready_mvp_completion_audit.v1") -Failure "completion audit schema is invalid or missing"
 $checks += Add-Check -Id "app_commit" -Condition ($null -ne $report -and [string]$report.app_commit -match '^[0-9a-f]{7,40}$') -Failure "app_commit is missing or not a git commit hash" -Evidence ([pscustomobject][ordered]@{ app_commit = $(if ($null -eq $report) { "" } else { [string]$report.app_commit }) })
 
+$reportCommit = if ($null -ne $report -and $report.PSObject.Properties["app_commit"]) { [string]$report.app_commit } else { "" }
+$commitFailures = @()
+if ([string]::IsNullOrWhiteSpace($currentCommit)) {
+    $commitFailures += "current git commit could not be resolved."
+}
+elseif ($reportCommit -ne $currentCommit) {
+    $commitFailures += "completion audit app_commit $reportCommit does not match current app commit $currentCommit."
+}
+$checks += New-Check -Id "app_commit_freshness" -Passed ($commitFailures.Count -eq 0) -Failures $commitFailures -Evidence ([pscustomobject][ordered]@{ report_app_commit = $reportCommit; current_app_commit = $currentCommit })
+
 $requiredSourceFileIds = @(
     "pre_mvp_internal_verification",
     "staging_readiness",
@@ -637,6 +682,49 @@ foreach ($sourceId in $requiredSourceFileIds) {
 
     $checks += New-Check -Id "source_file_$sourceId" -Passed ($sourceFailures.Count -eq 0) -Failures $sourceFailures -Evidence $source
 }
+
+$commitSourceIds = @(
+    "production_mvp_outstanding_work",
+    "production_mvp_next_action_packet_manifest",
+    "production_mvp_next_action_plan",
+    "production_mvp_operator_input_matrix",
+    "production_mvp_next_action_packet_validation"
+)
+$sourceCommitFailures = @()
+foreach ($sourceId in $commitSourceIds) {
+    $source = Get-SourceFile -Report $report -Id $sourceId
+    if ($null -eq $source) {
+        continue
+    }
+
+    $sourceDocument = Read-JsonFile -Path ([string]$source.path)
+    if ($null -eq $sourceDocument) {
+        $sourceCommitFailures += "$sourceId could not be parsed for app_commit validation."
+        continue
+    }
+
+    $sourceCommit = if ($sourceDocument.PSObject.Properties["app_commit"]) { [string]$sourceDocument.app_commit } else { "" }
+    if ($sourceCommit -notmatch '^[0-9a-f]{7,40}$') {
+        $sourceCommitFailures += "$sourceId app_commit is missing or invalid."
+    }
+    elseif ($sourceCommit -ne $reportCommit) {
+        $sourceCommitFailures += "$sourceId app_commit $sourceCommit does not match completion audit app_commit $reportCommit."
+    }
+    elseif (-not [string]::IsNullOrWhiteSpace($currentCommit) -and $sourceCommit -ne $currentCommit) {
+        $sourceCommitFailures += "$sourceId app_commit $sourceCommit does not match current app commit $currentCommit."
+    }
+
+    if ($sourceDocument.PSObject.Properties["source_report"]) {
+        $sourceReportCommit = if ($sourceDocument.source_report.PSObject.Properties["app_commit"]) { [string]$sourceDocument.source_report.app_commit } else { "" }
+        if ($sourceReportCommit -notmatch '^[0-9a-f]{7,40}$') {
+            $sourceCommitFailures += "$sourceId source_report.app_commit is missing or invalid."
+        }
+        elseif ($sourceReportCommit -ne $reportCommit) {
+            $sourceCommitFailures += "$sourceId source_report.app_commit $sourceReportCommit does not match completion audit app_commit $reportCommit."
+        }
+    }
+}
+$checks += New-Check -Id "source_app_commit_freshness" -Passed ($sourceCommitFailures.Count -eq 0) -Failures $sourceCommitFailures -Evidence ([pscustomobject][ordered]@{ source_ids = $commitSourceIds; current_app_commit = $currentCommit; report_app_commit = $reportCommit })
 
 $packetValidationSource = Get-SourceFile -Report $report -Id "production_mvp_next_action_packet_validation"
 $packetValidation = $(if ($null -ne $packetValidationSource) { Read-JsonFile -Path ([string]$packetValidationSource.path) } else { $null })
@@ -1227,6 +1315,7 @@ $reportOut = [pscustomobject][ordered]@{
     schema = "archrealms.passport.token_ready_mvp_completion_audit_validation.v1"
     created_utc = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
     repo_root = $repoRoot
+    app_commit = $currentCommit
     report_path = $resolvedReportPath
     report_sha256 = Get-Sha256Hex -Path $resolvedReportPath
     markdown_path = $resolvedMarkdownPath

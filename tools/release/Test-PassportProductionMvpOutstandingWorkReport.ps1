@@ -31,6 +31,21 @@ function Get-Sha256Hex {
     return (Get-FileHash -Algorithm SHA256 -LiteralPath $Path).Hash.ToLowerInvariant()
 }
 
+function Get-CurrentCommit {
+    Push-Location $repoRoot
+    try {
+        $commit = (& git rev-parse --short HEAD 2>$null)
+        if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($commit)) {
+            return ([string]$commit).Trim()
+        }
+    }
+    finally {
+        Pop-Location
+    }
+
+    return ""
+}
+
 function Format-CommandArgument {
     param([string]$Argument)
 
@@ -273,6 +288,7 @@ if ($UseGeneratedFixture) {
 $resolvedReportPath = Resolve-RepoPath -Path $ReportPath
 $resolvedMarkdownPath = Resolve-RepoPath -Path $MarkdownPath
 $resolvedOutputPath = Resolve-RepoPath -Path $OutputPath
+$currentCommit = Get-CurrentCommit
 
 $checks = @()
 $generatorResult = $null
@@ -298,6 +314,19 @@ if ($reportExists) {
 
 if ($null -ne $report) {
     $checks += Add-Check -Id "schema" -Condition ([string]$report.schema -eq "archrealms.passport.production_mvp_outstanding_work_report.v1") -Failure "unexpected outstanding-work report schema"
+    $reportedCommit = if ($report.PSObject.Properties["app_commit"]) { [string]$report.app_commit } else { "" }
+    $commitFailures = @()
+    if ($reportedCommit -notmatch '^[0-9a-f]{7,40}$') {
+        $commitFailures += "outstanding-work report app_commit is missing or invalid."
+    }
+    if ([string]::IsNullOrWhiteSpace($currentCommit)) {
+        $commitFailures += "current git commit could not be resolved."
+    }
+    elseif ($reportedCommit -ne $currentCommit) {
+        $commitFailures += "outstanding-work report app_commit $reportedCommit does not match current app commit $currentCommit."
+    }
+    $checks += New-Check -Id "app_commit_freshness" -Passed ($commitFailures.Count -eq 0) -Failures $commitFailures -Evidence ([pscustomobject][ordered]@{ report_app_commit = $reportedCommit; current_app_commit = $currentCommit })
+
     $inputFailures = @(Get-ObjectArray -Object $report -Name "input_failures")
     $checks += Add-Check -Id "input_failures_absent" -Condition ($inputFailures.Count -eq 0) -Failure "outstanding-work report has input failures"
 
@@ -683,6 +712,7 @@ $validation = [pscustomobject][ordered]@{
     schema = "archrealms.passport.production_mvp_outstanding_work_validation.v1"
     created_utc = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
     repo_root = $repoRoot
+    app_commit = $currentCommit
     report_path = $resolvedReportPath
     report_sha256 = Get-Sha256Hex -Path $resolvedReportPath
     markdown_path = $resolvedMarkdownPath
