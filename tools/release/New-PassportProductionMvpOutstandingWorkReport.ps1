@@ -745,6 +745,13 @@ if (Test-Path -LiteralPath $resolvedSimulationRunReportPath -PathType Leaf) {
 $staffStewardPilotHandoffRoot = "artifacts\release\pre-mvp-staff-steward-pilot-handoff"
 $staffStewardPilotWorkspaceCommand = "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Start-PassportPreMvpStaffStewardPilot.ps1 -HandoffRoot $staffStewardPilotHandoffRoot -PilotOwner <pilot-owner> -Force"
 $staffStewardPilotCloseoutCommand = "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Complete-PassportPreMvpStaffStewardPilotHandoff.ps1 -HandoffRoot $staffStewardPilotHandoffRoot -SimulationRunReportPath $simulationRunReportPath -SimulationRunReportSha256 $simulationRunReportSha256 -Force"
+$stagingEvidenceRoot = "<filled-staging-evidence-root>"
+$stagingEvidenceFillCommand = "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Set-PassportStagingReadinessEvidencePacket.ps1 -PacketRoot $stagingEvidenceRoot -OperationalDrillId ""<staging-operational-drill-id>"" -RollbackDrillId ""<staging-rollback-drill-id>"" -PromotionApprovalId ""<staging-promotion-approval-id>"" -EngineeringSignoffId ""<engineering-signoff-id>"" -SecurityPrivacySignoffId ""<security-privacy-signoff-id>"" -CrownMonetaryAuthoritySignoffId ""<crown-monetary-authority-signoff-id>"" -ApiBaseUrl ""<staging-api-base-url>"" -AiGatewayUrl ""<staging-ai-gateway-url>"" -LedgerNamespace ""<staging-ledger-namespace>"" -TelemetryDestination ""<staging-telemetry-destination>"" -PackageVersion ""<staging-package-version>"" -Operator ""<operator-id>"" -IncidentResponseOwner ""<incident-response-owner-id>"" -OperationalEvidenceReference ""<staging-operational-evidence-refs>"" -RollbackReasonCode ""<rollback-reason-code>"" -RollbackApprover ""<staging-rollback-approver-ids>"" -AffectedServiceClass ""identity;wallet;storage;ai;ledger-export"" -AffectedAsset ""ARCH;CC"" -RollbackUserFacingStatus ""<rollback-user-facing-status>"" -ConfirmOperationalDrillCompleted -ConfirmProductionCandidateUpgradeValidated -ConfirmEndpointFailoverValidated -ConfirmSigningVerificationValidated -ConfirmLedgerExportReplayValidated -ConfirmRecoveryRevocationValidated -ConfirmStorageProofValidationCompleted -ConfirmStorageRedemptionDryRunCompleted -ConfirmConversionDisclosureDryRunCompleted -ConfirmTelemetryPrivacyValidated -ConfirmIncidentResponseValidated -ConfirmSupportAccessControlsValidated -ConfirmAiGatewayAuthPrivacyValidated -ConfirmProhibitedClaimsBlocked -ConfirmRollbackDrillCompleted -ConfirmNewOperationsDisabledOrRouted -ConfirmLedgerEventsPreserved -ConfirmNoDeletionMutationOrBackdating -ConfirmPendingEscrowResolvedByPolicy -ConfirmExportAccessPreserved -ConfirmProductionRecordsUntouched -ConfirmCanaryOrProductionReleaseApproved -ConfirmProductApprovalSigned -ConfirmEngineeringSignoffSigned -ConfirmSecurityPrivacySignoffSigned -ConfirmCrownMonetaryAuthoritySignoffSigned -Force"
+$stagingEvidenceCloseoutCommand = "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Complete-PassportStagingReadinessEvidencePacket.ps1 -PacketRoot $stagingEvidenceRoot -EnvironmentFile artifacts\release\staging.env -Force"
+$canaryEvidenceRoot = "<filled-canary-evidence-root>"
+$canaryEvidenceFillCommand = "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Set-PassportCanaryMvpReadinessEvidencePacket.ps1 -PacketRoot $canaryEvidenceRoot -PolicyId ""<canary-policy-id>"" -IncidentReviewId ""<canary-incident-review-id>"" -BalanceReconciliationId ""<canary-balance-reconciliation-id>"" -ServiceDeliveryReconciliationId ""<canary-service-delivery-reconciliation-id>"" -SupportReadinessId ""<canary-support-readiness-id>"" -ProductionApprovalId ""<canary-production-approval-id>"" -ProductionLedgerNamespace ""<production-mvp-ledger-namespace>"" -PolicyEvidenceReference ""<canary-policy-evidence-refs>"" -IncidentEvidenceReference ""<canary-incident-evidence-refs>"" -BalanceEvidenceReference ""<canary-balance-evidence-refs>"" -ServiceDeliveryEvidenceReference ""<canary-service-delivery-evidence-refs>"" -SupportEvidenceReference ""<canary-support-evidence-refs>"" -AllowedServiceClass ""<canary-allowed-service-classes>"" -SupportOwner ""<support-owner-id>"" -IncidentResponseOwner ""<incident-response-owner-id>"" -RollbackPolicyId ""<rollback-policy-id>"" -EngineeringSignoffId ""<engineering-signoff-id>"" -SecurityPrivacySignoffId ""<security-privacy-signoff-id>"" -CrownMonetaryAuthoritySignoffId ""<crown-monetary-authority-signoff-id>"" -ApprovalNotes ""<canary-approval-notes-or-record-id>"" -ConfirmProductionIntended -ConfirmProductionLedger -ConfirmAllowlistedCitizensOnly -ConfirmIncidentReviewCompleted -ConfirmNoUnresolvedCriticalIncidents -ConfirmNoUnresolvedHighIncidents -ConfirmBalancesReconciled -ConfirmEscrowReconciled -ConfirmBurnRefundRecreditReconciled -ConfirmCrownReserveReconciled -ConfirmNoNegativeBalances -ConfirmNoUnapprovedIssuance -ConfirmNoStagingRecordsDetected -ConfirmServiceDeliveryReconciled -ConfirmStorageRedemptionsReconciled -ConfirmStorageProofsReconciled -ConfirmBurnsMatchVerifiedEpochs -ConfirmRefundsRecreditsExtensionsReconciled -ConfirmSupportReady -ConfirmSupportQueueReviewed -ConfirmRecoverySupportReady -ConfirmEscalationPathReady -ConfirmSupportAccessControlsValidated -ConfirmProductionMvpReleaseApproved -Force"
+$canaryEvidenceCloseoutCommand = "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Complete-PassportCanaryMvpReadinessEvidencePacket.ps1 -PacketRoot $canaryEvidenceRoot -EnvironmentFile artifacts\release\canary-mvp.env -Force"
+$canaryEvidenceValidationCommand = "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportCanaryMvpReadinessEvidencePacket.ps1 -PacketRoot $canaryEvidenceRoot -RequireNoPlaceholders"
 
 $readinessActionMap = @{
     pre_mvp_internal_verification = New-Action `
@@ -760,14 +767,16 @@ $readinessActionMap = @{
         -Title "Close out staging readiness" `
         -Action "Fill staging endpoint, ledger/telemetry, operational drill, rollback drill, and promotion approval evidence; then run the staging closeout command with real non-synthetic values." `
         -Commands @(
-            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Complete-PassportStagingReadinessEvidencePacket.ps1 -PacketRoot <filled-staging-evidence-root> -EnvironmentFile artifacts\release\staging.env -Force"
+            $stagingEvidenceFillCommand,
+            $stagingEvidenceCloseoutCommand
         )
     canary_mvp_readiness = New-Action `
         -Id "canary_mvp_readiness" `
         -Title "Close out canary MVP readiness" `
         -Action "Fill the canary policy, incident review, balance reconciliation, service-delivery reconciliation, support readiness, and production-promotion evidence; then run the canary closeout command." `
         -Commands @(
-            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Complete-PassportCanaryMvpReadinessEvidencePacket.ps1 -PacketRoot <filled-canary-evidence-root> -EnvironmentFile artifacts\release\canary-mvp.env -Force"
+            $canaryEvidenceFillCommand,
+            $canaryEvidenceCloseoutCommand
         )
     package_signing = New-Action `
         -Id "package_signing" `
@@ -914,7 +923,8 @@ $provisioningActionMap = @{
         -Title "Complete canary readiness evidence packet" `
         -Action "Complete and validate the canary readiness evidence packet with no placeholders." `
         -Commands @(
-            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportCanaryMvpReadinessEvidencePacket.ps1 -PacketRoot <filled-canary-evidence-root> -RequireNoPlaceholders"
+            $canaryEvidenceFillCommand,
+            $canaryEvidenceValidationCommand
         )
     open_weight_ai_runtime_deployment = New-Action `
         -Id "open_weight_ai_runtime_deployment" `
@@ -977,28 +987,32 @@ $releaseEvidenceActionMap = @{
         -Title "Close staging readiness" `
         -Action "Complete the filled staging evidence packet and produce a non-synthetic ready staging report." `
         -Commands @(
-            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Complete-PassportStagingReadinessEvidencePacket.ps1 -PacketRoot <filled-staging-evidence-root> -EnvironmentFile artifacts\release\staging.env -Force"
+            $stagingEvidenceFillCommand,
+            $stagingEvidenceCloseoutCommand
         )
     staging_readiness_report_promotion_approved = New-Action `
         -Id "staging_readiness_report_promotion_approved" `
         -Title "Approve staging promotion" `
         -Action "Record signed staging promotion approval evidence and rerun the staging closeout." `
         -Commands @(
-            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Complete-PassportStagingReadinessEvidencePacket.ps1 -PacketRoot <filled-staging-evidence-root> -EnvironmentFile artifacts\release\staging.env -Force"
+            $stagingEvidenceFillCommand,
+            $stagingEvidenceCloseoutCommand
         )
     canary_mvp_readiness_report_ready = New-Action `
         -Id "canary_mvp_readiness_report_ready" `
         -Title "Close canary MVP readiness" `
         -Action "Complete the filled canary evidence packet and produce a non-synthetic ready canary report." `
         -Commands @(
-            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Complete-PassportCanaryMvpReadinessEvidencePacket.ps1 -PacketRoot <filled-canary-evidence-root> -EnvironmentFile artifacts\release\canary-mvp.env -Force"
+            $canaryEvidenceFillCommand,
+            $canaryEvidenceCloseoutCommand
         )
     canary_mvp_readiness_report_production_approved = New-Action `
         -Id "canary_mvp_readiness_report_production_approved" `
         -Title "Approve ProductionMvp promotion" `
         -Action "Record signed canary-to-production approval evidence and rerun the canary closeout." `
         -Commands @(
-            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Complete-PassportCanaryMvpReadinessEvidencePacket.ps1 -PacketRoot <filled-canary-evidence-root> -EnvironmentFile artifacts\release\canary-mvp.env -Force"
+            $canaryEvidenceFillCommand,
+            $canaryEvidenceCloseoutCommand
         )
 }
 

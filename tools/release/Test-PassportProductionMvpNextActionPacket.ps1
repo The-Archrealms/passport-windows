@@ -690,6 +690,47 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
         launcher_command_count = $staffStewardLauncherCommands.Count
     })
 
+    $evidenceFillHelperFailures = @()
+    $stagingActionIds = @("staging_readiness", "staging_readiness_report_ready", "staging_readiness_report_promotion_approved")
+    $canaryActionIds = @("canary_mvp_readiness", "canary_mvp_readiness_report_ready", "canary_mvp_readiness_report_production_approved", "canary_readiness_evidence_packet")
+    $stagingActions = @($packetActions | Where-Object { $stagingActionIds -contains [string]$_.id })
+    $canaryActions = @($packetActions | Where-Object { $canaryActionIds -contains [string]$_.id })
+    $stagingHelperCommandCount = 0
+    $canaryHelperCommandCount = 0
+
+    foreach ($action in $stagingActions) {
+        $commands = @(Get-ObjectArray -Object $action -Name "commands" | ForEach-Object { [string]$_ })
+        $hasFillHelper = @($commands | Where-Object { $_ -match 'Set-PassportStagingReadinessEvidencePacket\.ps1' }).Count -gt 0
+        $hasCloseout = @($commands | Where-Object { $_ -match 'Complete-PassportStagingReadinessEvidencePacket\.ps1' }).Count -gt 0
+        if ($hasFillHelper) { $stagingHelperCommandCount += 1 }
+        if (-not $hasFillHelper) {
+            $evidenceFillHelperFailures += "staging action $($action.id) must include Set-PassportStagingReadinessEvidencePacket.ps1 before closeout."
+        }
+        if (-not $hasCloseout) {
+            $evidenceFillHelperFailures += "staging action $($action.id) must include Complete-PassportStagingReadinessEvidencePacket.ps1."
+        }
+    }
+
+    foreach ($action in $canaryActions) {
+        $commands = @(Get-ObjectArray -Object $action -Name "commands" | ForEach-Object { [string]$_ })
+        $hasFillHelper = @($commands | Where-Object { $_ -match 'Set-PassportCanaryMvpReadinessEvidencePacket\.ps1' }).Count -gt 0
+        $hasCloseoutOrValidation = @($commands | Where-Object { $_ -match '(Complete|Test)-PassportCanaryMvpReadinessEvidencePacket\.ps1' }).Count -gt 0
+        if ($hasFillHelper) { $canaryHelperCommandCount += 1 }
+        if (-not $hasFillHelper) {
+            $evidenceFillHelperFailures += "canary action $($action.id) must include Set-PassportCanaryMvpReadinessEvidencePacket.ps1 before closeout or validation."
+        }
+        if (-not $hasCloseoutOrValidation) {
+            $evidenceFillHelperFailures += "canary action $($action.id) must include Complete- or Test-PassportCanaryMvpReadinessEvidencePacket.ps1."
+        }
+    }
+
+    $checks += New-Check -Id "staging_canary_fill_helper_commands" -Passed ($evidenceFillHelperFailures.Count -eq 0) -Failures $evidenceFillHelperFailures -Evidence ([pscustomobject][ordered]@{
+        staging_action_count = $stagingActions.Count
+        staging_helper_command_count = $stagingHelperCommandCount
+        canary_action_count = $canaryActions.Count
+        canary_helper_command_count = $canaryHelperCommandCount
+    })
+
     if ($null -ne $matrix) {
         $sourceMatrix = $sourceReport.operator_input_matrix
         $sourceEnvironmentVariables = @(Get-ObjectArray -Object $sourceMatrix -Name "environment_variables")
