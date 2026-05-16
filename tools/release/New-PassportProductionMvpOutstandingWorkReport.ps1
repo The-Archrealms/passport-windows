@@ -255,6 +255,98 @@ function New-Blocker {
     }
 }
 
+function Add-UniqueString {
+    param(
+        [System.Collections.Generic.List[string]]$List,
+        [string]$Value
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Value)) {
+        return
+    }
+
+    if (-not $List.Contains($Value)) {
+        $List.Add($Value)
+    }
+}
+
+function Get-NextActionPhase {
+    param(
+        [string]$ActionId,
+        [string[]]$Categories = @()
+    )
+
+    if ($ActionId -eq "restore_outstanding_work_inputs") { return @{ Order = 0; Name = "restore_inputs" } }
+    if ($ActionId -match "^pre_mvp|pre_mvp") { return @{ Order = 10; Name = "pre_mvp" } }
+    if ($ActionId -match "^staging|staging_") { return @{ Order = 20; Name = "staging" } }
+    if ($ActionId -match "^canary|canary_") { return @{ Order = 30; Name = "canary" } }
+    if ($ActionId -match "package_signing") { return @{ Order = 40; Name = "package_signing" } }
+    if ($ActionId -match "release_lane|hosted_runtime|hosted_operator") { return @{ Order = 50; Name = "hosted_endpoints" } }
+    if ($ActionId -match "managed_storage") { return @{ Order = 60; Name = "managed_storage" } }
+    if ($ActionId -match "managed_signing") { return @{ Order = 70; Name = "managed_signing" } }
+    if ($ActionId -match "issuer|capacity|genesis|monetary") { return @{ Order = 75; Name = "monetary_provisioning" } }
+    if ($ActionId -match "open_weight|ai_runtime") { return @{ Order = 80; Name = "ai_runtime" } }
+    if ($ActionId -match "telemetry|production_ops") { return @{ Order = 82; Name = "operations" } }
+    if ($ActionId -match "approval|approved|production_release") { return @{ Order = 85; Name = "approvals" } }
+    if ($ActionId -match "readiness_ready|provisioning_packet_passed|reviewable_for_signoff|_report_ready") { return @{ Order = 88; Name = "release_evidence" } }
+    if ($ActionId -eq "production_mvp_closeout" -or ($Categories -contains "closeout_failure")) { return @{ Order = 90; Name = "closeout" } }
+
+    return @{ Order = 55; Name = "production_provisioning" }
+}
+
+function New-NextActionPlan {
+    param([object[]]$Blockers = @())
+
+    $plansById = @{}
+    foreach ($blocker in @($Blockers)) {
+        $actionId = [string]$blocker.next_action_id
+        if ([string]::IsNullOrWhiteSpace($actionId)) {
+            $actionId = "operator_action_" + [Math]::Abs(([string]$blocker.next_action).GetHashCode())
+        }
+
+        if (-not $plansById.ContainsKey($actionId)) {
+            $phase = Get-NextActionPhase -ActionId $actionId -Categories @([string]$blocker.category)
+            $plansById[$actionId] = [ordered]@{
+                id = $actionId
+                phase = [string]$phase.Name
+                phase_order = [int]$phase.Order
+                title = ConvertTo-ReportText -Value $blocker.next_action_title
+                action = ConvertTo-ReportText -Value $blocker.next_action
+                commands = New-Object System.Collections.Generic.List[string]
+                blocker_ids = New-Object System.Collections.Generic.List[string]
+                categories = New-Object System.Collections.Generic.List[string]
+                source_ids = New-Object System.Collections.Generic.List[string]
+            }
+        }
+
+        $entry = $plansById[$actionId]
+        Add-UniqueString -List $entry.blocker_ids -Value ([string]$blocker.id)
+        Add-UniqueString -List $entry.categories -Value ([string]$blocker.category)
+        foreach ($sourceId in @($blocker.source_ids)) {
+            Add-UniqueString -List $entry.source_ids -Value ([string]$sourceId)
+        }
+        foreach ($command in @($blocker.next_action_commands)) {
+            Add-UniqueString -List $entry.commands -Value ([string]$command)
+        }
+    }
+
+    $items = foreach ($entry in $plansById.Values) {
+        [pscustomobject][ordered]@{
+            id = [string]$entry.id
+            phase = [string]$entry.phase
+            phase_order = [int]$entry.phase_order
+            title = [string]$entry.title
+            action = [string]$entry.action
+            commands = @($entry.commands)
+            blocker_ids = @($entry.blocker_ids)
+            categories = @($entry.categories)
+            source_ids = @($entry.source_ids)
+        }
+    }
+
+    return @($items | Sort-Object @{ Expression = "phase_order"; Ascending = $true }, @{ Expression = "title"; Ascending = $true }, @{ Expression = "id"; Ascending = $true })
+}
+
 function Get-ReportReferenceRefreshRecord {
     param(
         [string]$GateId,
@@ -979,6 +1071,7 @@ foreach ($check in $failedReleaseEvidenceChecks) {
         -OperatorAction $check.operator_action
 }
 
+$nextActionPlan = New-NextActionPlan -Blockers $blockers
 $readinessEvidenceItemCommandCount = @($readinessEvidenceItems | Where-Object { @($_.operator_action_commands).Count -gt 0 }).Count
 $releaseEvidenceItemCommandCount = @($releaseEvidenceItems | Where-Object { @($_.operator_action_commands).Count -gt 0 }).Count
 
@@ -1001,6 +1094,15 @@ foreach ($item in @($reportReferenceRefreshes)) {
 foreach ($item in @($blockers)) {
     if ($item.operator_action_commands -isnot [array]) {
         $contractFailures += "blockers operator_action_commands must serialize as an array for $($item.id)."
+    }
+}
+foreach ($item in @($nextActionPlan)) {
+    if ($item.commands -isnot [array]) {
+        $contractFailures += "next_action_plan commands must serialize as an array for $($item.id)."
+    }
+
+    if ($item.blocker_ids -isnot [array]) {
+        $contractFailures += "next_action_plan blocker_ids must serialize as an array for $($item.id)."
     }
 }
 if ($UseGeneratedFixture -and @($reportReferenceRefreshes).Count -eq 0) {
@@ -1036,6 +1138,7 @@ $report = [pscustomobject][ordered]@{
         release_evidence_failed_check_count = $(if ($null -ne $releaseEvidence -and $releaseEvidence.PSObject.Properties["failed_check_count"]) { [int]$releaseEvidence.failed_check_count } else { $null })
         closeout_failure_count = $closeoutFailures.Count
         blocker_count = $blockers.Count
+        next_action_count = $nextActionPlan.Count
         failed_readiness_gate_count = $failedReadinessGates.Count
         failed_provisioning_check_count = $failedProvisioningChecks.Count
         failed_provisioning_child_check_count = [int]$failedProvisioningChildCheckCount
@@ -1049,6 +1152,7 @@ $report = [pscustomobject][ordered]@{
         required_release_evidence_item_command_count = $releaseEvidenceItemCommandCount
     }
     closeout_failures = $closeoutFailures
+    next_action_plan = $nextActionPlan
     blockers = $blockers
     failed_readiness_gates = $failedReadinessGates
     failed_provisioning_checks = $failedProvisioningChecks
@@ -1117,6 +1221,24 @@ if (-not [string]::IsNullOrWhiteSpace($MarkdownOutputPath)) {
     else {
         foreach ($failure in $closeoutFailures) {
             $lines.Add("- $failure")
+        }
+    }
+
+    $lines.Add("")
+    $lines.Add("## Next Action Plan")
+    if ($nextActionPlan.Count -eq 0) {
+        $lines.Add("- None")
+    }
+    else {
+        foreach ($item in @($nextActionPlan)) {
+            $lines.Add("- ``$($item.id)`` [$($item.phase)]: $($item.title)")
+            $lines.Add("  - Action: $($item.action)")
+            $lines.Add("  - Blockers covered: $((@($item.blocker_ids) -join ', '))")
+            foreach ($command in @($item.commands | Select-Object -First 3)) {
+                if (-not [string]::IsNullOrWhiteSpace($command)) {
+                    $lines.Add("  - Command: ``$command``")
+                }
+            }
         }
     }
 

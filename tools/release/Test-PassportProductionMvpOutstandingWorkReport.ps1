@@ -312,11 +312,13 @@ if ($null -ne $report) {
     $readinessEvidenceItems = @(Get-ObjectArray -Object $matrix -Name "readiness_evidence_items")
     $provisioningEvidenceFiles = @(Get-ObjectArray -Object $matrix -Name "provisioning_evidence_files")
     $releaseEvidenceItems = @(Get-ObjectArray -Object $matrix -Name "release_evidence_items")
+    $nextActionPlan = @(Get-ObjectArray -Object $report -Name "next_action_plan")
     $summary = $report.summary
 
     $countFailures = @()
     if ((Read-ObjectInt -Object $summary -Name "closeout_failure_count") -ne $closeoutFailures.Count) { $countFailures += "closeout_failure_count does not match closeout_failures." }
     if ((Read-ObjectInt -Object $summary -Name "blocker_count") -ne $blockers.Count) { $countFailures += "blocker_count does not match blockers." }
+    if ((Read-ObjectInt -Object $summary -Name "next_action_count") -ne $nextActionPlan.Count) { $countFailures += "next_action_count does not match next_action_plan." }
     if ((Read-ObjectInt -Object $summary -Name "failed_readiness_gate_count") -ne $failedReadinessGates.Count) { $countFailures += "failed_readiness_gate_count does not match failed_readiness_gates." }
     if ((Read-ObjectInt -Object $summary -Name "failed_provisioning_check_count") -ne $failedProvisioningChecks.Count) { $countFailures += "failed_provisioning_check_count does not match failed_provisioning_checks." }
     if ((Read-ObjectInt -Object $summary -Name "failed_release_evidence_check_count") -ne $failedReleaseEvidenceChecks.Count) { $countFailures += "failed_release_evidence_check_count does not match failed_release_evidence_checks." }
@@ -359,6 +361,9 @@ if ($null -ne $report) {
     foreach ($blocker in $blockers) {
         Add-CommandArrayRecords -Records $commandRecords -Source "blockers.$($blocker.id)" -Commands (Get-ObjectArray -Object $blocker -Name "operator_action_commands")
         Add-CommandArrayRecords -Records $commandRecords -Source "blockers.$($blocker.id).next_action" -Commands (Get-ObjectArray -Object $blocker -Name "next_action_commands")
+    }
+    foreach ($item in $nextActionPlan) {
+        Add-CommandArrayRecords -Records $commandRecords -Source "next_action_plan.$($item.id)" -Commands (Get-ObjectArray -Object $item -Name "commands")
     }
     foreach ($item in $reportReferenceRefreshes) {
         Add-CommandArrayRecords -Records $commandRecords -Source "report_reference_refreshes.$($item.readiness_gate_id)" -Commands (Get-ObjectArray -Object $item -Name "operator_action_commands")
@@ -477,6 +482,87 @@ if ($null -ne $report) {
     }
     $checks += New-Check -Id "blocker_contract" -Passed ($blockerContractFailures.Count -eq 0) -Failures $blockerContractFailures -Evidence ([pscustomobject][ordered]@{ blocker_count = $blockers.Count })
 
+    $nextActionPlanFailures = @()
+    $seenPlanIds = @{}
+    $knownBlockerIds = @{}
+    foreach ($blocker in $blockers) {
+        $knownBlockerIds[[string]$blocker.id] = $blocker
+    }
+
+    $coveredBlockerIds = @{}
+    $previousOrder = -1
+    foreach ($item in $nextActionPlan) {
+        $itemId = [string]$item.id
+        if ([string]::IsNullOrWhiteSpace($itemId)) {
+            $nextActionPlanFailures += "next_action_plan item is missing id."
+        }
+        elseif ($seenPlanIds.ContainsKey($itemId)) {
+            $nextActionPlanFailures += "duplicate next_action_plan id: $itemId"
+        }
+        else {
+            $seenPlanIds[$itemId] = $true
+        }
+
+        foreach ($fieldName in @("phase", "title", "action")) {
+            if ([string]::IsNullOrWhiteSpace([string]$item.$fieldName)) {
+                $nextActionPlanFailures += "next_action_plan $itemId is missing $fieldName."
+            }
+        }
+
+        $phaseOrder = Read-ObjectInt -Object $item -Name "phase_order"
+        if ($phaseOrder -lt 0) {
+            $nextActionPlanFailures += "next_action_plan $itemId has invalid phase_order."
+        }
+        if ($phaseOrder -lt $previousOrder) {
+            $nextActionPlanFailures += "next_action_plan is not sorted by phase_order at $itemId."
+        }
+        $previousOrder = $phaseOrder
+
+        $commands = @(Get-ObjectArray -Object $item -Name "commands" | ForEach-Object { [string]$_ })
+        if ($commands.Count -eq 0) {
+            $nextActionPlanFailures += "next_action_plan $itemId lacks commands."
+        }
+
+        $itemBlockerIds = @(Get-ObjectArray -Object $item -Name "blocker_ids" | ForEach-Object { [string]$_ })
+        if ($itemBlockerIds.Count -eq 0) {
+            $nextActionPlanFailures += "next_action_plan $itemId lacks blocker_ids."
+        }
+
+        foreach ($blockerId in $itemBlockerIds) {
+            if (-not $knownBlockerIds.ContainsKey($blockerId)) {
+                $nextActionPlanFailures += "next_action_plan $itemId references unknown blocker id: $blockerId"
+                continue
+            }
+
+            $coveredBlockerIds[$blockerId] = $true
+            $blocker = $knownBlockerIds[$blockerId]
+            if ([string]$blocker.next_action_id -ne $itemId) {
+                $nextActionPlanFailures += "next_action_plan $itemId covers blocker $blockerId with mismatched next_action_id $($blocker.next_action_id)."
+            }
+
+            foreach ($blockerCommand in @(Get-ObjectArray -Object $blocker -Name "next_action_commands" | ForEach-Object { [string]$_ })) {
+                if ($commands -notcontains $blockerCommand) {
+                    $nextActionPlanFailures += "next_action_plan $itemId is missing blocker command for $blockerId`: $blockerCommand"
+                }
+            }
+        }
+    }
+
+    foreach ($blocker in $blockers) {
+        $blockerId = [string]$blocker.id
+        if (-not $coveredBlockerIds.ContainsKey($blockerId)) {
+            $nextActionPlanFailures += "blocker $blockerId is not covered by next_action_plan."
+        }
+    }
+
+    if (-not [bool]$report.ready_for_production_testing -and $blockers.Count -gt 0 -and $nextActionPlan.Count -eq 0) {
+        $nextActionPlanFailures += "ready_for_production_testing=false with blockers but next_action_plan is empty."
+    }
+    if ([bool]$report.ready_for_production_testing -and $nextActionPlan.Count -gt 0) {
+        $nextActionPlanFailures += "ready_for_production_testing=true but next_action_plan is not empty."
+    }
+    $checks += New-Check -Id "next_action_plan_contract" -Passed ($nextActionPlanFailures.Count -eq 0) -Failures $nextActionPlanFailures -Evidence ([pscustomobject][ordered]@{ next_action_count = $nextActionPlan.Count })
+
     $checks += Add-Check -Id "ready_consistency" -Condition (-not [bool]$report.ready_for_production_testing -or ($blockers.Count -eq 0 -and $inputFailures.Count -eq 0 -and $closeoutFailures.Count -eq 0 -and $failedReadinessGates.Count -eq 0 -and $failedProvisioningChecks.Count -eq 0 -and $failedReleaseEvidenceChecks.Count -eq 0)) -Failure "ready_for_production_testing=true while outstanding blockers remain"
     if ($RequireReady) {
         $checks += Add-Check -Id "require_ready" -Condition ([bool]$report.ready_for_production_testing) -Failure "outstanding-work report is not ready for production testing"
@@ -486,7 +572,7 @@ if ($null -ne $report) {
         $markdown = Get-Content -LiteralPath $resolvedMarkdownPath -Raw
         $markdownFailures = @()
         if ($markdown -notmatch '# Production MVP Outstanding Work') { $markdownFailures += "Markdown title is missing." }
-        foreach ($section in @("## Source Files", "## Blockers", "## Operator Input Matrix", "## Readiness Gates", "## Provisioning Packet", "## Release Evidence", "## Next Command")) {
+        foreach ($section in @("## Source Files", "## Next Action Plan", "## Blockers", "## Operator Input Matrix", "## Readiness Gates", "## Provisioning Packet", "## Release Evidence", "## Next Command")) {
             if ($markdown -notmatch [regex]::Escape($section)) {
                 $markdownFailures += "Markdown section is missing: $section"
             }
@@ -499,6 +585,24 @@ if ($null -ne $report) {
                 }
                 if (-not [string]::IsNullOrWhiteSpace([string]$sourceFile.sha256) -and $markdown -notmatch [regex]::Escape([string]$sourceFile.sha256)) {
                     $markdownFailures += "Markdown does not include source file SHA-256: $($sourceFile.id)"
+                }
+            }
+        }
+        foreach ($item in $nextActionPlan) {
+            if ($markdown -notmatch [regex]::Escape([string]$item.id)) {
+                $markdownFailures += "Markdown does not include next_action_plan id: $($item.id)"
+            }
+            if (-not [string]::IsNullOrWhiteSpace([string]$item.action) -and $markdown -notmatch [regex]::Escape([string]$item.action)) {
+                $markdownFailures += "Markdown does not include next_action_plan action: $($item.id)"
+            }
+            foreach ($blockerId in @(Get-ObjectArray -Object $item -Name "blocker_ids")) {
+                if (-not [string]::IsNullOrWhiteSpace([string]$blockerId) -and $markdown -notmatch [regex]::Escape([string]$blockerId)) {
+                    $markdownFailures += "Markdown does not include next_action_plan blocker id: $($item.id)"
+                }
+            }
+            foreach ($command in @(Get-ObjectArray -Object $item -Name "commands")) {
+                if (-not [string]::IsNullOrWhiteSpace([string]$command) -and $markdown -notmatch [regex]::Escape([string]$command)) {
+                    $markdownFailures += "Markdown does not include next_action_plan command: $($item.id)"
                 }
             }
         }
