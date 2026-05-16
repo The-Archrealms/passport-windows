@@ -102,10 +102,12 @@ function New-ActionRecord {
         phase = [string]$Item.phase
         phase_order = [int]$Item.phase_order
         title = [string]$Item.title
+        summary = $(if ($Item.PSObject.Properties["summary"]) { [string]$Item.summary } else { "" })
         action = [string]$Item.action
         commands = @(Get-ObjectArray -Object $Item -Name "commands" | ForEach-Object { [string]$_ })
         operator_placeholders = @(Get-ObjectArray -Object $Item -Name "operator_placeholders")
         blocker_ids = @(Get-ObjectArray -Object $Item -Name "blocker_ids" | ForEach-Object { [string]$_ })
+        blocker_summaries = @(Get-ObjectArray -Object $Item -Name "blocker_summaries" | ForEach-Object { [string]$_ })
         operator_input_required = $(if ($Item.PSObject.Properties["operator_input_required"]) { [bool]$Item.operator_input_required } else { $false })
         required_operator_input_count = $(if ($Item.PSObject.Properties["required_operator_input_count"]) { [int]$Item.required_operator_input_count } else { 0 })
         blocked_by_external_actor = $(if ($Item.PSObject.Properties["blocked_by_external_actor"]) { [bool]$Item.blocked_by_external_actor } else { $false })
@@ -257,6 +259,15 @@ else {
 
         $markdown.Add("### $($action.id): $($action.title)")
         $markdown.Add("")
+        if (-not [string]::IsNullOrWhiteSpace([string]$action.summary)) {
+            $markdown.Add("- Summary: $($action.summary)")
+        }
+        if (@($action.blocker_summaries).Count -gt 0) {
+            $markdown.Add("- Covered blocker summaries:")
+            foreach ($summary in @($action.blocker_summaries)) {
+                $markdown.Add("  - $summary")
+            }
+        }
         $markdown.Add("- Action: $($action.action)")
         $markdown.Add("- Blockers covered: $((@($action.blocker_ids) -join ', '))")
         $markdown.Add("- Operator input required: $(([bool]$action.operator_input_required).ToString().ToLowerInvariant())")

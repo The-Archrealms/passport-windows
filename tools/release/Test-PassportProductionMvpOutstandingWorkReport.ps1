@@ -963,7 +963,7 @@ if ($null -ne $report) {
             $seenPlanIds[$itemId] = $true
         }
 
-        foreach ($fieldName in @("phase", "title", "action")) {
+        foreach ($fieldName in @("phase", "title", "summary", "action")) {
             if ([string]::IsNullOrWhiteSpace([string]$item.$fieldName)) {
                 $nextActionPlanFailures += "next_action_plan $itemId is missing $fieldName."
             }
@@ -991,6 +991,10 @@ if ($null -ne $report) {
         if ($itemBlockerIds.Count -eq 0) {
             $nextActionPlanFailures += "next_action_plan $itemId lacks blocker_ids."
         }
+        if (-not $item.PSObject.Properties["blocker_summaries"]) {
+            $nextActionPlanFailures += "next_action_plan $itemId is missing blocker_summaries."
+        }
+        $itemBlockerSummaries = @(Get-ObjectArray -Object $item -Name "blocker_summaries" | ForEach-Object { [string]$_ })
 
         if (-not $item.PSObject.Properties["operator_input_required"]) {
             $nextActionPlanFailures += "next_action_plan $itemId is missing operator_input_required."
@@ -1034,6 +1038,9 @@ if ($null -ne $report) {
             $blocker = $knownBlockerIds[$blockerId]
             if ([string]$blocker.next_action_id -ne $itemId) {
                 $nextActionPlanFailures += "next_action_plan $itemId covers blocker $blockerId with mismatched next_action_id $($blocker.next_action_id)."
+            }
+            if ($blocker.PSObject.Properties["summary"] -and -not [string]::IsNullOrWhiteSpace([string]$blocker.summary) -and $itemBlockerSummaries -notcontains [string]$blocker.summary) {
+                $nextActionPlanFailures += "next_action_plan $itemId blocker_summaries does not include covered blocker summary: $blockerId"
             }
 
             foreach ($blockerCommand in @(Get-ObjectArray -Object $blocker -Name "next_action_commands" | ForEach-Object { [string]$_ })) {
@@ -1095,6 +1102,14 @@ if ($null -ne $report) {
             }
             if (-not [string]::IsNullOrWhiteSpace([string]$item.action) -and $markdown -notmatch [regex]::Escape([string]$item.action)) {
                 $markdownFailures += "Markdown does not include next_action_plan action: $($item.id)"
+            }
+            if (-not [string]::IsNullOrWhiteSpace([string]$item.summary) -and $markdown -notmatch [regex]::Escape([string]$item.summary)) {
+                $markdownFailures += "Markdown does not include next_action_plan summary: $($item.id)"
+            }
+            foreach ($summary in @(Get-ObjectArray -Object $item -Name "blocker_summaries")) {
+                if (-not [string]::IsNullOrWhiteSpace([string]$summary) -and $markdown -notmatch [regex]::Escape([string]$summary)) {
+                    $markdownFailures += "Markdown does not include next_action_plan blocker summary: $($item.id)"
+                }
             }
             foreach ($blockerId in @(Get-ObjectArray -Object $item -Name "blocker_ids")) {
                 if (-not [string]::IsNullOrWhiteSpace([string]$blockerId) -and $markdown -notmatch [regex]::Escape([string]$blockerId)) {

@@ -620,6 +620,7 @@ function New-NextActionPlan {
                 external_blocker_ids = New-Object System.Collections.Generic.List[string]
                 categories = New-Object System.Collections.Generic.List[string]
                 source_ids = New-Object System.Collections.Generic.List[string]
+                summaries = New-Object System.Collections.Generic.List[string]
             }
         }
 
@@ -635,18 +636,31 @@ function New-NextActionPlan {
         foreach ($command in @($blocker.next_action_commands)) {
             Add-UniqueString -List $entry.commands -Value ([string]$command)
         }
+        Add-UniqueString -List $entry.summaries -Value ([string]$blocker.summary)
     }
 
     $items = foreach ($entry in $plansById.Values) {
+        $blockerSummaries = @($entry.summaries | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | ForEach-Object { ConvertTo-ReportText -Value $_ })
+        $firstSummary = @($blockerSummaries | Select-Object -First 1)
+        $summaryParts = @(
+            [string]$entry.title,
+            "Covers $(@($entry.blocker_ids).Count) blocker(s)."
+        )
+        if ($firstSummary.Count -gt 0) {
+            $summaryParts += "First blocker: $($firstSummary[0])"
+        }
+
         [pscustomobject][ordered]@{
             id = [string]$entry.id
             phase = [string]$entry.phase
             phase_order = [int]$entry.phase_order
             title = [string]$entry.title
+            summary = ConvertTo-ReportText -Value (($summaryParts | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }) -join " ")
             action = [string]$entry.action
             commands = @($entry.commands)
             operator_placeholders = @(Get-CommandPlaceholders -Commands @($entry.commands))
             blocker_ids = @($entry.blocker_ids)
+            blocker_summaries = @($blockerSummaries)
             operator_input_required = (@($entry.blocker_ids).Count -gt 0)
             required_operator_input_count = @($entry.external_blocker_ids).Count
             blocked_by_external_actor = (@($entry.external_blocker_ids).Count -gt 0)
@@ -1632,6 +1646,15 @@ if (-not [string]::IsNullOrWhiteSpace($MarkdownOutputPath)) {
     else {
         foreach ($item in @($nextActionPlan)) {
             $lines.Add("- ``$($item.id)`` [$($item.phase)]: $($item.title)")
+            if (-not [string]::IsNullOrWhiteSpace([string]$item.summary)) {
+                $lines.Add("  - Summary: $($item.summary)")
+            }
+            if (@($item.blocker_summaries).Count -gt 0) {
+                $lines.Add("  - Covered blocker summaries:")
+                foreach ($summary in @($item.blocker_summaries)) {
+                    $lines.Add("    - $summary")
+                }
+            }
             $lines.Add("  - Action: $($item.action)")
             $lines.Add("  - Blockers covered: $((@($item.blocker_ids) -join ', '))")
             $lines.Add("  - Operator input required: $(([bool]$item.operator_input_required).ToString().ToLowerInvariant())")

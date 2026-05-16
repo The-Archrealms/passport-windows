@@ -371,7 +371,7 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
         }
 
         $sourceAction = $sourceById[$id]
-        foreach ($field in @("phase", "title", "action")) {
+        foreach ($field in @("phase", "title", "summary", "action")) {
             if ([string]$packetAction.$field -ne [string]$sourceAction.$field) {
                 $actionFailures += "packet action $id field mismatch: $field"
             }
@@ -387,7 +387,7 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
         if ([int]$packetAction.phase_order -ne [int]$sourceAction.phase_order) {
             $actionFailures += "packet action $id phase_order mismatch."
         }
-        foreach ($arrayName in @("commands", "blocker_ids", "external_blocker_ids", "categories", "source_ids")) {
+        foreach ($arrayName in @("commands", "blocker_ids", "blocker_summaries", "external_blocker_ids", "categories", "source_ids")) {
             $packetArray = @(Get-ObjectArray -Object $packetAction -Name $arrayName)
             $sourceArray = @(Get-ObjectArray -Object $sourceAction -Name $arrayName)
             if ((Join-ArrayForCompare -Values $packetArray) -ne (Join-ArrayForCompare -Values $sourceArray)) {
@@ -511,7 +511,7 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
             $markdownFailures += "Markdown title is missing."
         }
         foreach ($packetAction in $packetActions) {
-            foreach ($value in @([string]$packetAction.id, [string]$packetAction.title, [string]$packetAction.action)) {
+            foreach ($value in @([string]$packetAction.id, [string]$packetAction.title, [string]$packetAction.summary, [string]$packetAction.action)) {
                 if (-not [string]::IsNullOrWhiteSpace($value) -and $markdown -notmatch [regex]::Escape($value)) {
                     $markdownFailures += "Markdown is missing action value for $($packetAction.id): $value"
                 }
@@ -519,6 +519,11 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
             foreach ($blockerId in @(Get-ObjectArray -Object $packetAction -Name "blocker_ids")) {
                 if ($markdown -notmatch [regex]::Escape([string]$blockerId)) {
                     $markdownFailures += "Markdown is missing blocker id for $($packetAction.id): $blockerId"
+                }
+            }
+            foreach ($summary in @(Get-ObjectArray -Object $packetAction -Name "blocker_summaries")) {
+                if (-not [string]::IsNullOrWhiteSpace([string]$summary) -and $markdown -notmatch [regex]::Escape([string]$summary)) {
+                    $markdownFailures += "Markdown is missing blocker summary for $($packetAction.id): $summary"
                 }
             }
             foreach ($command in @(Get-ObjectArray -Object $packetAction -Name "commands")) {
