@@ -157,6 +157,12 @@ function Join-ArrayForCompare {
     return (@($Values | ForEach-Object { [string]$_ }) -join [char]30)
 }
 
+function Convert-ForCompare {
+    param([object]$Value)
+
+    return ($Value | ConvertTo-Json -Depth 20 -Compress)
+}
+
 if ($UseGeneratedFixture) {
     $fixtureRoot = Resolve-RepoPath -Path "artifacts\release\production-mvp-next-action-packet-fixture"
     New-Item -ItemType Directory -Force -Path $fixtureRoot | Out-Null
@@ -186,6 +192,8 @@ $manifestPath = Join-Path $resolvedPacketRoot "production-mvp-next-action-packet
 $planPath = Join-Path $resolvedPacketRoot "next-action-plan.json"
 $markdownPath = Join-Path $resolvedPacketRoot "next-action-plan.md"
 $commandsPath = Join-Path $resolvedPacketRoot "operator-commands.ps1"
+$matrixPath = Join-Path $resolvedPacketRoot "operator-input-matrix.json"
+$matrixMarkdownPath = Join-Path $resolvedPacketRoot "operator-input-matrix.md"
 
 $checks = @()
 if ($UseGeneratedFixture) {
@@ -212,10 +220,13 @@ if ($Generate) {
 $checks += Add-Check -Id "manifest_exists" -Condition (Test-Path -LiteralPath $manifestPath -PathType Leaf) -Failure "next-action packet manifest is missing" -Evidence ([pscustomobject][ordered]@{ path = $manifestPath })
 $checks += Add-Check -Id "plan_json_exists" -Condition (Test-Path -LiteralPath $planPath -PathType Leaf) -Failure "next-action plan JSON is missing" -Evidence ([pscustomobject][ordered]@{ path = $planPath })
 $checks += Add-Check -Id "plan_markdown_exists" -Condition (Test-Path -LiteralPath $markdownPath -PathType Leaf) -Failure "next-action plan Markdown is missing" -Evidence ([pscustomobject][ordered]@{ path = $markdownPath })
+$checks += Add-Check -Id "operator_input_matrix_json_exists" -Condition (Test-Path -LiteralPath $matrixPath -PathType Leaf) -Failure "operator input matrix JSON is missing" -Evidence ([pscustomobject][ordered]@{ path = $matrixPath })
+$checks += Add-Check -Id "operator_input_matrix_markdown_exists" -Condition (Test-Path -LiteralPath $matrixMarkdownPath -PathType Leaf) -Failure "operator input matrix Markdown is missing" -Evidence ([pscustomobject][ordered]@{ path = $matrixMarkdownPath })
 $checks += Add-Check -Id "operator_commands_exists" -Condition (Test-Path -LiteralPath $commandsPath -PathType Leaf) -Failure "operator command checklist is missing" -Evidence ([pscustomobject][ordered]@{ path = $commandsPath })
 
 $manifest = Read-JsonFile -Path $manifestPath
 $plan = Read-JsonFile -Path $planPath
+$matrix = Read-JsonFile -Path $matrixPath
 $sourceReport = Read-JsonFile -Path $resolvedOutstandingWorkReportPath
 
 if ($null -ne $manifest) {
@@ -230,6 +241,13 @@ if ($null -ne $plan) {
 }
 else {
     $checks += New-Check -Id "plan_schema" -Passed $false -Failures @("next-action plan JSON could not be parsed")
+}
+
+if ($null -ne $matrix) {
+    $checks += Add-Check -Id "operator_input_matrix_schema" -Condition ([string]$matrix.schema -eq "archrealms.passport.production_mvp_operator_input_matrix.v1") -Failure "unexpected operator input matrix schema"
+}
+else {
+    $checks += New-Check -Id "operator_input_matrix_schema" -Passed $false -Failures @("operator input matrix JSON could not be parsed")
 }
 
 if ($null -ne $sourceReport) {
@@ -303,8 +321,57 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
     }
     $checks += New-Check -Id "action_plan_matches_source" -Passed ($actionFailures.Count -eq 0) -Failures $actionFailures -Evidence ([pscustomobject][ordered]@{ action_count = $packetActions.Count })
 
+    if ($null -ne $matrix) {
+        $sourceMatrix = $sourceReport.operator_input_matrix
+        $sourceEnvironmentVariables = @(Get-ObjectArray -Object $sourceMatrix -Name "environment_variables")
+        $sourceReportReferenceRefreshes = @(Get-ObjectArray -Object $sourceMatrix -Name "report_reference_refreshes")
+        $sourceReadinessEvidenceItems = @(Get-ObjectArray -Object $sourceMatrix -Name "readiness_evidence_items")
+        $sourceProvisioningEvidenceFiles = @(Get-ObjectArray -Object $sourceMatrix -Name "provisioning_evidence_files")
+        $sourceReleaseEvidenceItems = @(Get-ObjectArray -Object $sourceMatrix -Name "release_evidence_items")
+
+        $matrixFailures = @()
+        if ([string]$matrix.source_report.sha256 -ne $sourceHash) {
+            $matrixFailures += "operator input matrix source report SHA-256 does not match actual source report."
+        }
+        if ([int]$matrix.summary.environment_variable_count -ne $sourceEnvironmentVariables.Count) {
+            $matrixFailures += "operator input matrix environment variable count does not match source report."
+        }
+        if ([int]$matrix.summary.report_reference_refresh_count -ne $sourceReportReferenceRefreshes.Count) {
+            $matrixFailures += "operator input matrix report-reference refresh count does not match source report."
+        }
+        if ([int]$matrix.summary.readiness_evidence_item_count -ne $sourceReadinessEvidenceItems.Count) {
+            $matrixFailures += "operator input matrix readiness evidence item count does not match source report."
+        }
+        if ([int]$matrix.summary.provisioning_evidence_file_count -ne $sourceProvisioningEvidenceFiles.Count) {
+            $matrixFailures += "operator input matrix provisioning evidence file count does not match source report."
+        }
+        if ([int]$matrix.summary.release_evidence_item_count -ne $sourceReleaseEvidenceItems.Count) {
+            $matrixFailures += "operator input matrix release evidence item count does not match source report."
+        }
+
+        $comparisons = @(
+            [pscustomobject]@{ name = "environment_variables"; expected = $sourceEnvironmentVariables; actual = @(Get-ObjectArray -Object $matrix -Name "environment_variables") }
+            [pscustomobject]@{ name = "report_reference_refreshes"; expected = $sourceReportReferenceRefreshes; actual = @(Get-ObjectArray -Object $matrix -Name "report_reference_refreshes") }
+            [pscustomobject]@{ name = "readiness_evidence_items"; expected = $sourceReadinessEvidenceItems; actual = @(Get-ObjectArray -Object $matrix -Name "readiness_evidence_items") }
+            [pscustomobject]@{ name = "provisioning_evidence_files"; expected = $sourceProvisioningEvidenceFiles; actual = @(Get-ObjectArray -Object $matrix -Name "provisioning_evidence_files") }
+            [pscustomobject]@{ name = "release_evidence_items"; expected = $sourceReleaseEvidenceItems; actual = @(Get-ObjectArray -Object $matrix -Name "release_evidence_items") }
+        )
+        foreach ($comparison in $comparisons) {
+            if ((Convert-ForCompare -Value $comparison.expected) -ne (Convert-ForCompare -Value $comparison.actual)) {
+                $matrixFailures += "operator input matrix $($comparison.name) does not match source report."
+            }
+        }
+
+        $checks += New-Check -Id "operator_input_matrix_matches_source" -Passed ($matrixFailures.Count -eq 0) -Failures $matrixFailures -Evidence ([pscustomobject][ordered]@{
+            environment_variable_count = $sourceEnvironmentVariables.Count
+            readiness_evidence_item_count = $sourceReadinessEvidenceItems.Count
+            provisioning_evidence_file_count = $sourceProvisioningEvidenceFiles.Count
+            release_evidence_item_count = $sourceReleaseEvidenceItems.Count
+        })
+    }
+
     $generatedFileFailures = @()
-    $expectedFileIds = @("next_action_plan_json", "next_action_plan_markdown", "operator_commands")
+    $expectedFileIds = @("next_action_plan_json", "next_action_plan_markdown", "operator_input_matrix_json", "operator_input_matrix_markdown", "operator_commands")
     $generatedFiles = @(Get-ObjectArray -Object $manifest -Name "generated_files")
     foreach ($expectedFileId in $expectedFileIds) {
         $record = @($generatedFiles | Where-Object { [string]$_.id -eq $expectedFileId } | Select-Object -First 1)
@@ -351,6 +418,41 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
         $checks += New-Check -Id "markdown_coverage" -Passed ($markdownFailures.Count -eq 0) -Failures $markdownFailures
     }
 
+    if ($null -ne $matrix -and (Test-Path -LiteralPath $matrixMarkdownPath -PathType Leaf)) {
+        $matrixMarkdown = Get-Content -LiteralPath $matrixMarkdownPath -Raw
+        $matrixMarkdownFailures = @()
+        if ($matrixMarkdown -notmatch "# Production MVP Operator Input Matrix") {
+            $matrixMarkdownFailures += "operator input matrix Markdown title is missing."
+        }
+
+        foreach ($item in @(Get-ObjectArray -Object $matrix -Name "environment_variables")) {
+            $name = [string]$item.name
+            if (-not [string]::IsNullOrWhiteSpace($name) -and $matrixMarkdown -notmatch [regex]::Escape($name)) {
+                $matrixMarkdownFailures += "operator input matrix Markdown is missing environment variable: $name"
+            }
+        }
+        foreach ($item in @(Get-ObjectArray -Object $matrix -Name "readiness_evidence_items")) {
+            $id = [string]$item.readiness_gate_id
+            if (-not [string]::IsNullOrWhiteSpace($id) -and $matrixMarkdown -notmatch [regex]::Escape($id)) {
+                $matrixMarkdownFailures += "operator input matrix Markdown is missing readiness evidence item: $id"
+            }
+        }
+        foreach ($item in @(Get-ObjectArray -Object $matrix -Name "provisioning_evidence_files")) {
+            foreach ($value in @([string]$item.provisioning_check_id, [string]$item.child_check_id, [string]$item.evidence_path)) {
+                if (-not [string]::IsNullOrWhiteSpace($value) -and $matrixMarkdown -notmatch [regex]::Escape($value)) {
+                    $matrixMarkdownFailures += "operator input matrix Markdown is missing provisioning evidence value: $value"
+                }
+            }
+        }
+        foreach ($item in @(Get-ObjectArray -Object $matrix -Name "release_evidence_items")) {
+            $id = [string]$item.id
+            if (-not [string]::IsNullOrWhiteSpace($id) -and $matrixMarkdown -notmatch [regex]::Escape($id)) {
+                $matrixMarkdownFailures += "operator input matrix Markdown is missing release evidence item: $id"
+            }
+        }
+        $checks += New-Check -Id "operator_input_matrix_markdown_coverage" -Passed ($matrixMarkdownFailures.Count -eq 0) -Failures $matrixMarkdownFailures
+    }
+
     if (Test-Path -LiteralPath $commandsPath -PathType Leaf) {
         $commandText = Get-Content -LiteralPath $commandsPath -Raw
         $commandFailures = @()
@@ -387,6 +489,10 @@ $validation = [pscustomobject][ordered]@{
     plan_sha256 = Get-Sha256Hex -Path $planPath
     markdown_path = $markdownPath
     markdown_sha256 = Get-Sha256Hex -Path $markdownPath
+    operator_input_matrix_path = $matrixPath
+    operator_input_matrix_sha256 = Get-Sha256Hex -Path $matrixPath
+    operator_input_matrix_markdown_path = $matrixMarkdownPath
+    operator_input_matrix_markdown_sha256 = Get-Sha256Hex -Path $matrixMarkdownPath
     operator_commands_path = $commandsPath
     operator_commands_sha256 = Get-Sha256Hex -Path $commandsPath
     generated = [bool]$Generate

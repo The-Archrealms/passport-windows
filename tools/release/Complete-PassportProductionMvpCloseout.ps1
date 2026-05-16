@@ -630,6 +630,8 @@ if (-not $closeoutPassed -and -not $SkipFailureHandoff) {
     $nextActionManifestPath = Join-Path $resolvedNextActionPacketDirectory "production-mvp-next-action-packet.manifest.json"
     $nextActionPlanPath = Join-Path $resolvedNextActionPacketDirectory "next-action-plan.json"
     $nextActionMarkdownPath = Join-Path $resolvedNextActionPacketDirectory "next-action-plan.md"
+    $nextActionMatrixPath = Join-Path $resolvedNextActionPacketDirectory "operator-input-matrix.json"
+    $nextActionMatrixMarkdownPath = Join-Path $resolvedNextActionPacketDirectory "operator-input-matrix.md"
     $nextActionCommandsPath = Join-Path $resolvedNextActionPacketDirectory "operator-commands.ps1"
 
     $failureHandoffPassed = (
@@ -663,6 +665,8 @@ if (-not $closeoutPassed -and -not $SkipFailureHandoff) {
             manifest = New-FileRecord -Id "production_mvp_next_action_packet_manifest" -Path $nextActionManifestPath
             plan_json = New-FileRecord -Id "production_mvp_next_action_plan_json" -Path $nextActionPlanPath
             plan_markdown = New-FileRecord -Id "production_mvp_next_action_plan_markdown" -Path $nextActionMarkdownPath
+            operator_input_matrix_json = New-FileRecord -Id "production_mvp_next_action_operator_input_matrix_json" -Path $nextActionMatrixPath
+            operator_input_matrix_markdown = New-FileRecord -Id "production_mvp_next_action_operator_input_matrix_markdown" -Path $nextActionMatrixMarkdownPath
             operator_commands = New-FileRecord -Id "production_mvp_next_action_operator_commands" -Path $nextActionCommandsPath
         }
     }
