@@ -608,6 +608,16 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
             }
         }
         foreach ($packetAction in $packetActions) {
+            foreach ($value in @([string]$packetAction.id, [string]$packetAction.title, [string]$packetAction.phase, [string]$packetAction.summary)) {
+                if (-not [string]::IsNullOrWhiteSpace($value) -and $commandText -notmatch [regex]::Escape($value)) {
+                    $commandFailures += "operator command checklist is missing action metadata for $($packetAction.id): $value"
+                }
+            }
+            foreach ($summary in @(Get-ObjectArray -Object $packetAction -Name "blocker_summaries")) {
+                if (-not [string]::IsNullOrWhiteSpace([string]$summary) -and $commandText -notmatch [regex]::Escape([string]$summary)) {
+                    $commandFailures += "operator command checklist is missing blocker summary for $($packetAction.id): $summary"
+                }
+            }
             foreach ($placeholder in @(Get-ObjectArray -Object $packetAction -Name "operator_placeholders")) {
                 foreach ($value in @([string]$placeholder.token, [string]$placeholder.input_kind, [string]$placeholder.validation_hint)) {
                     if (-not [string]::IsNullOrWhiteSpace($value) -and $commandText -notmatch [regex]::Escape($value)) {

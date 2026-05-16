@@ -374,6 +374,15 @@ $commandLines.Add("")
 foreach ($action in $actions) {
     $commandLines.Add("# Action: $($action.id) - $($action.title)")
     $commandLines.Add("# Phase: $($action.phase)")
+    if (-not [string]::IsNullOrWhiteSpace([string]$action.summary)) {
+        $commandLines.Add("# Summary: $($action.summary)")
+    }
+    if (@($action.blocker_summaries).Count -gt 0) {
+        $commandLines.Add("# Covered blocker summaries:")
+        foreach ($summary in @($action.blocker_summaries)) {
+            $commandLines.Add("# - $summary")
+        }
+    }
     $commandLines.Add("# Blockers: $((@($action.blocker_ids) -join ', '))")
     $commandLines.Add("# Operator input required: $(([bool]$action.operator_input_required).ToString().ToLowerInvariant())")
     $commandLines.Add("# External blocker count: $($action.required_operator_input_count)")
