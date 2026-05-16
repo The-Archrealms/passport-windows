@@ -189,6 +189,60 @@ function Get-OutstandingGateAction {
     })
 }
 
+function Get-OutstandingProvisioningFailures {
+    param(
+        [object]$OutstandingReport,
+        [string]$Id
+    )
+
+    if ($null -eq $OutstandingReport -or -not $OutstandingReport.PSObject.Properties["failed_provisioning_checks"]) {
+        return @()
+    }
+
+    $matches = @($OutstandingReport.failed_provisioning_checks | Where-Object { [string]$_.id -eq $Id } | Select-Object -First 1)
+    if ($matches.Count -eq 0) {
+        return @()
+    }
+
+    $check = $matches[0]
+    $summary = ConvertTo-AuditText -Value $check.summary
+    if (-not [string]::IsNullOrWhiteSpace($summary)) {
+        return @($summary)
+    }
+
+    return @("production provisioning check did not pass: $Id")
+}
+
+function Get-OutstandingProvisioningAction {
+    param(
+        [object]$OutstandingReport,
+        [string]$Id
+    )
+
+    if ($null -eq $OutstandingReport -or -not $OutstandingReport.PSObject.Properties["failed_provisioning_checks"]) {
+        return @()
+    }
+
+    $matches = @($OutstandingReport.failed_provisioning_checks | Where-Object { [string]$_.id -eq $Id } | Select-Object -First 1)
+    if ($matches.Count -eq 0) {
+        return @()
+    }
+
+    $check = $matches[0]
+    if (-not $check.PSObject.Properties["operator_action"] -or $null -eq $check.operator_action) {
+        return @()
+    }
+
+    $action = $check.operator_action
+    return ,([pscustomobject][ordered]@{
+        gate_id = $Id
+        id = ConvertTo-AuditText -Value $action.id
+        title = ConvertTo-AuditText -Value $action.title
+        action = ConvertTo-AuditText -Value $action.action
+        commands = @($action.commands | ForEach-Object { ConvertTo-AuditText -Value $_ })
+    })
+}
+
 function New-ManualAction {
     param(
         [string]$Id,
@@ -580,6 +634,185 @@ $items += New-AuditItem -Id "prd_success_cc_capacity_constrained" -Source "PRD/A
 $items += New-AuditItem -Id "prd_success_cc_does_not_create_arch" -Source "PRD/ARD Monetary Invariants" -Requirement "CC issuance cannot create ARCH or add ARCH to Crown reserves." -Status (Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds $capacityCoverageCheckIds) -EvidenceIds @("pre_mvp_internal_verification") -CoverageCheckIds $capacityCoverageCheckIds -CoverageEvidence (Get-CoverageEvidence -PreMvpReport $preMvp -CheckIds $capacityCoverageCheckIds)
 $items += New-AuditItem -Id "prd_success_ledger_export_auditability" -Source "PRD/ARD Ledger and Export" -Requirement "Ledger events are signed, replayable, exportable, and correction-safe." -Status (Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds $ledgerCoverageCheckIds) -EvidenceIds @("pre_mvp_internal_verification") -CoverageCheckIds $ledgerCoverageCheckIds -CoverageEvidence (Get-CoverageEvidence -PreMvpReport $preMvp -CheckIds $ledgerCoverageCheckIds)
 
+$monetaryProvisioningBlockers = @()
+$monetaryProvisioningBlockers += @($issuerBlockers)
+$monetaryProvisioningBlockers += @(Get-OutstandingProvisioningFailures -OutstandingReport $outstanding -Id "production_monetary_provisioning")
+$monetaryProvisioningActions = @()
+$monetaryProvisioningActions += @(Get-OutstandingGateAction -OutstandingReport $outstanding -Id "issuer_capacity_genesis_secrets")
+$monetaryProvisioningActions += @(Get-OutstandingProvisioningAction -OutstandingReport $outstanding -Id "production_monetary_provisioning")
+$monetaryProvisioningComplete = (
+    (Get-Gate -Report $productionReadiness -Id "issuer_capacity_genesis_secrets").passed -eq $true -and
+    (Get-OutstandingProvisioningFailures -OutstandingReport $outstanding -Id "production_monetary_provisioning").Count -eq 0
+)
+$capacityImplementationReady = (Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds $capacityCoverageCheckIds) -eq "passed"
+
+$items += New-AuditItem `
+    -Id "prd_required_arch_genesis_decision" `
+    -Source "PRD Required Decisions Before MVP Release" `
+    -Requirement "ARCH genesis total supply, base-unit precision, allocation, vesting or lock rules if any, treasury policy, and genesis ledger hash are defined." `
+    -Status $(if ($monetaryProvisioningComplete) { "passed" } else { "blocked" }) `
+    -EvidenceIds @("pre_mvp_internal_verification", "production_mvp_readiness", "production_mvp_outstanding_work", "production_mvp_operator_input_matrix") `
+    -CoverageCheckIds $monetaryCoverageCheckIds `
+    -CoverageEvidence (Get-CoverageEvidence -PreMvpReport $preMvp -CheckIds $monetaryCoverageCheckIds) `
+    -EvidenceNotes @("The local monetary implementation is validated; production release requires approved issuer/capacity/genesis IDs and a filled production monetary provisioning packet.") `
+    -Blockers $monetaryProvisioningBlockers `
+    -OperatorActions $monetaryProvisioningActions `
+    -RemainingWorkType "monetary_provisioning" `
+    -ImplementationReady $monetaryImplementationReady
+
+$items += New-AuditItem `
+    -Id "prd_required_cc_issuance_decision" `
+    -Source "PRD Required Decisions Before MVP Release" `
+    -Requirement "CC issuance conservative service-capacity methodology, issuance authority, issuance records, capacity reports, and no-ARCH-creation validation are defined." `
+    -Status $(if ($monetaryProvisioningComplete -and $capacityImplementationReady) { "passed" } else { "blocked" }) `
+    -EvidenceIds @("pre_mvp_internal_verification", "production_mvp_readiness", "production_mvp_outstanding_work", "production_mvp_operator_input_matrix") `
+    -CoverageCheckIds $capacityCoverageCheckIds `
+    -CoverageEvidence (Get-CoverageEvidence -PreMvpReport $preMvp -CheckIds $capacityCoverageCheckIds) `
+    -EvidenceNotes @("The conservative-capacity and no-ARCH-creation rules are locally validated; production release requires the filled monetary provisioning packet and authority identifiers.") `
+    -Blockers $monetaryProvisioningBlockers `
+    -OperatorActions $monetaryProvisioningActions `
+    -RemainingWorkType "monetary_provisioning" `
+    -ImplementationReady $capacityImplementationReady
+
+$listedServiceBlockers = @()
+$listedServiceBlockers += @(Get-OutstandingProvisioningFailures -OutstandingReport $outstanding -Id "managed_storage_provisioning")
+$listedServiceBlockers += @($storageBlockers)
+$listedServiceActions = @()
+$listedServiceActions += @(Get-OutstandingProvisioningAction -OutstandingReport $outstanding -Id "managed_storage_provisioning")
+$listedServiceActions += @($storageActions)
+$listedServiceComplete = (
+    (Get-OutstandingProvisioningFailures -OutstandingReport $outstanding -Id "managed_storage_provisioning").Count -eq 0 -and
+    $storageBlockers.Count -eq 0
+)
+$items += New-AuditItem `
+    -Id "prd_required_listed_services_decision" `
+    -Source "PRD Required Decisions Before MVP Release" `
+    -Requirement "Listed Crown-administered services, starting with storage, define service classes, quote method, proof standard, failure remedy, burn timing, and support ownership." `
+    -Status $(if ($listedServiceComplete -and $storageStatus -eq "passed") { "passed" } else { "blocked" }) `
+    -EvidenceIds @("pre_mvp_internal_verification", "production_mvp_readiness", "production_mvp_outstanding_work", "production_mvp_operator_input_matrix") `
+    -CoverageCheckIds $storageCoverageCheckIds `
+    -CoverageEvidence (Get-CoverageEvidence -PreMvpReport $preMvp -CheckIds $storageCoverageCheckIds) `
+    -EvidenceNotes @("Storage redemption, escrow, burn, refund, and re-credit behavior is locally validated; production release requires managed storage provisioning and live storage status evidence.") `
+    -Blockers $listedServiceBlockers `
+    -OperatorActions $listedServiceActions `
+    -RemainingWorkType "managed_storage_provisioning" `
+    -ImplementationReady ($storageStatus -eq "passed")
+
+$items += New-AuditItem `
+    -Id "prd_required_conversion_policy_decision" `
+    -Source "PRD Required Decisions Before MVP Release" `
+    -Requirement "ARCH/CC conversion source, quote method, spread or fee policy, counterparty limits, liquidity limit, and disclosure wording are defined." `
+    -Status $(if ($monetaryProvisioningComplete -and $monetaryImplementationReady) { "passed" } else { "blocked" }) `
+    -EvidenceIds @("pre_mvp_internal_verification", "production_mvp_readiness", "production_mvp_outstanding_work", "production_mvp_operator_input_matrix") `
+    -CoverageCheckIds $monetaryCoverageCheckIds `
+    -CoverageEvidence (Get-CoverageEvidence -PreMvpReport $preMvp -CheckIds $monetaryCoverageCheckIds) `
+    -EvidenceNotes @("Floating-rate quote and execution records are locally validated; production release requires the approved monetary provisioning packet and no fixed-rate/guaranteed-conversion claims.") `
+    -Blockers $monetaryProvisioningBlockers `
+    -OperatorActions $monetaryProvisioningActions `
+    -RemainingWorkType "monetary_provisioning" `
+    -ImplementationReady $monetaryImplementationReady
+
+$releaseLaneBlockers = @()
+$releaseLaneBlockers += @(Get-OutstandingGateFailures -OutstandingReport $outstanding -Id "staging_readiness")
+$releaseLaneBlockers += @(Get-OutstandingGateFailures -OutstandingReport $outstanding -Id "canary_mvp_readiness")
+$releaseLaneBlockers += @(Get-OutstandingGateFailures -OutstandingReport $outstanding -Id "package_signing")
+$releaseLaneBlockers += @(Get-OutstandingGateFailures -OutstandingReport $outstanding -Id "release_lane_endpoints")
+$releaseLaneBlockers += @(Get-OutstandingProvisioningFailures -OutstandingReport $outstanding -Id "release_lane_endpoint_provisioning")
+$releaseLaneActions = @()
+$releaseLaneActions += @(Get-OutstandingGateAction -OutstandingReport $outstanding -Id "staging_readiness")
+$releaseLaneActions += @(Get-OutstandingGateAction -OutstandingReport $outstanding -Id "canary_mvp_readiness")
+$releaseLaneActions += @(Get-OutstandingGateAction -OutstandingReport $outstanding -Id "package_signing")
+$releaseLaneActions += @(Get-OutstandingGateAction -OutstandingReport $outstanding -Id "release_lane_endpoints")
+$releaseLaneActions += @(Get-OutstandingProvisioningAction -OutstandingReport $outstanding -Id "release_lane_endpoint_provisioning")
+$releaseLaneComplete = (
+    (Get-Gate -Report $productionReadiness -Id "staging_readiness").passed -eq $true -and
+    (Get-Gate -Report $productionReadiness -Id "canary_mvp_readiness").passed -eq $true -and
+    (Get-Gate -Report $productionReadiness -Id "package_signing").passed -eq $true -and
+    (Get-Gate -Report $productionReadiness -Id "release_lane_endpoints").passed -eq $true -and
+    (Get-OutstandingProvisioningFailures -OutstandingReport $outstanding -Id "release_lane_endpoint_provisioning").Count -eq 0
+)
+$items += New-AuditItem `
+    -Id "prd_required_release_lanes_decision" `
+    -Source "PRD Required Decisions Before MVP Release" `
+    -Requirement "Release lanes, staging isolation, canary policy, package identity, signing path, promotion approvals, rollback, stop rules, and production endpoints are defined." `
+    -Status $(if ($releaseLaneComplete) { "passed" } else { "blocked" }) `
+    -EvidenceIds @("staging_readiness", "canary_mvp_readiness", "production_mvp_readiness", "production_mvp_outstanding_work", "production_mvp_operator_input_matrix") `
+    -EvidenceNotes @("Release-lane implementation tooling is present; production release requires real non-synthetic staging/canary evidence, package signing, and production endpoint provisioning.") `
+    -Blockers $releaseLaneBlockers `
+    -OperatorActions $releaseLaneActions `
+    -RemainingWorkType "staging_provisioning" `
+    -ImplementationReady $preMvpImplementationReady
+
+$custodyBlockers = @()
+$custodyBlockers += @(Get-OutstandingProvisioningFailures -OutstandingReport $outstanding -Id "managed_signing_custody_provisioning")
+$custodyBlockers += @(Get-OutstandingGateFailures -OutstandingReport $outstanding -Id "managed_signing_key_custody")
+$custodyBlockers += @(Get-OutstandingGateFailures -OutstandingReport $outstanding -Id "managed_signing_endpoint_probe")
+$custodyActions = @()
+$custodyActions += @(Get-OutstandingProvisioningAction -OutstandingReport $outstanding -Id "managed_signing_custody_provisioning")
+$custodyActions += @(Get-OutstandingGateAction -OutstandingReport $outstanding -Id "managed_signing_key_custody")
+$custodyActions += @(Get-OutstandingGateAction -OutstandingReport $outstanding -Id "managed_signing_endpoint_probe")
+$custodyComplete = (
+    (Get-OutstandingProvisioningFailures -OutstandingReport $outstanding -Id "managed_signing_custody_provisioning").Count -eq 0 -and
+    (Get-Gate -Report $productionReadiness -Id "managed_signing_key_custody").passed -eq $true -and
+    (Get-Gate -Report $productionReadiness -Id "managed_signing_endpoint_probe").passed -eq $true
+)
+$custodyImplementationReady = (
+    (Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds $identityCoverageCheckIds) -eq "passed" -and
+    (Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds $walletCoverageCheckIds) -eq "passed"
+)
+$items += New-AuditItem `
+    -Id "prd_required_custody_recovery_decision" `
+    -Source "PRD Required Decisions Before MVP Release" `
+    -Requirement "Custody and recovery policy defines identity key recovery, wallet key recovery, device loss, compromise, rotation, revocation, freeze authority, and managed signing custody." `
+    -Status $(if ($custodyComplete -and $custodyImplementationReady) { "passed" } else { "blocked" }) `
+    -EvidenceIds @("pre_mvp_internal_verification", "production_mvp_readiness", "production_mvp_outstanding_work", "production_mvp_operator_input_matrix") `
+    -CoverageCheckIds @($identityCoverageCheckIds + $walletCoverageCheckIds) `
+    -CoverageEvidence (Get-CoverageEvidence -PreMvpReport $preMvp -CheckIds @($identityCoverageCheckIds + $walletCoverageCheckIds)) `
+    -EvidenceNotes @("Identity recovery and wallet-key binding are locally validated; production release requires managed signing-key custody and endpoint evidence.") `
+    -Blockers $custodyBlockers `
+    -OperatorActions $custodyActions `
+    -RemainingWorkType "managed_signing_provisioning" `
+    -ImplementationReady $custodyImplementationReady
+
+$releaseApprovalBlockers = Get-OutstandingGateFailures -OutstandingReport $outstanding -Id "production_release_approvals"
+$releaseApprovalActions = Get-OutstandingGateAction -OutstandingReport $outstanding -Id "production_release_approvals"
+$items += New-AuditItem `
+    -Id "prd_required_legal_tax_accounting_custody_review" `
+    -Source "PRD Required Decisions Before MVP Release" `
+    -Requirement "Legal, tax, accounting, and custody review is complete before citizen-facing real ARCH or real CC release." `
+    -Status $(if ((Get-Gate -Report $productionReadiness -Id "production_release_approvals").passed -eq $true) { "passed" } else { "blocked" }) `
+    -EvidenceIds @("production_mvp_readiness", "production_mvp_outstanding_work", "production_mvp_operator_input_matrix", "production_mvp_next_action_packet_validation") `
+    -EvidenceNotes @("This PRD-required decision is tracked separately from the ARD release gate so release signoff cannot be hidden inside a broad closeout item.") `
+    -Blockers $releaseApprovalBlockers `
+    -OperatorActions $releaseApprovalActions `
+    -RemainingWorkType "release_approval" `
+    -ImplementationReady $preMvpImplementationReady
+
+$aiImplementationStatus = Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds $aiCoverageCheckIds
+$privacyBlockers = @()
+$privacyBlockers += @(Get-OutstandingGateFailures -OutstandingReport $outstanding -Id "telemetry_incident_response")
+$privacyBlockers += @(Get-OutstandingProvisioningFailures -OutstandingReport $outstanding -Id "production_ops_documents")
+$privacyActions = @()
+$privacyActions += @(Get-OutstandingGateAction -OutstandingReport $outstanding -Id "telemetry_incident_response")
+$privacyActions += @(Get-OutstandingProvisioningAction -OutstandingReport $outstanding -Id "production_ops_documents")
+$privacyComplete = (
+    (Get-Gate -Report $productionReadiness -Id "telemetry_incident_response").passed -eq $true -and
+    (Get-OutstandingProvisioningFailures -OutstandingReport $outstanding -Id "production_ops_documents").Count -eq 0
+)
+$items += New-AuditItem `
+    -Id "prd_required_privacy_data_retention_decision" `
+    -Source "PRD Required Decisions Before MVP Release" `
+    -Requirement "Privacy, data retention, AI prompt-use policy, immutable audit log limits, support access, incident response, and user export handling are defined." `
+    -Status $(if ($privacyComplete) { "passed" } else { "blocked" }) `
+    -EvidenceIds @("pre_mvp_internal_verification", "production_mvp_readiness", "production_mvp_outstanding_work", "production_mvp_operator_input_matrix") `
+    -CoverageCheckIds $aiCoverageCheckIds `
+    -CoverageEvidence (Get-CoverageEvidence -PreMvpReport $preMvp -CheckIds $aiCoverageCheckIds) `
+    -EvidenceNotes @("AI privacy, no-authority behavior, and runtime deployment packaging are locally validated; production release requires telemetry retention and incident-response evidence.") `
+    -Blockers $privacyBlockers `
+    -OperatorActions $privacyActions `
+    -RemainingWorkType "operations_provisioning" `
+    -ImplementationReady ($aiImplementationStatus -eq "passed")
+
 $aiBlockers = @()
 $aiBlockers += @(Get-OutstandingGateFailures -OutstandingReport $outstanding -Id "open_weight_ai_runtime")
 $aiBlockers += @(Get-OutstandingGateFailures -OutstandingReport $outstanding -Id "hosted_ai_runtime_probe")
@@ -601,7 +834,6 @@ $items += New-AuditItem `
     -RemainingWorkType "ai_runtime_provisioning" `
     -ImplementationReady ($aiImplementationStatus -eq "passed")
 
-$releaseApprovalBlockers = Get-OutstandingGateFailures -OutstandingReport $outstanding -Id "production_release_approvals"
 $items += New-AuditItem `
     -Id "ard_release_legal_tax_accounting_custody_privacy_security" `
     -Source "ARD Release Gates" `
@@ -609,7 +841,7 @@ $items += New-AuditItem `
     -Status $(if ((Get-Gate -Report $productionReadiness -Id "production_release_approvals").passed -eq $true) { "passed" } else { "blocked" }) `
     -EvidenceIds @("production_mvp_readiness", "production_mvp_outstanding_work", "production_mvp_operator_input_matrix", "production_mvp_next_action_packet_validation") `
     -Blockers $releaseApprovalBlockers `
-    -OperatorActions (Get-OutstandingGateAction -OutstandingReport $outstanding -Id "production_release_approvals") `
+    -OperatorActions $releaseApprovalActions `
     -RemainingWorkType "release_approval" `
     -ImplementationReady $preMvpImplementationReady
 

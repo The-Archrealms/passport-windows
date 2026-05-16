@@ -921,6 +921,14 @@ $requiredChecklistIds = @(
     "prd_success_cc_capacity_constrained",
     "prd_success_cc_does_not_create_arch",
     "prd_success_ledger_export_auditability",
+    "prd_required_arch_genesis_decision",
+    "prd_required_cc_issuance_decision",
+    "prd_required_listed_services_decision",
+    "prd_required_conversion_policy_decision",
+    "prd_required_release_lanes_decision",
+    "prd_required_custody_recovery_decision",
+    "prd_required_legal_tax_accounting_custody_review",
+    "prd_required_privacy_data_retention_decision",
     "prd_success_hosted_ai",
     "ard_release_legal_tax_accounting_custody_privacy_security",
     "production_mvp_closeout"
@@ -954,7 +962,9 @@ $allowedRemainingWorkTypes = @(
     "package_signing",
     "monetary_provisioning",
     "managed_storage_provisioning",
+    "managed_signing_provisioning",
     "ai_runtime_provisioning",
+    "operations_provisioning",
     "release_approval",
     "production_closeout",
     "implementation_gap",
@@ -993,6 +1003,12 @@ $requiredCoverageByChecklistId = @{
     prd_success_cc_capacity_constrained = @("core_monetary_protocol_targeted_tests", "windows_monetary_ledger_targeted_tests", "production_monetary_provisioning_validation")
     prd_success_cc_does_not_create_arch = @("core_monetary_protocol_targeted_tests", "windows_monetary_ledger_targeted_tests", "production_monetary_provisioning_validation")
     prd_success_ledger_export_auditability = @("core_monetary_protocol_targeted_tests", "windows_monetary_ledger_targeted_tests", "ledger_verifier_build")
+    prd_required_arch_genesis_decision = @("core_monetary_protocol_targeted_tests", "windows_monetary_ledger_targeted_tests")
+    prd_required_cc_issuance_decision = @("core_monetary_protocol_targeted_tests", "windows_monetary_ledger_targeted_tests", "production_monetary_provisioning_validation")
+    prd_required_listed_services_decision = @("storage_redemption_targeted_tests", "windows_monetary_ledger_targeted_tests")
+    prd_required_conversion_policy_decision = @("core_monetary_protocol_targeted_tests", "windows_monetary_ledger_targeted_tests")
+    prd_required_custody_recovery_decision = @("windows_identity_recovery_targeted_tests", "windows_wallet_key_targeted_tests", "core_wallet_binding_targeted_tests")
+    prd_required_privacy_data_retention_decision = @("hosted_ai_targeted_tests", "windows_ai_gateway_targeted_tests", "open_weight_ai_runtime_deployment_validation")
     prd_success_hosted_ai = @("hosted_ai_targeted_tests", "windows_ai_gateway_targeted_tests", "open_weight_ai_runtime_deployment_validation")
 }
 
