@@ -630,6 +630,38 @@ if ($null -ne $report) {
             $nextActionPlanFailures += "next_action_plan $itemId lacks blocker_ids."
         }
 
+        if (-not $item.PSObject.Properties["operator_input_required"]) {
+            $nextActionPlanFailures += "next_action_plan $itemId is missing operator_input_required."
+        }
+        elseif ([bool]$item.operator_input_required -ne ($itemBlockerIds.Count -gt 0)) {
+            $nextActionPlanFailures += "next_action_plan $itemId operator_input_required does not match blocker coverage."
+        }
+
+        if (-not $item.PSObject.Properties["required_operator_input_count"]) {
+            $nextActionPlanFailures += "next_action_plan $itemId is missing required_operator_input_count."
+        }
+        $requiredOperatorInputCount = Read-ObjectInt -Object $item -Name "required_operator_input_count"
+        if ($requiredOperatorInputCount -lt 0) {
+            $nextActionPlanFailures += "next_action_plan $itemId has invalid required_operator_input_count."
+        }
+
+        if (-not $item.PSObject.Properties["blocked_by_external_actor"]) {
+            $nextActionPlanFailures += "next_action_plan $itemId is missing blocked_by_external_actor."
+        }
+
+        $externalBlockerIds = @(Get-ObjectArray -Object $item -Name "external_blocker_ids" | ForEach-Object { [string]$_ })
+        if ($requiredOperatorInputCount -ne $externalBlockerIds.Count) {
+            $nextActionPlanFailures += "next_action_plan $itemId required_operator_input_count does not match external_blocker_ids count."
+        }
+        if ($item.PSObject.Properties["blocked_by_external_actor"] -and ([bool]$item.blocked_by_external_actor -ne ($externalBlockerIds.Count -gt 0))) {
+            $nextActionPlanFailures += "next_action_plan $itemId blocked_by_external_actor does not match external_blocker_ids."
+        }
+        foreach ($externalBlockerId in $externalBlockerIds) {
+            if ($itemBlockerIds -notcontains $externalBlockerId) {
+                $nextActionPlanFailures += "next_action_plan $itemId external blocker is not in blocker_ids: $externalBlockerId"
+            }
+        }
+
         foreach ($blockerId in $itemBlockerIds) {
             if (-not $knownBlockerIds.ContainsKey($blockerId)) {
                 $nextActionPlanFailures += "next_action_plan $itemId references unknown blocker id: $blockerId"
@@ -693,6 +725,11 @@ if ($null -ne $report) {
         foreach ($item in $nextActionPlan) {
             if ($markdown -notmatch [regex]::Escape([string]$item.id)) {
                 $markdownFailures += "Markdown does not include next_action_plan id: $($item.id)"
+            }
+            foreach ($value in @([string]$item.required_operator_input_count, ([bool]$item.blocked_by_external_actor).ToString().ToLowerInvariant())) {
+                if (-not [string]::IsNullOrWhiteSpace($value) -and $markdown -notmatch [regex]::Escape($value)) {
+                    $markdownFailures += "Markdown does not include next_action_plan operator metadata: $($item.id)"
+                }
             }
             if (-not [string]::IsNullOrWhiteSpace([string]$item.action) -and $markdown -notmatch [regex]::Escape([string]$item.action)) {
                 $markdownFailures += "Markdown does not include next_action_plan action: $($item.id)"

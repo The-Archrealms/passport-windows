@@ -105,6 +105,10 @@ function New-ActionRecord {
         action = [string]$Item.action
         commands = @(Get-ObjectArray -Object $Item -Name "commands" | ForEach-Object { [string]$_ })
         blocker_ids = @(Get-ObjectArray -Object $Item -Name "blocker_ids" | ForEach-Object { [string]$_ })
+        operator_input_required = $(if ($Item.PSObject.Properties["operator_input_required"]) { [bool]$Item.operator_input_required } else { $false })
+        required_operator_input_count = $(if ($Item.PSObject.Properties["required_operator_input_count"]) { [int]$Item.required_operator_input_count } else { 0 })
+        blocked_by_external_actor = $(if ($Item.PSObject.Properties["blocked_by_external_actor"]) { [bool]$Item.blocked_by_external_actor } else { $false })
+        external_blocker_ids = @(Get-ObjectArray -Object $Item -Name "external_blocker_ids" | ForEach-Object { [string]$_ })
         categories = @(Get-ObjectArray -Object $Item -Name "categories" | ForEach-Object { [string]$_ })
         source_ids = @(Get-ObjectArray -Object $Item -Name "source_ids" | ForEach-Object { [string]$_ })
     }
@@ -248,6 +252,9 @@ else {
         $markdown.Add("")
         $markdown.Add("- Action: $($action.action)")
         $markdown.Add("- Blockers covered: $((@($action.blocker_ids) -join ', '))")
+        $markdown.Add("- Operator input required: $(([bool]$action.operator_input_required).ToString().ToLowerInvariant())")
+        $markdown.Add("- External blocker count: $($action.required_operator_input_count)")
+        $markdown.Add("- Blocked by external actor: $(([bool]$action.blocked_by_external_actor).ToString().ToLowerInvariant())")
         if (@($action.categories).Count -gt 0) {
             $markdown.Add("- Categories: $((@($action.categories) -join ', '))")
         }
@@ -337,6 +344,9 @@ foreach ($action in $actions) {
     $commandLines.Add("# Action: $($action.id) - $($action.title)")
     $commandLines.Add("# Phase: $($action.phase)")
     $commandLines.Add("# Blockers: $((@($action.blocker_ids) -join ', '))")
+    $commandLines.Add("# Operator input required: $(([bool]$action.operator_input_required).ToString().ToLowerInvariant())")
+    $commandLines.Add("# External blocker count: $($action.required_operator_input_count)")
+    $commandLines.Add("# Blocked by external actor: $(([bool]$action.blocked_by_external_actor).ToString().ToLowerInvariant())")
     foreach ($command in @($action.commands)) {
         $commandLines.Add("# $command")
     }

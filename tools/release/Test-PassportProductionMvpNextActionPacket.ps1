@@ -368,10 +368,18 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
                 $actionFailures += "packet action $id field mismatch: $field"
             }
         }
+        foreach ($field in @("operator_input_required", "blocked_by_external_actor")) {
+            if ([bool]$packetAction.$field -ne [bool]$sourceAction.$field) {
+                $actionFailures += "packet action $id field mismatch: $field"
+            }
+        }
+        if ([int]$packetAction.required_operator_input_count -ne [int]$sourceAction.required_operator_input_count) {
+            $actionFailures += "packet action $id required_operator_input_count mismatch."
+        }
         if ([int]$packetAction.phase_order -ne [int]$sourceAction.phase_order) {
             $actionFailures += "packet action $id phase_order mismatch."
         }
-        foreach ($arrayName in @("commands", "blocker_ids", "categories", "source_ids")) {
+        foreach ($arrayName in @("commands", "blocker_ids", "external_blocker_ids", "categories", "source_ids")) {
             $packetArray = @(Get-ObjectArray -Object $packetAction -Name $arrayName)
             $sourceArray = @(Get-ObjectArray -Object $sourceAction -Name $arrayName)
             if ((Join-ArrayForCompare -Values $packetArray) -ne (Join-ArrayForCompare -Values $sourceArray)) {

@@ -312,6 +312,17 @@ function Get-NextActionPhase {
     return @{ Order = 55; Name = "production_provisioning" }
 }
 
+function Test-ExternalBlockerCategory {
+    param([string]$Category)
+
+    return @(
+        "closeout_failure",
+        "readiness_gate",
+        "provisioning_check",
+        "release_evidence_check"
+    ) -contains $Category
+}
+
 function New-NextActionPlan {
     param([object[]]$Blockers = @())
 
@@ -332,6 +343,7 @@ function New-NextActionPlan {
                 action = ConvertTo-ReportText -Value $blocker.next_action
                 commands = New-Object System.Collections.Generic.List[string]
                 blocker_ids = New-Object System.Collections.Generic.List[string]
+                external_blocker_ids = New-Object System.Collections.Generic.List[string]
                 categories = New-Object System.Collections.Generic.List[string]
                 source_ids = New-Object System.Collections.Generic.List[string]
             }
@@ -339,6 +351,9 @@ function New-NextActionPlan {
 
         $entry = $plansById[$actionId]
         Add-UniqueString -List $entry.blocker_ids -Value ([string]$blocker.id)
+        if (Test-ExternalBlockerCategory -Category ([string]$blocker.category)) {
+            Add-UniqueString -List $entry.external_blocker_ids -Value ([string]$blocker.id)
+        }
         Add-UniqueString -List $entry.categories -Value ([string]$blocker.category)
         foreach ($sourceId in @($blocker.source_ids)) {
             Add-UniqueString -List $entry.source_ids -Value ([string]$sourceId)
@@ -357,6 +372,10 @@ function New-NextActionPlan {
             action = [string]$entry.action
             commands = @($entry.commands)
             blocker_ids = @($entry.blocker_ids)
+            operator_input_required = (@($entry.blocker_ids).Count -gt 0)
+            required_operator_input_count = @($entry.external_blocker_ids).Count
+            blocked_by_external_actor = (@($entry.external_blocker_ids).Count -gt 0)
+            external_blocker_ids = @($entry.external_blocker_ids)
             categories = @($entry.categories)
             source_ids = @($entry.source_ids)
         }
@@ -1311,6 +1330,9 @@ if (-not [string]::IsNullOrWhiteSpace($MarkdownOutputPath)) {
             $lines.Add("- ``$($item.id)`` [$($item.phase)]: $($item.title)")
             $lines.Add("  - Action: $($item.action)")
             $lines.Add("  - Blockers covered: $((@($item.blocker_ids) -join ', '))")
+            $lines.Add("  - Operator input required: $(([bool]$item.operator_input_required).ToString().ToLowerInvariant())")
+            $lines.Add("  - External blocker count: $($item.required_operator_input_count)")
+            $lines.Add("  - Blocked by external actor: $(([bool]$item.blocked_by_external_actor).ToString().ToLowerInvariant())")
             foreach ($command in @($item.commands | Select-Object -First 3)) {
                 if (-not [string]::IsNullOrWhiteSpace($command)) {
                     $lines.Add("  - Command: ``$command``")
