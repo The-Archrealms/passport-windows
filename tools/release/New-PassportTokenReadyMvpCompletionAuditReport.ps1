@@ -260,7 +260,9 @@ function New-AuditItem {
         [object[]]$CoverageEvidence = @(),
         [string[]]$EvidenceNotes = @(),
         [string[]]$Blockers = @(),
-        [object[]]$OperatorActions = @()
+        [object[]]$OperatorActions = @(),
+        [string]$RemainingWorkType = "",
+        [object]$ImplementationReady = $null
     )
 
     $primaryAction = Get-PrimaryOperatorAction -OperatorActions $OperatorActions
@@ -269,12 +271,27 @@ function New-AuditItem {
         $nextActionCommands = @($primaryAction.commands | ForEach-Object { ConvertTo-AuditText -Value $_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
     }
 
+    if ($Status -eq "passed") {
+        $workType = "none"
+        $ready = $true
+    }
+    else {
+        $workType = ConvertTo-AuditText -Value $RemainingWorkType
+        if ([string]::IsNullOrWhiteSpace($workType)) {
+            $workType = "unclassified"
+        }
+
+        $ready = if ($null -eq $ImplementationReady) { $false } else { [bool]$ImplementationReady }
+    }
+
     return [pscustomobject][ordered]@{
         id = $Id
         source = $Source
         requirement = $Requirement
         summary = New-AuditItemSummary -Requirement $Requirement -Status $Status -Blockers $Blockers -OperatorActions $OperatorActions
         status = $Status
+        remaining_work_type = $workType
+        implementation_ready = $ready
         next_action_id = $(if ($null -ne $primaryAction -and $primaryAction.PSObject.Properties["id"]) { ConvertTo-AuditText -Value $primaryAction.id } else { "" })
         next_action_title = $(if ($null -ne $primaryAction -and $primaryAction.PSObject.Properties["title"]) { ConvertTo-AuditText -Value $primaryAction.title } else { "" })
         next_action = $(if ($null -ne $primaryAction) { ConvertTo-AuditText -Value $primaryAction.action } else { "" })
@@ -362,6 +379,22 @@ function Get-StatusFromCheckIds {
     return "passed"
 }
 
+function Test-PreMvpImplementationReady {
+    param([object]$PreMvpReport)
+
+    if ($null -eq $PreMvpReport -or -not $PreMvpReport.PSObject.Properties["checks"]) {
+        return $false
+    }
+
+    $externalCheckIds = @("staff_steward_pilot_evidence")
+    $failedLocalChecks = @($PreMvpReport.checks | Where-Object {
+            $_.passed -ne $true -and
+            ($externalCheckIds -notcontains [string]$_.id)
+        })
+
+    return ($failedLocalChecks.Count -eq 0)
+}
+
 $files = [ordered]@{
     pre_mvp_internal_verification = New-FileEvidence -Id "pre_mvp_internal_verification" -Path $PreMvpInternalVerificationReportPath
     staging_readiness = New-FileEvidence -Id "staging_readiness" -Path $StagingReadinessReportPath
@@ -393,6 +426,7 @@ foreach ($file in $files.Values) {
 }
 
 $items = @()
+$preMvpImplementationReady = Test-PreMvpImplementationReady -PreMvpReport $preMvp
 
 $preMvpBlockers = @()
 if ($null -eq $preMvp) {
@@ -419,7 +453,9 @@ $items += New-AuditItem `
     -EvidenceIds @("pre_mvp_internal_verification") `
     -EvidenceNotes @("fake_balance_migration_blocked=$($preMvp.fake_balance_migration_blocked)") `
     -Blockers $preMvpBlockers `
-    -OperatorActions (Get-OutstandingGateAction -OutstandingReport $outstanding -Id "pre_mvp_internal_verification")
+    -OperatorActions (Get-OutstandingGateAction -OutstandingReport $outstanding -Id "pre_mvp_internal_verification") `
+    -RemainingWorkType "external_verification" `
+    -ImplementationReady $preMvpImplementationReady
 
 $items += New-AuditItem `
     -Id "prd_success_staging_readiness" `
@@ -428,7 +464,9 @@ $items += New-AuditItem `
     -Status $(if ($null -eq $staging) { "missing" } elseif ($staging.ready -eq $true) { "passed" } else { "blocked" }) `
     -EvidenceIds @("staging_readiness", "production_mvp_outstanding_work") `
     -Blockers (Get-OutstandingGateFailures -OutstandingReport $outstanding -Id "staging_readiness") `
-    -OperatorActions (Get-OutstandingGateAction -OutstandingReport $outstanding -Id "staging_readiness")
+    -OperatorActions (Get-OutstandingGateAction -OutstandingReport $outstanding -Id "staging_readiness") `
+    -RemainingWorkType "staging_provisioning" `
+    -ImplementationReady $preMvpImplementationReady
 
 $items += New-AuditItem `
     -Id "prd_success_canary_readiness" `
@@ -437,7 +475,9 @@ $items += New-AuditItem `
     -Status $(if ($null -eq $canary) { "missing" } elseif ($canary.ready -eq $true) { "passed" } else { "blocked" }) `
     -EvidenceIds @("canary_mvp_readiness", "production_mvp_outstanding_work") `
     -Blockers (Get-OutstandingGateFailures -OutstandingReport $outstanding -Id "canary_mvp_readiness") `
-    -OperatorActions (Get-OutstandingGateAction -OutstandingReport $outstanding -Id "canary_mvp_readiness")
+    -OperatorActions (Get-OutstandingGateAction -OutstandingReport $outstanding -Id "canary_mvp_readiness") `
+    -RemainingWorkType "canary_provisioning" `
+    -ImplementationReady $preMvpImplementationReady
 
 $items += New-AuditItem `
     -Id "prd_success_installable_passport" `
@@ -447,7 +487,9 @@ $items += New-AuditItem `
     -EvidenceIds @("production_mvp_readiness", "production_mvp_outstanding_work") `
     -EvidenceNotes @("Production package installation depends on the package_signing readiness gate and release artifact validation.") `
     -Blockers (Get-OutstandingGateFailures -OutstandingReport $outstanding -Id "package_signing") `
-    -OperatorActions (Get-OutstandingGateAction -OutstandingReport $outstanding -Id "package_signing")
+    -OperatorActions (Get-OutstandingGateAction -OutstandingReport $outstanding -Id "package_signing") `
+    -RemainingWorkType "package_signing" `
+    -ImplementationReady $preMvpImplementationReady
 
 $identityCoverageCheckIds = @("windows_identity_recovery_targeted_tests")
 $deviceCoverageCheckIds = @("windows_device_authorization_targeted_tests")
@@ -463,6 +505,7 @@ $items += New-AuditItem -Id "prd_success_device_authorization" -Source "PRD Succ
 $items += New-AuditItem -Id "prd_success_wallet_key_binding" -Source "PRD Success Criteria" -Requirement "A citizen can bind a wallet key." -Status (Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds $walletCoverageCheckIds) -EvidenceIds @("pre_mvp_internal_verification") -CoverageCheckIds $walletCoverageCheckIds -CoverageEvidence (Get-CoverageEvidence -PreMvpReport $preMvp -CheckIds $walletCoverageCheckIds) -EvidenceNotes @("Covered by targeted Windows wallet-key and Core wallet authorization tests.")
 
 $issuerBlockers = Get-OutstandingGateFailures -OutstandingReport $outstanding -Id "issuer_capacity_genesis_secrets"
+$monetaryImplementationReady = (Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds $monetaryCoverageCheckIds) -eq "passed"
 $items += New-AuditItem `
     -Id "prd_success_real_arch" `
     -Source "PRD Success Criteria" `
@@ -473,7 +516,9 @@ $items += New-AuditItem `
     -CoverageEvidence (Get-CoverageEvidence -PreMvpReport $preMvp -CheckIds $monetaryCoverageCheckIds) `
     -EvidenceNotes @("Implementation coverage is tied to targeted monetary protocol and Windows ledger checks; production ARCH requires the approved genesis manifest and ledger namespace.") `
     -Blockers $issuerBlockers `
-    -OperatorActions (Get-OutstandingGateAction -OutstandingReport $outstanding -Id "issuer_capacity_genesis_secrets")
+    -OperatorActions (Get-OutstandingGateAction -OutstandingReport $outstanding -Id "issuer_capacity_genesis_secrets") `
+    -RemainingWorkType "monetary_provisioning" `
+    -ImplementationReady $monetaryImplementationReady
 
 $items += New-AuditItem `
     -Id "prd_success_real_cc" `
@@ -485,7 +530,9 @@ $items += New-AuditItem `
     -CoverageEvidence (Get-CoverageEvidence -PreMvpReport $preMvp -CheckIds $monetaryCoverageCheckIds) `
     -EvidenceNotes @("Implementation coverage is tied to targeted monetary protocol and Windows ledger checks; production CC requires issuer/capacity/genesis and production ledger namespace values.") `
     -Blockers $issuerBlockers `
-    -OperatorActions (Get-OutstandingGateAction -OutstandingReport $outstanding -Id "issuer_capacity_genesis_secrets")
+    -OperatorActions (Get-OutstandingGateAction -OutstandingReport $outstanding -Id "issuer_capacity_genesis_secrets") `
+    -RemainingWorkType "monetary_provisioning" `
+    -ImplementationReady $monetaryImplementationReady
 
 $storageStatus = Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds $storageCoverageCheckIds
 $storageBlockers = @()
@@ -504,7 +551,9 @@ $items += New-AuditItem `
     -CoverageEvidence (Get-CoverageEvidence -PreMvpReport $preMvp -CheckIds $storageCoverageCheckIds) `
     -EvidenceNotes @("Storage redemption implementation is covered by targeted storage-redemption and Windows monetary ledger checks; production service delivery remains gated on managed storage provisioning/status.") `
     -Blockers $storageBlockers `
-    -OperatorActions $storageActions
+    -OperatorActions $storageActions `
+    -RemainingWorkType "managed_storage_provisioning" `
+    -ImplementationReady ($storageStatus -eq "passed")
 
 $items += New-AuditItem `
     -Id "prd_success_storage_escrow_burn_refund_recredit" `
@@ -516,7 +565,9 @@ $items += New-AuditItem `
     -CoverageEvidence (Get-CoverageEvidence -PreMvpReport $preMvp -CheckIds $storageCoverageCheckIds) `
     -EvidenceNotes @("Proof-linked redemption and remedy paths are covered by targeted storage-redemption and Windows monetary ledger checks; production storage status is still blocked.") `
     -Blockers $storageBlockers `
-    -OperatorActions $storageActions
+    -OperatorActions $storageActions `
+    -RemainingWorkType "managed_storage_provisioning" `
+    -ImplementationReady ($storageStatus -eq "passed")
 
 $capacityCoverageCheckIds = @($monetaryCoverageCheckIds + "production_monetary_provisioning_validation")
 $items += New-AuditItem -Id "prd_success_resource_contribution" -Source "PRD Success Criteria" -Requirement "Resource contribution is optional, revocable, and disclosed." -Status (Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds $resourceCoverageCheckIds) -EvidenceIds @("pre_mvp_internal_verification") -CoverageCheckIds $resourceCoverageCheckIds -CoverageEvidence (Get-CoverageEvidence -PreMvpReport $preMvp -CheckIds $resourceCoverageCheckIds) -EvidenceNotes @("Covered by targeted Windows resource contribution tests and lane artifact validation.")
@@ -543,7 +594,9 @@ $items += New-AuditItem `
     -CoverageEvidence (Get-CoverageEvidence -PreMvpReport $preMvp -CheckIds $aiCoverageCheckIds) `
     -EvidenceNotes @("Hosted AI implementation coverage is tied to targeted hosted AI, Windows AI gateway, and open-weight runtime deployment checks; production open-weight model runtime and live probe remain blocked until provisioned.") `
     -Blockers $aiBlockers `
-    -OperatorActions $aiActions
+    -OperatorActions $aiActions `
+    -RemainingWorkType "ai_runtime_provisioning" `
+    -ImplementationReady ($aiImplementationStatus -eq "passed")
 
 $releaseApprovalBlockers = Get-OutstandingGateFailures -OutstandingReport $outstanding -Id "production_release_approvals"
 $items += New-AuditItem `
@@ -553,7 +606,9 @@ $items += New-AuditItem `
     -Status $(if ((Get-Gate -Report $productionReadiness -Id "production_release_approvals").passed -eq $true) { "passed" } else { "blocked" }) `
     -EvidenceIds @("production_mvp_readiness", "production_mvp_outstanding_work", "production_mvp_operator_input_matrix", "production_mvp_next_action_packet_validation") `
     -Blockers $releaseApprovalBlockers `
-    -OperatorActions (Get-OutstandingGateAction -OutstandingReport $outstanding -Id "production_release_approvals")
+    -OperatorActions (Get-OutstandingGateAction -OutstandingReport $outstanding -Id "production_release_approvals") `
+    -RemainingWorkType "release_approval" `
+    -ImplementationReady $preMvpImplementationReady
 
 $closeoutActions = @()
 if ($null -ne $outstanding -and $outstanding.PSObject.Properties["next_closeout_command"] -and -not [string]::IsNullOrWhiteSpace([string]$outstanding.next_closeout_command)) {
@@ -571,7 +626,9 @@ $items += New-AuditItem `
     -Status $(if ($null -eq $closeout) { "missing" } elseif ($closeout.passed -eq $true) { "passed" } else { "blocked" }) `
     -EvidenceIds @("production_mvp_closeout", "production_mvp_readiness", "production_mvp_outstanding_work", "production_mvp_next_action_packet_manifest", "production_mvp_next_action_plan", "production_mvp_operator_input_matrix", "production_mvp_operator_commands", "production_mvp_next_action_packet_validation") `
     -Blockers @($closeout.failures | ForEach-Object { ConvertTo-AuditText -Value $_ }) `
-    -OperatorActions $closeoutActions
+    -OperatorActions $closeoutActions `
+    -RemainingWorkType "production_closeout" `
+    -ImplementationReady $preMvpImplementationReady
 
 $statusGroups = $items | Group-Object -Property status
 $statusCounts = [ordered]@{}
@@ -579,9 +636,25 @@ foreach ($group in $statusGroups) {
     $statusCounts[$group.Name] = $group.Count
 }
 
+$remainingWorkGroups = $items | Where-Object { $_.status -ne "passed" } | Group-Object -Property remaining_work_type
+$remainingWorkCounts = [ordered]@{}
+foreach ($group in $remainingWorkGroups) {
+    $remainingWorkCounts[$group.Name] = $group.Count
+}
+
+$localImplementationGapItems = @($items | Where-Object {
+        $_.status -ne "passed" -and
+        ($_.implementation_ready -ne $true -or [string]$_.remaining_work_type -eq "implementation_gap" -or [string]$_.remaining_work_type -eq "unclassified")
+    })
+
 $completionReady = (
     $inputFailures.Count -eq 0 -and
     @($items | Where-Object { $_.status -ne "passed" }).Count -eq 0
+)
+
+$localImplementationReady = (
+    $inputFailures.Count -eq 0 -and
+    $localImplementationGapItems.Count -eq 0
 )
 
 $report = [pscustomobject][ordered]@{
@@ -589,9 +662,12 @@ $report = [pscustomobject][ordered]@{
     created_utc = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
     app_commit = Get-CurrentCommit
     completion_ready = $completionReady
+    local_implementation_ready = $localImplementationReady
+    local_implementation_gap_count = $localImplementationGapItems.Count
     input_failures = $inputFailures
     source_files = $files
     status_counts = $statusCounts
+    remaining_work_counts = $remainingWorkCounts
     checklist = $items
     outstanding_summary = $(if ($null -ne $outstanding -and $outstanding.PSObject.Properties["summary"]) { $outstanding.summary } else { $null })
 }
@@ -617,8 +693,13 @@ if (-not [string]::IsNullOrWhiteSpace($MarkdownOutputPath)) {
     $lines.Add("- Generated UTC: $($report.created_utc)")
     $lines.Add("- App commit: $($report.app_commit)")
     $lines.Add("- Completion ready: $($report.completion_ready.ToString().ToLowerInvariant())")
+    $lines.Add("- Local implementation ready: $($report.local_implementation_ready.ToString().ToLowerInvariant())")
+    $lines.Add("- Local implementation gap items: $($report.local_implementation_gap_count)")
     foreach ($key in @($statusCounts.Keys | Sort-Object)) {
         $lines.Add("- $key items: $($statusCounts[$key])")
+    }
+    foreach ($key in @($remainingWorkCounts.Keys | Sort-Object)) {
+        $lines.Add("- remaining ``$key`` items: $($remainingWorkCounts[$key])")
     }
     if ($inputFailures.Count -gt 0) {
         $lines.Add("")
@@ -639,6 +720,7 @@ if (-not [string]::IsNullOrWhiteSpace($MarkdownOutputPath)) {
     $lines.Add("## Checklist")
     foreach ($item in $items) {
         $lines.Add("- ``$($item.id)`` [$($item.status)]: $($item.requirement)")
+        $lines.Add("  - Remaining work: $($item.remaining_work_type); implementation_ready=$($item.implementation_ready)")
         if (-not [string]::IsNullOrWhiteSpace([string]$item.summary)) {
             $lines.Add("  - Summary: $($item.summary)")
         }
@@ -688,6 +770,8 @@ if (-not [string]::IsNullOrWhiteSpace($MarkdownOutputPath)) {
 $result = [pscustomobject][ordered]@{
     schema = "archrealms.passport.token_ready_mvp_completion_audit_result.v1"
     completion_ready = $report.completion_ready
+    local_implementation_ready = $report.local_implementation_ready
+    local_implementation_gap_count = $report.local_implementation_gap_count
     output_path = $resolvedOutputPath
     output_sha256 = Get-Sha256Hex -Path $resolvedOutputPath
     markdown_output_path = $(if ([string]::IsNullOrWhiteSpace($MarkdownOutputPath)) { "" } else { Resolve-RepoPath -Path $MarkdownOutputPath })

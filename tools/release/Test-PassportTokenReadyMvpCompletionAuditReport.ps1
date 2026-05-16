@@ -756,6 +756,20 @@ $checks += New-Check `
     })
 
 $allowedStatuses = @("passed", "partial", "blocked", "missing")
+$allowedRemainingWorkTypes = @(
+    "none",
+    "external_verification",
+    "staging_provisioning",
+    "canary_provisioning",
+    "package_signing",
+    "monetary_provisioning",
+    "managed_storage_provisioning",
+    "ai_runtime_provisioning",
+    "release_approval",
+    "production_closeout",
+    "implementation_gap",
+    "unclassified"
+)
 $sourceFileSet = @{}
 foreach ($sourceId in $requiredSourceFileIds) {
     $sourceFileSet[$sourceId] = $true
@@ -814,6 +828,29 @@ foreach ($item in $checklist) {
 
     if ($allowedStatuses -notcontains [string]$item.status) {
         $itemFailures += "$id status is invalid: $($item.status)"
+    }
+
+    $remainingWorkType = if ($item.PSObject.Properties["remaining_work_type"]) { [string]$item.remaining_work_type } else { "" }
+    if ([string]::IsNullOrWhiteSpace($remainingWorkType)) {
+        $itemFailures += "$id remaining_work_type is missing"
+    }
+    elseif ($allowedRemainingWorkTypes -notcontains $remainingWorkType) {
+        $itemFailures += "$id remaining_work_type is invalid: $remainingWorkType"
+    }
+
+    if (-not $item.PSObject.Properties["implementation_ready"]) {
+        $itemFailures += "$id implementation_ready is missing"
+    }
+    elseif ([string]$item.status -eq "passed" -and [bool]$item.implementation_ready -ne $true) {
+        $itemFailures += "$id is passed but implementation_ready is not true"
+    }
+
+    if ([string]$item.status -eq "passed" -and -not [string]::IsNullOrWhiteSpace($remainingWorkType) -and $remainingWorkType -ne "none") {
+        $itemFailures += "$id is passed but remaining_work_type is not none"
+    }
+
+    if ([string]$item.status -ne "passed" -and ($remainingWorkType -eq "none" -or $remainingWorkType -eq "unclassified")) {
+        $itemFailures += "$id is not passed but remaining_work_type is $remainingWorkType"
     }
 
     foreach ($evidenceId in Get-ObjectArray -Object $item -Name "evidence_ids") {
@@ -1041,6 +1078,64 @@ $checks += New-Check -Id "status_counts_match_checklist" -Passed ($statusCountFa
     passed = $actualStatusCounts["passed"]
 })
 
+$actualRemainingWorkCounts = @{}
+foreach ($item in @($checklist | Where-Object { [string]$_.status -ne "passed" })) {
+    $remainingType = if ($item.PSObject.Properties["remaining_work_type"]) { [string]$item.remaining_work_type } else { "" }
+    if ([string]::IsNullOrWhiteSpace($remainingType)) {
+        $remainingType = "missing"
+    }
+
+    if (-not $actualRemainingWorkCounts.ContainsKey($remainingType)) {
+        $actualRemainingWorkCounts[$remainingType] = 0
+    }
+    $actualRemainingWorkCounts[$remainingType] = [int]$actualRemainingWorkCounts[$remainingType] + 1
+}
+
+$remainingWorkCountFailures = @()
+if ($null -eq $report -or -not $report.PSObject.Properties["remaining_work_counts"]) {
+    $remainingWorkCountFailures += "remaining_work_counts is missing"
+}
+else {
+    $reportedRemainingWorkTypes = @($report.remaining_work_counts.PSObject.Properties | ForEach-Object { $_.Name })
+    $actualRemainingWorkTypes = @($actualRemainingWorkCounts.Keys)
+    foreach ($remainingType in @($actualRemainingWorkTypes | Where-Object { $reportedRemainingWorkTypes -notcontains $_ })) {
+        $remainingWorkCountFailures += "remaining_work_counts is missing type: $remainingType"
+    }
+    foreach ($remainingType in @($reportedRemainingWorkTypes | Where-Object { $actualRemainingWorkTypes -notcontains $_ })) {
+        $remainingWorkCountFailures += "remaining_work_counts includes unexpected type: $remainingType"
+    }
+    foreach ($remainingType in $actualRemainingWorkTypes) {
+        if ($report.remaining_work_counts.PSObject.Properties[$remainingType]) {
+            $reportedCount = [int]$report.remaining_work_counts.$remainingType
+            $actualCount = [int]$actualRemainingWorkCounts[$remainingType]
+            if ($reportedCount -ne $actualCount) {
+                $remainingWorkCountFailures += "remaining_work_counts mismatch for $remainingType; reported=$reportedCount actual=$actualCount"
+            }
+        }
+    }
+}
+
+$actualLocalImplementationGaps = @($checklist | Where-Object {
+        [string]$_.status -ne "passed" -and
+        ($_.implementation_ready -ne $true -or [string]$_.remaining_work_type -eq "implementation_gap" -or [string]$_.remaining_work_type -eq "unclassified")
+    })
+
+$reportedLocalImplementationReady = Get-ObjectBool -Object $report -Name "local_implementation_ready"
+$reportedLocalImplementationGapCount = if ($null -ne $report -and $report.PSObject.Properties["local_implementation_gap_count"]) { [int]$report.local_implementation_gap_count } else { -1 }
+$expectedLocalImplementationReady = ($inputFailures.Count -eq 0 -and $actualLocalImplementationGaps.Count -eq 0)
+if ($reportedLocalImplementationGapCount -ne $actualLocalImplementationGaps.Count) {
+    $remainingWorkCountFailures += "local_implementation_gap_count mismatch; reported=$reportedLocalImplementationGapCount actual=$($actualLocalImplementationGaps.Count)"
+}
+if ($reportedLocalImplementationReady -ne $expectedLocalImplementationReady) {
+    $remainingWorkCountFailures += "local_implementation_ready mismatch; reported=$reportedLocalImplementationReady expected=$expectedLocalImplementationReady"
+}
+
+$checks += New-Check -Id "remaining_work_classification_contract" -Passed ($remainingWorkCountFailures.Count -eq 0) -Failures $remainingWorkCountFailures -Evidence ([pscustomobject][ordered]@{
+    local_implementation_ready = $reportedLocalImplementationReady
+    local_implementation_gap_count = $reportedLocalImplementationGapCount
+    remaining_work_types = @($actualRemainingWorkCounts.Keys)
+})
+
 $expectedReady = ($inputFailures.Count -eq 0 -and @($checklist | Where-Object { [string]$_.status -ne "passed" }).Count -eq 0)
 $reportedReady = Get-ObjectBool -Object $report -Name "completion_ready"
 $checks += Add-Check `
@@ -1065,6 +1160,12 @@ if ($markdownExists) {
     }
     if ($markdown -notmatch '## Source Files') {
         $markdownFailures += "Markdown source-file section is missing"
+    }
+    if ($markdown -notmatch '(?m)^- Local implementation ready: ') {
+        $markdownFailures += "Markdown local implementation ready summary is missing"
+    }
+    if ($markdown -notmatch '(?m)^- Local implementation gap items: ') {
+        $markdownFailures += "Markdown local implementation gap count is missing"
     }
     foreach ($sourceId in $requiredSourceFileIds) {
         $source = Get-SourceFile -Report $report -Id $sourceId
@@ -1096,6 +1197,9 @@ if ($markdownExists) {
         }
 
         $itemBlock = $itemMatch.Value
+        if ($itemBlock -notmatch '(?m)^\s+- Remaining work: ') {
+            $markdownActionFailures += "Markdown block does not include a Remaining work line for non-passed item: $itemId"
+        }
         if ($itemBlock -notmatch '(?m)^\s+- Next action: ') {
             $markdownActionFailures += "Markdown block does not include a Next action line for non-passed item: $itemId"
         }
