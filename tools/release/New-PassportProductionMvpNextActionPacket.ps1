@@ -258,6 +258,7 @@ $planPath = Join-Path $resolvedOutputDirectory "next-action-plan.json"
 $markdownPath = Join-Path $resolvedOutputDirectory "next-action-plan.md"
 $commandsPath = Join-Path $resolvedOutputDirectory "operator-commands.ps1"
 $phaseCommandDirectory = Join-Path $resolvedOutputDirectory "operator-command-phases"
+$phaseManifestPath = Join-Path $resolvedOutputDirectory "operator-command-phases.manifest.json"
 $matrixPath = Join-Path $resolvedOutputDirectory "operator-input-matrix.json"
 $matrixMarkdownPath = Join-Path $resolvedOutputDirectory "operator-input-matrix.md"
 
@@ -347,6 +348,17 @@ foreach ($phaseGroup in $phaseCommandGroups) {
         command_sequences = @($phaseCommands | ForEach-Object { [int]$_.sequence })
     }
 }
+
+$phaseManifest = [pscustomobject][ordered]@{
+    schema = "archrealms.passport.production_mvp_operator_command_phase_manifest.v1"
+    created_utc = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
+    app_commit = $sourceCommit
+    source_report = $sourceReportRecord
+    phase_command_directory = $phaseCommandDirectory
+    phase_script_count = $phaseScriptRecords.Count
+    phase_scripts = @($phaseScriptRecords)
+}
+Write-JsonFile -Path $phaseManifestPath -Value $phaseManifest
 
 $plan = [pscustomobject][ordered]@{
     schema = "archrealms.passport.production_mvp_next_action_plan.v1"
@@ -637,6 +649,7 @@ $manifest = [pscustomobject][ordered]@{
         New-FileRecord -Id "operator_input_matrix_json" -Path $matrixPath
         New-FileRecord -Id "operator_input_matrix_markdown" -Path $matrixMarkdownPath
         New-FileRecord -Id "operator_commands" -Path $commandsPath
+        New-FileRecord -Id "operator_command_phase_manifest" -Path $phaseManifestPath
         @($phaseScriptRecords | ForEach-Object {
             New-FileRecord -Id ("operator_command_phase_{0:d3}" -f [int]$_.phase_order) -Path ([string]$_.path)
         })
@@ -661,6 +674,8 @@ $result = [pscustomobject][ordered]@{
     operator_commands_path = $commandsPath
     operator_commands_sha256 = Get-Sha256Hex -Path $commandsPath
     operator_command_phase_directory = $phaseCommandDirectory
+    operator_command_phase_manifest_path = $phaseManifestPath
+    operator_command_phase_manifest_sha256 = Get-Sha256Hex -Path $phaseManifestPath
     operator_command_phase_count = $phaseScriptRecords.Count
     operator_command_phase_scripts = @($phaseScriptRecords)
     action_count = $actions.Count

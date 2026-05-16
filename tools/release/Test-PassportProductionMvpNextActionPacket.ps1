@@ -208,6 +208,7 @@ $planPath = Join-Path $resolvedPacketRoot "next-action-plan.json"
 $markdownPath = Join-Path $resolvedPacketRoot "next-action-plan.md"
 $commandsPath = Join-Path $resolvedPacketRoot "operator-commands.ps1"
 $phaseCommandDirectory = Join-Path $resolvedPacketRoot "operator-command-phases"
+$phaseManifestPath = Join-Path $resolvedPacketRoot "operator-command-phases.manifest.json"
 $matrixPath = Join-Path $resolvedPacketRoot "operator-input-matrix.json"
 $matrixMarkdownPath = Join-Path $resolvedPacketRoot "operator-input-matrix.md"
 $currentCommit = Get-CurrentCommit
@@ -240,10 +241,12 @@ $checks += Add-Check -Id "plan_markdown_exists" -Condition (Test-Path -LiteralPa
 $checks += Add-Check -Id "operator_input_matrix_json_exists" -Condition (Test-Path -LiteralPath $matrixPath -PathType Leaf) -Failure "operator input matrix JSON is missing" -Evidence ([pscustomobject][ordered]@{ path = $matrixPath })
 $checks += Add-Check -Id "operator_input_matrix_markdown_exists" -Condition (Test-Path -LiteralPath $matrixMarkdownPath -PathType Leaf) -Failure "operator input matrix Markdown is missing" -Evidence ([pscustomobject][ordered]@{ path = $matrixMarkdownPath })
 $checks += Add-Check -Id "operator_commands_exists" -Condition (Test-Path -LiteralPath $commandsPath -PathType Leaf) -Failure "operator command checklist is missing" -Evidence ([pscustomobject][ordered]@{ path = $commandsPath })
+$checks += Add-Check -Id "operator_command_phase_manifest_exists" -Condition (Test-Path -LiteralPath $phaseManifestPath -PathType Leaf) -Failure "operator command phase manifest is missing" -Evidence ([pscustomobject][ordered]@{ path = $phaseManifestPath })
 
 $manifest = Read-JsonFile -Path $manifestPath
 $plan = Read-JsonFile -Path $planPath
 $matrix = Read-JsonFile -Path $matrixPath
+$phaseManifest = Read-JsonFile -Path $phaseManifestPath
 $sourceReport = Read-JsonFile -Path $resolvedOutstandingWorkReportPath
 
 if ($null -ne $manifest) {
@@ -267,6 +270,13 @@ else {
     $checks += New-Check -Id "operator_input_matrix_schema" -Passed $false -Failures @("operator input matrix JSON could not be parsed")
 }
 
+if ($null -ne $phaseManifest) {
+    $checks += Add-Check -Id "operator_command_phase_manifest_schema" -Condition ([string]$phaseManifest.schema -eq "archrealms.passport.production_mvp_operator_command_phase_manifest.v1") -Failure "unexpected operator command phase manifest schema"
+}
+else {
+    $checks += New-Check -Id "operator_command_phase_manifest_schema" -Passed $false -Failures @("operator command phase manifest could not be parsed")
+}
+
 if ($null -ne $sourceReport) {
     $checks += Add-Check -Id "source_report_schema" -Condition ([string]$sourceReport.schema -eq "archrealms.passport.production_mvp_outstanding_work_report.v1") -Failure "unexpected outstanding-work report schema"
 }
@@ -282,7 +292,8 @@ if ([string]::IsNullOrWhiteSpace($currentCommit)) {
 $commitDocuments = @(
     [pscustomobject]@{ name = "manifest"; document = $manifest },
     [pscustomobject]@{ name = "next-action plan"; document = $plan },
-    [pscustomobject]@{ name = "operator input matrix"; document = $matrix }
+    [pscustomobject]@{ name = "operator input matrix"; document = $matrix },
+    [pscustomobject]@{ name = "operator command phase manifest"; document = $phaseManifest }
 )
 
 foreach ($entry in $commitDocuments) {
@@ -499,6 +510,7 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
 
     $phaseScriptFailures = @()
     $phaseScriptRecords = @(Get-ObjectArray -Object $plan -Name "operator_command_phase_scripts")
+    $phaseManifestScriptRecords = @(Get-ObjectArray -Object $phaseManifest -Name "phase_scripts")
     $expectedPhaseGroups = @($deduplicatedCommands | Group-Object -Property latest_phase_order | Sort-Object @{ Expression = { [int]$_.Name }; Ascending = $true })
     if ($plan.PSObject.Properties["summary"] -and $plan.summary.PSObject.Properties["operator_command_phase_count"]) {
         if ([int]$plan.summary.operator_command_phase_count -ne $expectedPhaseGroups.Count) {
@@ -507,6 +519,26 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
     }
     if ($phaseScriptRecords.Count -ne $expectedPhaseGroups.Count) {
         $phaseScriptFailures += "operator_command_phase_scripts count does not match expected phase groups."
+    }
+    if ($null -eq $phaseManifest) {
+        $phaseScriptFailures += "operator command phase manifest is missing or unreadable."
+    }
+    else {
+        if ([string]$phaseManifest.app_commit -ne $currentCommit) {
+            $phaseScriptFailures += "operator command phase manifest app_commit does not match current commit."
+        }
+        if ([string]$phaseManifest.source_report.sha256 -ne $sourceHash) {
+            $phaseScriptFailures += "operator command phase manifest source report SHA-256 does not match actual source report."
+        }
+        if ([int]$phaseManifest.phase_script_count -ne $expectedPhaseGroups.Count) {
+            $phaseScriptFailures += "operator command phase manifest phase_script_count does not match expected phase groups."
+        }
+        if ([System.IO.Path]::GetFullPath([string]$phaseManifest.phase_command_directory) -ne [System.IO.Path]::GetFullPath($phaseCommandDirectory)) {
+            $phaseScriptFailures += "operator command phase manifest directory does not match packet phase directory."
+        }
+        if ((Convert-ForCompare -Value $phaseManifestScriptRecords) -ne (Convert-ForCompare -Value $phaseScriptRecords)) {
+            $phaseScriptFailures += "operator command phase manifest phase_scripts do not match plan phase scripts."
+        }
     }
     if ($null -ne $manifest) {
         $manifestPhaseRecords = @(Get-ObjectArray -Object $manifest -Name "operator_command_phase_scripts")
@@ -677,6 +709,7 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
 
     $generatedFileFailures = @()
     $expectedFileIds = @("next_action_plan_json", "next_action_plan_markdown", "operator_input_matrix_json", "operator_input_matrix_markdown", "operator_commands")
+    $expectedFileIds += "operator_command_phase_manifest"
     foreach ($phaseScript in @(Get-ObjectArray -Object $plan -Name "operator_command_phase_scripts")) {
         $expectedFileIds += ("operator_command_phase_{0:d3}" -f [int]$phaseScript.phase_order)
     }
@@ -880,6 +913,8 @@ $validation = [pscustomobject][ordered]@{
     operator_commands_path = $commandsPath
     operator_commands_sha256 = Get-Sha256Hex -Path $commandsPath
     operator_command_phase_directory = $phaseCommandDirectory
+    operator_command_phase_manifest_path = $phaseManifestPath
+    operator_command_phase_manifest_sha256 = Get-Sha256Hex -Path $phaseManifestPath
     operator_command_phase_count = @(Get-ObjectArray -Object $plan -Name "operator_command_phase_scripts").Count
     generated = [bool]$Generate
     used_generated_fixture = [bool]$UseGeneratedFixture
