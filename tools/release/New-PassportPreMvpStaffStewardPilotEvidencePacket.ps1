@@ -63,6 +63,20 @@ if ([string]::IsNullOrWhiteSpace($AppCommit)) {
     $AppCommit = Get-CurrentCommit
 }
 
+$normalizedRemainingProductionBlockers = @()
+foreach ($blocker in @($RemainingProductionBlocker)) {
+    foreach ($part in (([string]$blocker) -split ';')) {
+        $trimmed = $part.Trim()
+        if (-not [string]::IsNullOrWhiteSpace($trimmed)) {
+            $normalizedRemainingProductionBlockers += $trimmed
+        }
+    }
+}
+
+if ($normalizedRemainingProductionBlockers.Count -eq 0) {
+    $normalizedRemainingProductionBlockers = @("<known-production-readiness-blocker>")
+}
+
 $resolvedOutput = Resolve-RepoPath -Path $OutputDirectory
 New-Item -ItemType Directory -Force -Path $resolvedOutput | Out-Null
 
@@ -132,7 +146,7 @@ $issueReview = [pscustomobject][ordered]@{
     no_pilot_blocking_defects = $false
     no_production_records_created = $false
     pilot_blockers = @()
-    remaining_production_blockers = @($RemainingProductionBlocker)
+    remaining_production_blockers = @($normalizedRemainingProductionBlockers)
     review_signoff_reference = "<signature-or-controlled-approval-id>"
 }
 

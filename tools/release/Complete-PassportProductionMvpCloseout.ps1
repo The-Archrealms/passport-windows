@@ -637,6 +637,7 @@ if (-not $closeoutPassed -and -not $SkipFailureHandoff) {
         ) `
         -LogPath (Join-Path $resolvedOutput "production-mvp-next-action-packet-validation.log")
     $nextActionValidationState = Get-ToolReportState -Id "production_mvp_next_action_packet_validation" -Path $resolvedNextActionPacketValidationReportPath
+    $nextActionValidationReport = Read-JsonFile -Path $resolvedNextActionPacketValidationReportPath
 
     $nextActionManifestPath = Join-Path $resolvedNextActionPacketDirectory "production-mvp-next-action-packet.manifest.json"
     $nextActionPlanPath = Join-Path $resolvedNextActionPacketDirectory "next-action-plan.json"
@@ -644,6 +645,8 @@ if (-not $closeoutPassed -and -not $SkipFailureHandoff) {
     $nextActionMatrixPath = Join-Path $resolvedNextActionPacketDirectory "operator-input-matrix.json"
     $nextActionMatrixMarkdownPath = Join-Path $resolvedNextActionPacketDirectory "operator-input-matrix.md"
     $nextActionCommandsPath = Join-Path $resolvedNextActionPacketDirectory "operator-commands.ps1"
+    $nextActionPhaseDirectory = Join-Path $resolvedNextActionPacketDirectory "operator-command-phases"
+    $nextActionPhaseManifestPath = Join-Path $resolvedNextActionPacketDirectory "operator-command-phases.manifest.json"
 
     $failureHandoffPassed = (
         $outstandingGeneration.exit_code -eq 0 -and
@@ -679,6 +682,9 @@ if (-not $closeoutPassed -and -not $SkipFailureHandoff) {
             operator_input_matrix_json = New-FileRecord -Id "production_mvp_next_action_operator_input_matrix_json" -Path $nextActionMatrixPath
             operator_input_matrix_markdown = New-FileRecord -Id "production_mvp_next_action_operator_input_matrix_markdown" -Path $nextActionMatrixMarkdownPath
             operator_commands = New-FileRecord -Id "production_mvp_next_action_operator_commands" -Path $nextActionCommandsPath
+            operator_command_phase_directory = $nextActionPhaseDirectory
+            operator_command_phase_manifest = New-FileRecord -Id "production_mvp_next_action_operator_command_phase_manifest" -Path $nextActionPhaseManifestPath
+            operator_command_phase_count = $(if ($null -ne $nextActionValidationReport -and $nextActionValidationReport.PSObject.Properties["operator_command_phase_count"]) { [int]$nextActionValidationReport.operator_command_phase_count } else { 0 })
         }
     }
 }

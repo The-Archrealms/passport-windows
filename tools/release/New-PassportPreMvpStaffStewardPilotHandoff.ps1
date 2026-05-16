@@ -208,6 +208,7 @@ $remainingProductionBlockers = @($productionReadinessReport.failed_gate_ids | Wh
 if ($remainingProductionBlockers.Count -eq 0) {
     $remainingProductionBlockers = @("<known-production-readiness-blocker>")
 }
+$remainingProductionBlockerArgument = ($remainingProductionBlockers | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }) -join ";"
 
 $packetGenerator = Join-Path $scriptRoot "New-PassportPreMvpStaffStewardPilotEvidencePacket.ps1"
 $packetValidator = Join-Path $scriptRoot "Test-PassportPreMvpStaffStewardPilotEvidencePacket.ps1"
@@ -221,8 +222,8 @@ $packetArguments = @(
     "-AppCommit", (Get-CurrentCommit),
     "-ProductionReadinessReportPath", $productionReadinessReport.path,
     "-ProductionReadinessReportSha256", $(if ($productionReadinessReport.exists) { $productionReadinessReport.sha256 } else { "<sha256>" }),
-    "-RemainingProductionBlocker"
-) + $remainingProductionBlockers
+    "-RemainingProductionBlocker", $remainingProductionBlockerArgument
+)
 
 if ($artifactManifest.exists) {
     $packetArguments += @("-ArtifactManifestPath", $artifactManifest.path, "-ArtifactManifestSha256", $artifactManifest.sha256)

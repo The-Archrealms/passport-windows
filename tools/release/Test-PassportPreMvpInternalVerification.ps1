@@ -1051,7 +1051,7 @@ else {
     $checks += New-ToolCheck `
         -Id "production_mvp_closeout_failure_handoff_validation" `
         -Description "Production MVP closeout generates and validates the outstanding-work and next-action handoff when closeout fails." `
-        -Result (Invoke-Tool -FilePath "powershell" -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "tools\release\Complete-PassportProductionMvpCloseout.ps1", "-UseGeneratedFailureFixture", "-NoFail"))
+        -Result (Invoke-Tool -FilePath "powershell" -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "tools\release\Test-PassportProductionMvpCloseoutFailureHandoff.ps1"))
     $checks += New-ToolCheck `
         -Id "production_mvp_outstanding_work_report_validation" `
         -Description "Production MVP outstanding-work reporting summarizes closeout, readiness, provisioning, and release-evidence blockers without exposing secrets." `
