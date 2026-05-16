@@ -10,6 +10,8 @@ param(
     [string]$CertificatePasswordFile,
     [string]$PackagePublisher,
     [string]$TimestampUrl,
+    [string]$HostedOperatorKeyFile,
+    [string]$HostedOperatorKeySha256,
     [int]$EndpointTimeoutSeconds = 10,
     [switch]$NoFail
 )
@@ -59,6 +61,8 @@ function Import-EnvironmentFile {
 }
 
 $loadedEnvironmentVariables = Import-EnvironmentFile -Path $EnvironmentFile
+$hostedOperatorKeyFileLoaded = $false
+$hostedOperatorKeySha256ParameterConfigured = $false
 
 function Test-NonEmptyEnvironment {
     param(
@@ -114,6 +118,17 @@ function Read-TrimmedTextFile {
     }
 
     return $value.Trim()
+}
+
+if (-not [string]::IsNullOrWhiteSpace($HostedOperatorKeyFile)) {
+    $hostedOperatorKey = Read-TrimmedTextFile -Path $HostedOperatorKeyFile -Description "Hosted operator key"
+    [System.Environment]::SetEnvironmentVariable("ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY", $hostedOperatorKey, "Process")
+    $hostedOperatorKeyFileLoaded = $true
+}
+
+if (-not [string]::IsNullOrWhiteSpace($HostedOperatorKeySha256)) {
+    [System.Environment]::SetEnvironmentVariable("ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY_SHA256", $HostedOperatorKeySha256.Trim(), "Process")
+    $hostedOperatorKeySha256ParameterConfigured = $true
 }
 
 function New-Gate {
@@ -1314,6 +1329,8 @@ $report = [pscustomobject][ordered]@{
     endpoint_timeout_seconds = $EndpointTimeoutSeconds
     pfx_base64_file_configured = -not [string]::IsNullOrWhiteSpace($CertificatePfxBase64File)
     certificate_password_file_configured = -not [string]::IsNullOrWhiteSpace($CertificatePasswordFile)
+    hosted_operator_key_file_loaded = $hostedOperatorKeyFileLoaded
+    hosted_operator_key_sha256_parameter_configured = $hostedOperatorKeySha256ParameterConfigured
     ready = ($failed.Count -eq 0)
     failed_gate_count = $failed.Count
     package_signing_certificate = $script:packageSigningCertificateReport

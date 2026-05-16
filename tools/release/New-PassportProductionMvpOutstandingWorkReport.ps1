@@ -788,6 +788,13 @@ $readinessActionMap = @{
         -Commands @(
             "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportProductionMvpReadiness.ps1 -EnvironmentFile artifacts\release\production-mvp.env -NoFail -OutputPath artifacts\release\production-mvp-readiness-report.json"
         )
+    hosted_operator_gate = New-Action `
+        -Id "hosted_operator_gate" `
+        -Title "Configure hosted operator key gate" `
+        -Action "Create or retrieve the approved hosted operator key, provide the raw key only from a secure local secret file, provide its SHA-256 hash as production configuration, and rerun ProductionMvp readiness." `
+        -Commands @(
+            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportProductionMvpReadiness.ps1 -EnvironmentFile artifacts\release\production-mvp.env -HostedOperatorKeyFile <approved-hosted-operator-key-file> -HostedOperatorKeySha256 <approved-hosted-operator-key-sha256> -NoFail -OutputPath artifacts\release\production-mvp-readiness-report.json"
+        )
     hosted_ai_runtime_probe = New-Action `
         -Id "hosted_ai_runtime_probe" `
         -Title "Make hosted AI runtime probe pass" `
