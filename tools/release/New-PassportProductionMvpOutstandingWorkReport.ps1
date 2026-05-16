@@ -233,6 +233,8 @@ function New-Blocker {
         [object]$OperatorAction = $null
     )
 
+    $actionCommands = Get-ActionCommandArray -Action $OperatorAction
+
     return [pscustomobject][ordered]@{
         id = $Id
         category = $Category
@@ -245,7 +247,11 @@ function New-Blocker {
         operator_action_id = $(if ($null -ne $OperatorAction -and $OperatorAction.PSObject.Properties["id"]) { [string]$OperatorAction.id } else { "" })
         operator_action_title = $(if ($null -ne $OperatorAction -and $OperatorAction.PSObject.Properties["title"]) { [string]$OperatorAction.title } else { "" })
         operator_action = $(if ($null -ne $OperatorAction -and $OperatorAction.PSObject.Properties["action"]) { [string]$OperatorAction.action } else { "" })
-        operator_action_commands = Get-ActionCommandArray -Action $OperatorAction
+        operator_action_commands = @($actionCommands)
+        next_action_id = $(if ($null -ne $OperatorAction -and $OperatorAction.PSObject.Properties["id"]) { [string]$OperatorAction.id } else { "" })
+        next_action_title = $(if ($null -ne $OperatorAction -and $OperatorAction.PSObject.Properties["title"]) { [string]$OperatorAction.title } else { "" })
+        next_action = $(if ($null -ne $OperatorAction -and $OperatorAction.PSObject.Properties["action"]) { [string]$OperatorAction.action } else { "" })
+        next_action_commands = @($actionCommands)
     }
 }
 
@@ -1132,6 +1138,14 @@ if (-not [string]::IsNullOrWhiteSpace($MarkdownOutputPath)) {
             }
             if (-not [string]::IsNullOrWhiteSpace([string]$blocker.operator_action)) {
                 $lines.Add("  - Action: $($blocker.operator_action)")
+            }
+            if (-not [string]::IsNullOrWhiteSpace([string]$blocker.next_action)) {
+                $lines.Add("  - Next action: $($blocker.next_action)")
+            }
+            foreach ($command in @($blocker.next_action_commands | Select-Object -First 2)) {
+                if (-not [string]::IsNullOrWhiteSpace($command)) {
+                    $lines.Add("  - Next action command: ``$command``")
+                }
             }
             foreach ($command in @($blocker.operator_action_commands | Select-Object -First 2)) {
                 if (-not [string]::IsNullOrWhiteSpace($command)) {

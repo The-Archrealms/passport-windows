@@ -358,6 +358,7 @@ if ($null -ne $report) {
     }
     foreach ($blocker in $blockers) {
         Add-CommandArrayRecords -Records $commandRecords -Source "blockers.$($blocker.id)" -Commands (Get-ObjectArray -Object $blocker -Name "operator_action_commands")
+        Add-CommandArrayRecords -Records $commandRecords -Source "blockers.$($blocker.id).next_action" -Commands (Get-ObjectArray -Object $blocker -Name "next_action_commands")
     }
     foreach ($item in $reportReferenceRefreshes) {
         Add-CommandArrayRecords -Records $commandRecords -Source "report_reference_refreshes.$($item.readiness_gate_id)" -Commands (Get-ObjectArray -Object $item -Name "operator_action_commands")
@@ -445,6 +446,28 @@ if ($null -ne $report) {
         if ((Get-ObjectArray -Object $blocker -Name "operator_action_commands").Count -eq 0) {
             $blockerContractFailures += "blocker $blockerId lacks operator action commands."
         }
+        if ([string]::IsNullOrWhiteSpace([string]$blocker.next_action)) {
+            $blockerContractFailures += "blocker $blockerId lacks next_action."
+        }
+        if ([string]$blocker.next_action -ne [string]$blocker.operator_action) {
+            $blockerContractFailures += "blocker $blockerId next_action does not match operator_action."
+        }
+        if ([string]$blocker.next_action_id -ne [string]$blocker.operator_action_id) {
+            $blockerContractFailures += "blocker $blockerId next_action_id does not match operator_action_id."
+        }
+        if ([string]$blocker.next_action_title -ne [string]$blocker.operator_action_title) {
+            $blockerContractFailures += "blocker $blockerId next_action_title does not match operator_action_title."
+        }
+        $operatorCommands = @(Get-ObjectArray -Object $blocker -Name "operator_action_commands" | ForEach-Object { [string]$_ })
+        $nextActionCommands = @(Get-ObjectArray -Object $blocker -Name "next_action_commands" | ForEach-Object { [string]$_ })
+        if ($nextActionCommands.Count -eq 0) {
+            $blockerContractFailures += "blocker $blockerId lacks next_action_commands."
+        }
+        foreach ($operatorCommand in $operatorCommands) {
+            if ($nextActionCommands -notcontains $operatorCommand) {
+                $blockerContractFailures += "blocker $blockerId next_action_commands is missing operator command: $operatorCommand"
+            }
+        }
     }
     if (-not [bool]$report.ready_for_production_testing -and $blockers.Count -eq 0) {
         $blockerContractFailures += "ready_for_production_testing=false but blockers is empty."
@@ -485,6 +508,14 @@ if ($null -ne $report) {
             }
             if ($blocker.PSObject.Properties["summary"] -and -not [string]::IsNullOrWhiteSpace([string]$blocker.summary) -and $markdown -notmatch [regex]::Escape([string]$blocker.summary)) {
                 $markdownFailures += "Markdown does not include blocker summary: $($blocker.id)"
+            }
+            if ($blocker.PSObject.Properties["next_action"] -and -not [string]::IsNullOrWhiteSpace([string]$blocker.next_action) -and $markdown -notmatch [regex]::Escape([string]$blocker.next_action)) {
+                $markdownFailures += "Markdown does not include blocker next_action: $($blocker.id)"
+            }
+            foreach ($command in @(Get-ObjectArray -Object $blocker -Name "next_action_commands")) {
+                if (-not [string]::IsNullOrWhiteSpace([string]$command) -and $markdown -notmatch [regex]::Escape([string]$command)) {
+                    $markdownFailures += "Markdown does not include blocker next_action command: $($blocker.id)"
+                }
             }
         }
         foreach ($gate in $failedReadinessGates) {
