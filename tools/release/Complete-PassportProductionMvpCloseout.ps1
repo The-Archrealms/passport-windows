@@ -4,6 +4,11 @@ param(
     [string]$OutputDirectory = "artifacts\release\production-mvp-closeout",
     [string]$ProductionMvpReadinessReportPath = "artifacts\release\production-mvp-readiness-report.json",
     [string]$ReleaseEvidencePacketDirectory = "artifacts\release\production-mvp-release-evidence-packet",
+    [string]$OutstandingWorkReportPath = "artifacts\release\production-mvp-outstanding-work-report.json",
+    [string]$OutstandingWorkMarkdownPath = "artifacts\release\production-mvp-outstanding-work-report.md",
+    [string]$OutstandingWorkValidationReportPath = "artifacts\release\production-mvp-outstanding-work-validation-report.json",
+    [string]$NextActionPacketDirectory = "artifacts\release\production-mvp-next-action-packet",
+    [string]$NextActionPacketValidationReportPath = "artifacts\release\production-mvp-next-action-packet-validation-report.json",
     [string]$PreMvpReportPath = "artifacts\release\pre-mvp-internal-verification-report.json",
     [string]$StagingReadinessReportPath = "artifacts\release\staging-readiness-report.json",
     [string]$CanaryMvpReadinessReportPath = "artifacts\release\canary-mvp-readiness-report.json",
@@ -12,6 +17,8 @@ param(
     [int]$EndpointTimeoutSeconds = 10,
     [switch]$UseExistingReadinessReport,
     [switch]$UseGeneratedFixture,
+    [switch]$UseGeneratedFailureFixture,
+    [switch]$SkipFailureHandoff,
     [switch]$Force,
     [switch]$NoFail
 )
@@ -186,11 +193,15 @@ function New-PassingGate {
 }
 
 function New-GeneratedFixture {
-    param([string]$FixtureRoot)
+    param(
+        [string]$FixtureRoot,
+        [bool]$Passing = $true
+    )
 
     New-Item -ItemType Directory -Force -Path $FixtureRoot | Out-Null
     $createdUtc = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
     $operatorSecret = "synthetic-operator-key-must-not-appear"
+    $failedCount = $(if ($Passing) { 0 } else { 1 })
 
     $preMvpPath = Join-Path $FixtureRoot "pre-mvp-internal-verification-report.json"
     Write-JsonFile -Path $preMvpPath -Value ([pscustomobject][ordered]@{
@@ -199,9 +210,9 @@ function New-GeneratedFixture {
         pre_mvp_testing_is_mvp = $false
         citizen_facing_token_release = $false
         fake_balance_migration_blocked = $true
-        passed = $true
-        failed_check_count = 0
-        failed_requirement_count = 0
+        passed = $Passing
+        failed_check_count = $failedCount
+        failed_requirement_count = $failedCount
         checks = @()
         requirements = @()
     })
@@ -210,13 +221,13 @@ function New-GeneratedFixture {
     Write-JsonFile -Path $stagingPath -Value ([pscustomobject][ordered]@{
         schema = "archrealms.passport.staging_readiness.v1"
         created_utc = $createdUtc
-        ready = $true
+        ready = $Passing
         staging_is_mvp = $false
         synthetic_fixtures_used = $false
-        canary_or_production_release_approved = $true
-        failed_gate_count = 0
+        canary_or_production_release_approved = $Passing
+        failed_gate_count = $failedCount
         gates = @(
-            New-PassingGate -Id "pre_mvp_internal_verification"
+            $(if ($Passing) { New-PassingGate -Id "pre_mvp_internal_verification" } else { [pscustomobject][ordered]@{ id = "pre_mvp_internal_verification"; passed = $false; missing = @("synthetic failure fixture pre-MVP evidence missing") } })
             New-PassingGate -Id "staging_package_artifact"
             New-PassingGate -Id "staging_lane_endpoints"
             New-PassingGate -Id "staging_ledger_telemetry"
@@ -233,12 +244,12 @@ function New-GeneratedFixture {
         created_utc = $createdUtc
         lane = "canary-mvp"
         canary_is_mvp = $true
-        ready = $true
-        failed_gate_count = 0
+        ready = $Passing
+        failed_gate_count = $failedCount
         synthetic_fixtures_used = $false
-        production_release_approved = $true
+        production_release_approved = $Passing
         gates = @(
-            New-PassingGate -Id "staging_readiness"
+            $(if ($Passing) { New-PassingGate -Id "staging_readiness" } else { [pscustomobject][ordered]@{ id = "staging_readiness"; passed = $false; missing = @("synthetic failure fixture staging readiness missing") } })
             New-PassingGate -Id "canary_package_artifact"
             New-PassingGate -Id "canary_policy_limits"
             New-PassingGate -Id "canary_incident_review"
@@ -254,9 +265,21 @@ function New-GeneratedFixture {
         schema = "archrealms.passport.production_provisioning_packet_validation.v1"
         created_utc = $createdUtc
         packet_root = "synthetic-production-provisioning-packet"
-        passed = $true
-        failed_check_count = 0
-        checks = @()
+        passed = $Passing
+        failed_check_count = $failedCount
+        checks = $(if ($Passing) {
+            @()
+        } else {
+            @(
+                [pscustomobject][ordered]@{
+                    id = "package_signing_provisioning"
+                    description = "Synthetic failure fixture package-signing provisioning."
+                    passed = $false
+                    failures = @("synthetic failure fixture package-signing evidence missing")
+                    evidence = $null
+                }
+            )
+        })
     })
 
     $provisioningManifestPath = Join-Path $FixtureRoot "production-provisioning-packet.manifest.json"
@@ -277,8 +300,8 @@ function New-GeneratedFixture {
         environment_file_variable_count = 1
         environment_file_variables = @("ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY")
         endpoint_timeout_seconds = 10
-        ready = $true
-        failed_gate_count = 0
+        ready = $Passing
+        failed_gate_count = $failedCount
         package_signing_certificate = [pscustomobject][ordered]@{
             source = "synthetic-fixture"
             expected_publisher = "CN=The Archrealms"
@@ -302,7 +325,7 @@ function New-GeneratedFixture {
             passed = $true
         }
         gates = @(
-            New-PassingGate -Id "pre_mvp_internal_verification"
+            $(if ($Passing) { New-PassingGate -Id "pre_mvp_internal_verification" } else { [pscustomobject][ordered]@{ id = "pre_mvp_internal_verification"; passed = $false; missing = @("synthetic failure fixture pre-MVP evidence missing") } })
             New-PassingGate -Id "staging_readiness"
             New-PassingGate -Id "canary_mvp_readiness"
             New-PassingGate -Id "package_signing"
@@ -348,12 +371,37 @@ function New-GeneratedFixture {
 }
 
 if ($UseGeneratedFixture) {
+    if ($UseGeneratedFailureFixture) {
+        throw "-UseGeneratedFixture and -UseGeneratedFailureFixture are mutually exclusive."
+    }
+
     $fixtureRoot = Resolve-RepoPath -Path "artifacts\release\production-mvp-closeout-fixture"
-    $fixture = New-GeneratedFixture -FixtureRoot $fixtureRoot
+    $fixture = New-GeneratedFixture -FixtureRoot $fixtureRoot -Passing $true
     $EnvironmentFile = $fixture.environment_file
     $OutputDirectory = $fixture.closeout_output_directory
     $ProductionMvpReadinessReportPath = $fixture.readiness_report_path
     $ReleaseEvidencePacketDirectory = $fixture.release_evidence_packet_directory
+    $PreMvpReportPath = $fixture.pre_mvp_report_path
+    $StagingReadinessReportPath = $fixture.staging_readiness_report_path
+    $CanaryMvpReadinessReportPath = $fixture.canary_mvp_readiness_report_path
+    $ProvisioningPacketReportPath = $fixture.provisioning_report_path
+    $ProvisioningPacketManifestPath = $fixture.provisioning_manifest_path
+    $UseExistingReadinessReport = $true
+    $Force = $true
+}
+
+if ($UseGeneratedFailureFixture) {
+    $fixtureRoot = Resolve-RepoPath -Path "artifacts\release\production-mvp-closeout-failure-fixture"
+    $fixture = New-GeneratedFixture -FixtureRoot $fixtureRoot -Passing $false
+    $EnvironmentFile = $fixture.environment_file
+    $OutputDirectory = $fixture.closeout_output_directory
+    $ProductionMvpReadinessReportPath = $fixture.readiness_report_path
+    $ReleaseEvidencePacketDirectory = $fixture.release_evidence_packet_directory
+    $OutstandingWorkReportPath = Join-Path $fixtureRoot "production-mvp-outstanding-work-report.json"
+    $OutstandingWorkMarkdownPath = Join-Path $fixtureRoot "production-mvp-outstanding-work-report.md"
+    $OutstandingWorkValidationReportPath = Join-Path $fixtureRoot "production-mvp-outstanding-work-validation-report.json"
+    $NextActionPacketDirectory = Join-Path $fixtureRoot "production-mvp-next-action-packet"
+    $NextActionPacketValidationReportPath = Join-Path $fixtureRoot "production-mvp-next-action-packet-validation-report.json"
     $PreMvpReportPath = $fixture.pre_mvp_report_path
     $StagingReadinessReportPath = $fixture.staging_readiness_report_path
     $CanaryMvpReadinessReportPath = $fixture.canary_mvp_readiness_report_path
@@ -377,6 +425,11 @@ $resolvedEnvironmentFile = Resolve-RepoPath -Path $EnvironmentFile
 $resolvedProvisioningRoot = Resolve-RepoPath -Path $ProductionProvisioningPacketRoot
 $resolvedReadinessReportPath = Resolve-RepoPath -Path $ProductionMvpReadinessReportPath
 $resolvedReleaseEvidenceDirectory = Resolve-RepoPath -Path $ReleaseEvidencePacketDirectory
+$resolvedOutstandingWorkReportPath = Resolve-RepoPath -Path $OutstandingWorkReportPath
+$resolvedOutstandingWorkMarkdownPath = Resolve-RepoPath -Path $OutstandingWorkMarkdownPath
+$resolvedOutstandingWorkValidationReportPath = Resolve-RepoPath -Path $OutstandingWorkValidationReportPath
+$resolvedNextActionPacketDirectory = Resolve-RepoPath -Path $NextActionPacketDirectory
+$resolvedNextActionPacketValidationReportPath = Resolve-RepoPath -Path $NextActionPacketValidationReportPath
 $resolvedPreMvpReportPath = Resolve-RepoPath -Path $PreMvpReportPath
 $resolvedStagingReadinessReportPath = Resolve-RepoPath -Path $StagingReadinessReportPath
 $resolvedCanaryMvpReadinessReportPath = Resolve-RepoPath -Path $CanaryMvpReadinessReportPath
@@ -387,7 +440,9 @@ $failures = @()
 $provisioningValidation = $null
 $provisioningState = $null
 
-if ($UseGeneratedFixture) {
+$generatedFixtureMode = [bool]($UseGeneratedFixture -or $UseGeneratedFailureFixture)
+
+if ($generatedFixtureMode) {
     $provisioningValidation = [pscustomobject][ordered]@{
         command = "synthetic fixture provisioning validation"
         started_utc = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
@@ -398,6 +453,9 @@ if ($UseGeneratedFixture) {
         log_sha256 = ""
     }
     $provisioningState = Get-ToolReportState -Id "production_provisioning_packet_validation" -Path $resolvedProvisioningReportPath
+    if (-not [bool]$provisioningState.passed) {
+        $failures += "Filled production provisioning packet did not pass -RequireNoPlaceholders validation."
+    }
 }
 else {
     $provisioningValidation = Invoke-Tool `
@@ -531,6 +589,93 @@ $manifestPath = Join-Path $resolvedOutput "production-mvp-closeout.manifest.json
 Write-JsonFile -Path $manifestPath -Value $manifest
 $manifestRecord = New-FileRecord -Id "production_mvp_closeout_manifest" -Path $manifestPath
 
+$failureHandoff = $null
+if (-not $closeoutPassed -and -not $SkipFailureHandoff) {
+    $outstandingGeneration = Invoke-Tool `
+        -FilePath (Join-Path $scriptRoot "New-PassportProductionMvpOutstandingWorkReport.ps1") `
+        -Arguments @(
+            "-CloseoutManifestPath", $manifestPath,
+            "-ProductionMvpReadinessReportPath", $resolvedReadinessReportPath,
+            "-ProductionProvisioningPacketReportPath", $resolvedProvisioningReportPath,
+            "-ReleaseEvidenceValidationReportPath", $releaseValidationPath,
+            "-OutputPath", $resolvedOutstandingWorkReportPath,
+            "-MarkdownOutputPath", $resolvedOutstandingWorkMarkdownPath,
+            "-NoFail"
+        ) `
+        -LogPath (Join-Path $resolvedOutput "production-mvp-outstanding-work-generation.log")
+
+    $outstandingValidation = Invoke-Tool `
+        -FilePath (Join-Path $scriptRoot "Test-PassportProductionMvpOutstandingWorkReport.ps1") `
+        -Arguments @(
+            "-ReportPath", $resolvedOutstandingWorkReportPath,
+            "-MarkdownPath", $resolvedOutstandingWorkMarkdownPath,
+            "-OutputPath", $resolvedOutstandingWorkValidationReportPath,
+            "-NoFail"
+        ) `
+        -LogPath (Join-Path $resolvedOutput "production-mvp-outstanding-work-validation.log")
+    $outstandingValidationState = Get-ToolReportState -Id "production_mvp_outstanding_work_validation" -Path $resolvedOutstandingWorkValidationReportPath
+
+    $nextActionValidation = Invoke-Tool `
+        -FilePath (Join-Path $scriptRoot "Test-PassportProductionMvpNextActionPacket.ps1") `
+        -Arguments @(
+            "-Generate",
+            "-PacketRoot", $resolvedNextActionPacketDirectory,
+            "-OutstandingWorkReportPath", $resolvedOutstandingWorkReportPath,
+            "-OutputPath", $resolvedNextActionPacketValidationReportPath,
+            "-NoFail"
+        ) `
+        -LogPath (Join-Path $resolvedOutput "production-mvp-next-action-packet-validation.log")
+    $nextActionValidationState = Get-ToolReportState -Id "production_mvp_next_action_packet_validation" -Path $resolvedNextActionPacketValidationReportPath
+
+    $nextActionManifestPath = Join-Path $resolvedNextActionPacketDirectory "production-mvp-next-action-packet.manifest.json"
+    $nextActionPlanPath = Join-Path $resolvedNextActionPacketDirectory "next-action-plan.json"
+    $nextActionMarkdownPath = Join-Path $resolvedNextActionPacketDirectory "next-action-plan.md"
+    $nextActionCommandsPath = Join-Path $resolvedNextActionPacketDirectory "operator-commands.ps1"
+
+    $failureHandoffPassed = (
+        $outstandingGeneration.exit_code -eq 0 -and
+        $outstandingValidation.exit_code -eq 0 -and
+        [bool]$outstandingValidationState.passed -and
+        $nextActionValidation.exit_code -eq 0 -and
+        [bool]$nextActionValidationState.passed
+    )
+
+    $failureHandoff = [pscustomobject][ordered]@{
+        generated = $true
+        passed = $failureHandoffPassed
+        outstanding_work_generation = $outstandingGeneration
+        outstanding_work_validation = [pscustomobject][ordered]@{
+            command = $outstandingValidation
+            report = $outstandingValidationState
+        }
+        next_action_packet_validation = [pscustomobject][ordered]@{
+            command = $nextActionValidation
+            report = $nextActionValidationState
+        }
+        outstanding_work = [pscustomobject][ordered]@{
+            report = New-FileRecord -Id "production_mvp_outstanding_work_report" -Path $resolvedOutstandingWorkReportPath
+            markdown = New-FileRecord -Id "production_mvp_outstanding_work_markdown" -Path $resolvedOutstandingWorkMarkdownPath
+            validation_report = New-FileRecord -Id "production_mvp_outstanding_work_validation_report" -Path $resolvedOutstandingWorkValidationReportPath
+        }
+        next_action_packet = [pscustomobject][ordered]@{
+            directory = $resolvedNextActionPacketDirectory
+            validation_report = New-FileRecord -Id "production_mvp_next_action_packet_validation_report" -Path $resolvedNextActionPacketValidationReportPath
+            manifest = New-FileRecord -Id "production_mvp_next_action_packet_manifest" -Path $nextActionManifestPath
+            plan_json = New-FileRecord -Id "production_mvp_next_action_plan_json" -Path $nextActionPlanPath
+            plan_markdown = New-FileRecord -Id "production_mvp_next_action_plan_markdown" -Path $nextActionMarkdownPath
+            operator_commands = New-FileRecord -Id "production_mvp_next_action_operator_commands" -Path $nextActionCommandsPath
+        }
+    }
+}
+elseif (-not $closeoutPassed) {
+    $failureHandoff = [pscustomobject][ordered]@{
+        generated = $false
+        passed = $false
+        skipped = $true
+        reason = "Failure handoff generation was skipped by -SkipFailureHandoff."
+    }
+}
+
 $result = [pscustomobject][ordered]@{
     schema = "archrealms.passport.production_mvp_closeout_result.v1"
     passed = $closeoutPassed
@@ -541,11 +686,20 @@ $result = [pscustomobject][ordered]@{
     production_mvp_readiness_report_sha256 = $readinessReportSha256
     release_evidence_manifest_path = (Resolve-RepoPath -Path $releaseManifestPath)
     release_evidence_manifest_sha256 = Get-Sha256Hex -Path $releaseManifestPath
-    next_step = $(if ($closeoutPassed) { "Run Publish-PassportWindowsMsix.ps1 -Lane ProductionMvp -EnvironmentFile <production-env> without bypass, then validate and hand off the signed ProductionMvp package." } else { "Resolve the listed failures, then rerun Production MVP closeout." })
+    failure_handoff = $failureHandoff
+    next_step = $(if ($closeoutPassed) { "Run Publish-PassportWindowsMsix.ps1 -Lane ProductionMvp -EnvironmentFile <production-env> without bypass, then validate and hand off the signed ProductionMvp package." } elseif ($null -ne $failureHandoff -and [bool]$failureHandoff.passed) { "Review the generated failure_handoff outstanding-work report and next-action packet, resolve the listed blockers, then rerun Production MVP closeout." } else { "Resolve the listed failures, inspect failure handoff logs if present, then rerun Production MVP closeout." })
 }
 
 $json = $result | ConvertTo-Json -Depth 8
 $json
+
+$failureFixtureHandoffFailed = (
+    [bool]$UseGeneratedFailureFixture -and
+    ($null -eq $failureHandoff -or -not [bool]$failureHandoff.passed)
+)
+if ($failureFixtureHandoffFailed) {
+    exit 1
+}
 
 if (-not $closeoutPassed -and -not $NoFail) {
     exit 1
