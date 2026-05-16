@@ -44,7 +44,8 @@ function Test-Document {
     param(
         [string]$Id,
         [string]$Path,
-        [string[]]$RequiredText
+        [string[]]$RequiredText,
+        [string[]]$ForbiddenText = @()
     )
 
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
@@ -56,6 +57,12 @@ function Test-Document {
     foreach ($required in $RequiredText) {
         if ($text.IndexOf($required, [StringComparison]::OrdinalIgnoreCase) -lt 0) {
             $failures += "missing required text: $required"
+        }
+    }
+
+    foreach ($forbidden in $ForbiddenText) {
+        if ($text.IndexOf($forbidden, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
+            $failures += "forbidden stale text: $forbidden"
         }
     }
 
@@ -78,17 +85,30 @@ $checks += Test-Document -Id "readme_contract" -Path $readmePath -RequiredText @
     "ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY_SHA256",
     "Test-PassportProductionMvpReadiness.ps1",
     "/ops/runtime/status",
-    "/ai/runtime/probe"
+    "POST /storage/delivery/requests",
+    "GET /ai/runtime/probe"
+) -ForbiddenText @(
+    '`POST /storage/delivery`',
+    '`/storage/delivery`',
+    'POST /storage/delivery.',
+    "POST /ai/runtime/probe"
 )
 $checks += Test-Document -Id "production_endpoint_request_contract" -Path $endpointRequestPath -RequiredText @(
     "PASSPORT_WINDOWS_PRODUCTION_MVP_API_BASE_URL",
     "PASSPORT_WINDOWS_PRODUCTION_MVP_AI_GATEWAY_URL",
     "X-Archrealms-Operator-Key",
-    "/ops/storage/status",
-    "/arch/genesis/manifests",
-    "/capacity/reports/cc",
-    "/ai/session",
-    "/ai/chat"
+    "GET /ops/storage/status",
+    "POST /arch/genesis/manifests",
+    "POST /capacity/reports/cc",
+    "POST /storage/delivery/requests",
+    "POST /ai/session",
+    "POST /ai/chat",
+    "GET /ai/runtime/probe"
+) -ForbiddenText @(
+    '`POST /storage/delivery`',
+    '`/storage/delivery`',
+    'POST /storage/delivery.',
+    "POST /ai/runtime/probe"
 )
 $checks += Test-Document -Id "tls_dns_routing_policy_contract" -Path $routingPolicyPath -RequiredText @(
     "Production endpoint URLs must use HTTPS",
@@ -104,8 +124,11 @@ $checks += Test-Document -Id "endpoint_readiness_evidence_contract" -Path $readi
     "hosted_operator_status",
     "managed_storage_status",
     "hosted_ai_runtime_probe",
+    "GET /ai/runtime/probe",
     "runtime_answer_received=true",
     "ready=true"
+) -ForbiddenText @(
+    "POST /ai/runtime/probe"
 )
 
 $failed = @($checks | Where-Object { -not $_.passed })

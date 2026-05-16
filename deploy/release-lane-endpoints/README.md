@@ -25,7 +25,7 @@ The production API URL must route:
 - `POST /ops/incidents`
 - `POST /arch/genesis/manifests`
 - `POST /capacity/reports/cc`
-- `POST /storage/delivery`
+- `POST /storage/delivery/requests`
 
 The production AI gateway URL must route:
 
@@ -36,7 +36,7 @@ The production AI gateway URL must route:
 - `POST /ai/chat`
 - `POST /ai/feedback`
 - `GET /ai/runtime/status`
-- `POST /ai/runtime/probe`
+- `GET /ai/runtime/probe`
 
 Operator-protected routes must require `X-Archrealms-Operator-Key` and must validate that the raw key hashes to `ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY_SHA256`.
 

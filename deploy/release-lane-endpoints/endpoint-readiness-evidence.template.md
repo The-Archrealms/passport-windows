@@ -26,7 +26,7 @@ The report must show:
 - `hosted_ai_runtime_probe` passed.
 - API and AI gateway URLs use HTTPS unless they are loopback validation URLs.
 - `/ops/operator/status` authorized the configured operator key.
-- `/ai/runtime/probe` returned `ready=true` and `runtime_answer_received=true`.
+- `GET /ai/runtime/probe` returned `ready=true` and `runtime_answer_received=true`.
 
 ## Promotion Rule
 

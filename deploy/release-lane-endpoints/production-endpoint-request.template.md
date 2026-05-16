@@ -18,9 +18,9 @@
 
 ## Routing Contract
 
-The API endpoint must expose `/health`, `/ops/runtime/status`, `/ops/operator/status`, `/ops/storage/status`, `/ops/backup/manifests`, `/ops/incidents`, `/arch/genesis/manifests`, `/capacity/reports/cc`, and `/storage/delivery`.
+The API endpoint must expose `GET /health`, `GET /ops/runtime/status`, `GET /ops/operator/status`, `GET /ops/storage/status`, `POST /ops/backup/manifests`, `POST /ops/incidents`, `POST /arch/genesis/manifests`, `POST /capacity/reports/cc`, and `POST /storage/delivery/requests`.
 
-The AI gateway endpoint must expose `/ai/status`, `/ai/challenge`, `/ai/session`, `/ai/quota`, `/ai/chat`, `/ai/feedback`, `/ai/runtime/status`, and `/ai/runtime/probe`.
+The AI gateway endpoint must expose `GET /ai/status`, `POST /ai/challenge`, `POST /ai/session`, `GET /ai/quota`, `POST /ai/chat`, `POST /ai/feedback`, `GET /ai/runtime/status`, and `GET /ai/runtime/probe`.
 
 Operator-protected routes must require `X-Archrealms-Operator-Key`. The hosted service must store only `ARCHREALMS_PASSPORT_HOSTED_OPERATOR_API_KEY_SHA256`, not the raw operator key.
 
