@@ -99,7 +99,7 @@ function Test-NoPlaceholders {
         $Failures += "placeholder values remain in $Path"
     }
 
-    return $Failures
+    return ,$Failures
 }
 
 function Test-HexSha256 {

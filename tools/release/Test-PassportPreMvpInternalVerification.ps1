@@ -742,6 +742,11 @@ if ($SkipDeploymentValidation) {
         -Passed $false `
         -Failures @("Production monetary provisioning validation was skipped; pre-MVP verification cannot pass with skipped deployment validation.")
     $checks += New-Check `
+        -Id "production_monetary_failure_shape_validation" `
+        -Description "Production monetary placeholder-sensitive validation keeps separate operator failure messages." `
+        -Passed $false `
+        -Failures @("Production monetary failure-shape validation was skipped; pre-MVP verification cannot pass with skipped deployment validation.")
+    $checks += New-Check `
         -Id "production_provisioning_packet_validation" `
         -Description "Consolidated production provisioning packet validation wraps the release provisioning validators for operator handoff." `
         -Passed $false `
@@ -854,6 +859,10 @@ else {
         -Id "production_monetary_provisioning_validation" `
         -Description "Production monetary provisioning templates validate issuer, capacity, genesis, and ledger namespace contracts." `
         -Result (Invoke-Tool -FilePath "powershell" -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "tools\release\Test-PassportProductionMonetaryProvisioning.ps1"))
+    $checks += New-ToolCheck `
+        -Id "production_monetary_failure_shape_validation" `
+        -Description "Production monetary placeholder-sensitive validation keeps separate operator failure messages." `
+        -Result (Invoke-Tool -FilePath "powershell" -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "tools\release\Test-PassportProductionMonetaryProvisioningFailureShape.ps1"))
     $checks += New-ToolCheck `
         -Id "production_provisioning_packet_validation" `
         -Description "Consolidated production provisioning packet validation wraps the release provisioning validators for operator handoff." `
@@ -1057,7 +1066,7 @@ $requirements = @(
     New-Requirement -Id "hosted_services_deployment_package" -Description "Hosted API and AI gateway deployment package is validated before ProductionMvp provisioning." -CheckIds @("hosted_services_deployment_validation") -Checks $checks -Evidence "Hosted services deployment validator checks Dockerfile posture, staging compose posture, env template variables, and Release publish output."
     New-Requirement -Id "open_weight_ai_runtime_deployment_package" -Description "Open-weight AI runtime deployment package is validated before ProductionMvp provisioning." -CheckIds @("open_weight_ai_runtime_deployment_validation") -Checks $checks -Evidence "Open-weight AI runtime validator checks vLLM/TGI compose posture, env template variables, README contract, and optional probe wiring."
     New-Requirement -Id "production_ops_documents_package" -Description "Production ops document templates are validated before their approved IDs are loaded into readiness." -CheckIds @("production_ops_documents_validation") -Checks $checks -Evidence "Production ops validator checks backup, restore, telemetry retention, incident response, and release approval templates."
-    New-Requirement -Id "production_monetary_provisioning_package" -Description "Production monetary provisioning templates are validated before issuer, capacity, genesis, and ledger namespace IDs are loaded into readiness." -CheckIds @("production_monetary_provisioning_validation") -Checks $checks -Evidence "Production monetary validator checks issuer/capacity/genesis provisioning, ARCH genesis request, CC capacity request, and approval-gated hosted record creation path."
+    New-Requirement -Id "production_monetary_provisioning_package" -Description "Production monetary provisioning templates are validated before issuer, capacity, genesis, and ledger namespace IDs are loaded into readiness." -CheckIds @("production_monetary_provisioning_validation", "production_monetary_failure_shape_validation") -Checks $checks -Evidence "Production monetary validator checks issuer/capacity/genesis provisioning, ARCH genesis request, CC capacity request, approval-gated hosted record creation path, and placeholder-sensitive failure-message shape."
     New-Requirement -Id "production_provisioning_packet" -Description "The full production provisioning packet can be validated as one operator handoff before ProductionMvp readiness values are loaded." -CheckIds @("production_provisioning_packet_validation") -Checks $checks -Evidence "Consolidated packet validation runs signing, endpoint, storage, signing-custody, hosted-services, managed-signing, AI runtime, ops, and monetary validators."
     New-Requirement -Id "production_provisioning_packet_scaffold" -Description "The production provisioning packet can be generated as a controlled working copy and validated through PacketRoot mode." -CheckIds @("production_provisioning_packet_scaffold_validation") -Checks $checks -Evidence "Scaffolder copies production provisioning folders, writes a manifest, and validates the generated packet through Test-PassportProductionProvisioningPacket.ps1 -PacketRoot."
     New-Requirement -Id "production_release_evidence_packet" -Description "The production release evidence packet can be generated without serializing environment secrets and can summarize readiness blockers for signoff." -CheckIds @("production_release_evidence_packet_validation") -Checks $checks -Evidence "Release evidence validator uses synthetic fixtures to exercise packet generation, report copying, SHA-256 recording, environment-value redaction, and blocking-gate summary output."
