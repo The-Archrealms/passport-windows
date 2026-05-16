@@ -742,14 +742,17 @@ if (Test-Path -LiteralPath $resolvedSimulationRunReportPath -PathType Leaf) {
     $simulationRunReportSha256 = Get-Sha256Hex -Path $resolvedSimulationRunReportPath
 }
 
-$staffStewardPilotCloseoutCommand = "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Complete-PassportPreMvpStaffStewardPilotHandoff.ps1 -HandoffRoot <filled-staff-steward-handoff-root> -SimulationRunReportPath $simulationRunReportPath -SimulationRunReportSha256 $simulationRunReportSha256 -Force"
+$staffStewardPilotHandoffRoot = "artifacts\release\pre-mvp-staff-steward-pilot-handoff"
+$staffStewardPilotWorkspaceCommand = "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Start-PassportPreMvpStaffStewardPilot.ps1 -HandoffRoot $staffStewardPilotHandoffRoot -PilotOwner <pilot-owner> -Force"
+$staffStewardPilotCloseoutCommand = "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Complete-PassportPreMvpStaffStewardPilotHandoff.ps1 -HandoffRoot $staffStewardPilotHandoffRoot -SimulationRunReportPath $simulationRunReportPath -SimulationRunReportSha256 $simulationRunReportSha256 -Force"
 
 $readinessActionMap = @{
     pre_mvp_internal_verification = New-Action `
         -Id "pre_mvp_internal_verification" `
         -Title "Complete staff/steward pilot evidence" `
-        -Action "Fill the controlled staff/steward pilot packet, validate it with no placeholders, generate the final pilot report, and rerun pre-MVP internal verification with the report path and SHA-256." `
+        -Action "Open the staff/steward pilot workspace, perform the controlled pilot, fill the evidence packet, validate it with no placeholders, generate the final pilot report, and rerun pre-MVP internal verification with the report path and SHA-256." `
         -Commands @(
+            $staffStewardPilotWorkspaceCommand,
             $staffStewardPilotCloseoutCommand
         )
     staging_readiness = New-Action `
@@ -941,8 +944,9 @@ $releaseEvidenceActionMap = @{
     pre_mvp_passed = New-Action `
         -Id "pre_mvp_passed" `
         -Title "Close pre-MVP evidence" `
-        -Action "Complete the staff/steward pilot packet and rerun pre-MVP verification until the report passes." `
+        -Action "Open the staff/steward pilot workspace, complete the staff/steward pilot packet, and rerun pre-MVP verification until the report passes." `
         -Commands @(
+            $staffStewardPilotWorkspaceCommand,
             $staffStewardPilotCloseoutCommand
         )
     provisioning_packet_passed = New-Action `

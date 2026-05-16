@@ -655,6 +655,33 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
         staff_steward_command_count = $staffStewardPilotCommands.Count
     })
 
+    $staffStewardLauncherFailures = @()
+    $staffStewardLauncherCommands = @()
+    foreach ($packetAction in $packetActions) {
+        foreach ($command in @(Get-ObjectArray -Object $packetAction -Name "commands")) {
+            $commandText = [string]$command
+            if ($commandText -match 'Start-PassportPreMvpStaffStewardPilot\.ps1') {
+                $staffStewardLauncherCommands += $commandText
+            }
+        }
+    }
+
+    if ($staffStewardLauncherCommands.Count -lt 1) {
+        $staffStewardLauncherFailures += "next-action packet must include the staff/steward pilot workspace launcher command"
+    }
+    foreach ($command in $staffStewardLauncherCommands) {
+        if ($command -notmatch [regex]::Escape("-HandoffRoot artifacts\release\pre-mvp-staff-steward-pilot-handoff")) {
+            $staffStewardLauncherFailures += "staff/steward pilot launcher command must target the generated handoff root: $command"
+        }
+        if ($command -match "-SkipLaunchPassport") {
+            $staffStewardLauncherFailures += "operator-facing staff/steward pilot launcher command must not skip launching Passport: $command"
+        }
+    }
+
+    $checks += New-Check -Id "staff_steward_workspace_launcher_command" -Passed ($staffStewardLauncherFailures.Count -eq 0) -Failures $staffStewardLauncherFailures -Evidence ([pscustomobject][ordered]@{
+        launcher_command_count = $staffStewardLauncherCommands.Count
+    })
+
     if ($null -ne $matrix) {
         $sourceMatrix = $sourceReport.operator_input_matrix
         $sourceEnvironmentVariables = @(Get-ObjectArray -Object $sourceMatrix -Name "environment_variables")
