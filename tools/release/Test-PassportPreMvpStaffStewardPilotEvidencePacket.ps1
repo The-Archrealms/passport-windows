@@ -120,6 +120,52 @@ function Test-Sha256 {
     return ""
 }
 
+function Test-ReferencedFileHash {
+    param(
+        [string]$Name,
+        [string]$PathValue,
+        [string]$Sha256Value,
+        [bool]$Required = $false
+    )
+
+    $failures = @()
+    $pathFailure = Test-NotPlaceholder -Name "$Name path" -Value $PathValue -Required:$Required
+    if ($pathFailure) {
+        $failures += $pathFailure
+    }
+
+    $shaFailure = Test-Sha256 -Name "$Name sha256" -Value $Sha256Value -Required:$Required
+    if ($shaFailure) {
+        $failures += $shaFailure
+    }
+
+    if ($failures.Count -gt 0) {
+        return $failures
+    }
+
+    if ([string]::IsNullOrWhiteSpace($PathValue) -or $PathValue -match '<[^>]+>') {
+        return $failures
+    }
+
+    $resolvedPath = Resolve-RepoPath -Path $PathValue
+    if (-not (Test-Path -LiteralPath $resolvedPath -PathType Leaf)) {
+        if ($Required -or $RequireNoPlaceholders) {
+            $failures += "$Name referenced file is missing: $resolvedPath"
+        }
+
+        return $failures
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($Sha256Value) -and $Sha256Value -match '^[0-9a-fA-F]{64}$') {
+        $actualSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $resolvedPath).Hash.ToLowerInvariant()
+        if ($actualSha256 -ne $Sha256Value.ToLowerInvariant()) {
+            $failures += "$Name SHA-256 mismatch: expected $($Sha256Value.ToLowerInvariant()) actual $actualSha256"
+        }
+    }
+
+    return $failures
+}
+
 function Test-RequiredTrue {
     param(
         [object]$Object,
@@ -213,8 +259,7 @@ else {
     }
 
     foreach ($failure in @(
-        Test-NotPlaceholder -Name "pilot session artifact_manifest_path" -Value (Read-ObjectString -Object $session -Name "artifact_manifest_path") -Required:$false
-        Test-Sha256 -Name "pilot session artifact_manifest_sha256" -Value (Read-ObjectString -Object $session -Name "artifact_manifest_sha256") -Required:$false
+        Test-ReferencedFileHash -Name "pilot session artifact manifest" -PathValue (Read-ObjectString -Object $session -Name "artifact_manifest_path") -Sha256Value (Read-ObjectString -Object $session -Name "artifact_manifest_sha256") -Required:$RequireNoPlaceholders
         Test-RequiredTrue -Object $session -Name "synthetic_or_fake_balances_used" -Description "synthetic or fake balances used"
         Test-RequiredTrue -Object $session -Name "no_citizen_production_tokens_used" -Description "no citizen production tokens used"
         Test-RequiredTrue -Object $session -Name "no_production_records_created" -Description "no production records created"
@@ -322,8 +367,7 @@ else {
     }
 
     foreach ($failure in @(
-        Test-NotPlaceholder -Name "pilot issue review production_readiness_report_path" -Value (Read-ObjectString -Object $issueReview -Name "production_readiness_report_path") -Required:$false
-        Test-Sha256 -Name "pilot issue review production_readiness_report_sha256" -Value (Read-ObjectString -Object $issueReview -Name "production_readiness_report_sha256") -Required:$false
+        Test-ReferencedFileHash -Name "pilot issue review production readiness report" -PathValue (Read-ObjectString -Object $issueReview -Name "production_readiness_report_path") -Sha256Value (Read-ObjectString -Object $issueReview -Name "production_readiness_report_sha256") -Required:$RequireNoPlaceholders
         Test-RequiredTrue -Object $issueReview -Name "production_readiness_blockers_reviewed" -Description "production readiness blockers reviewed"
         Test-RequiredTrue -Object $issueReview -Name "pilot_signoff_signed" -Description "pilot signoff signed"
         Test-RequiredTrue -Object $issueReview -Name "no_pilot_blocking_defects" -Description "no pilot blocking defects"

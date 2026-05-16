@@ -281,6 +281,7 @@ else {
     $runbookText = Get-Content -LiteralPath $runbookPath -Raw
     foreach ($requiredText in @(
         "Start-PassportPreMvpStaffStewardPilot.ps1",
+        "Set-PassportPreMvpStaffStewardPilotEvidencePacket.ps1",
         "pilot-workspace-launch.json",
         "Test-PassportPreMvpStaffStewardPilotEvidencePacket.ps1",
         "New-PassportPreMvpStaffStewardPilotReport.ps1",

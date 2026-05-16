@@ -189,6 +189,26 @@ function New-GeneratedFixture {
     $pilotId = "pre-mvp-staff-steward-pilot-report-validation"
     $pilotOwner = "pre-mvp-validation-owner"
     $policyVersion = "token-ready-passport-mvp-pre-mvp-internal-verification-v1"
+    $sourceEvidenceRoot = Join-Path $fixtureRoot "source-evidence"
+    $artifactManifestPath = Join-Path $sourceEvidenceRoot "internal-verification-artifact-manifest.json"
+    $productionReadinessReportPath = Join-Path $sourceEvidenceRoot "production-mvp-readiness-report.json"
+
+    Write-JsonFile -Path $artifactManifestPath -Value ([pscustomobject][ordered]@{
+        schema = "archrealms.passport.release_manifest.fixture.v1"
+        lane = "internal-verification"
+        app_commit = Get-CurrentCommit
+    })
+
+    Write-JsonFile -Path $productionReadinessReportPath -Value ([pscustomobject][ordered]@{
+        schema = "archrealms.passport.production_mvp_readiness.fixture.v1"
+        ready = $false
+        gates = @(
+            [pscustomobject][ordered]@{
+                id = "controlled-production-readiness-values-still-required"
+                passed = $false
+            }
+        )
+    })
 
     $scenarios = @(
         "identity_create_or_recover",
@@ -209,8 +229,8 @@ function New-GeneratedFixture {
         pilot_owner = $pilotOwner
         policy_version = $policyVersion
         app_commit = Get-CurrentCommit
-        artifact_manifest_path = ""
-        artifact_manifest_sha256 = ""
+        artifact_manifest_path = $artifactManifestPath
+        artifact_manifest_sha256 = Get-Sha256Hex -Path $artifactManifestPath
         session_started_utc = $createdUtc
         session_ended_utc = $createdUtc
         pilot_participant_count = 1
@@ -255,8 +275,8 @@ function New-GeneratedFixture {
         pilot_id = $pilotId
         pilot_owner = $pilotOwner
         policy_version = $policyVersion
-        production_readiness_report_path = ""
-        production_readiness_report_sha256 = ""
+        production_readiness_report_path = $productionReadinessReportPath
+        production_readiness_report_sha256 = Get-Sha256Hex -Path $productionReadinessReportPath
         production_readiness_blockers_reviewed = $true
         pilot_signoff_signed = $true
         no_pilot_blocking_defects = $true
