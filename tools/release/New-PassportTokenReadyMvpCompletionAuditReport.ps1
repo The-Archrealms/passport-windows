@@ -13,6 +13,7 @@ param(
     [string]$ProductionMvpOperatorCommandsPath = "artifacts\release\production-mvp-next-action-packet\operator-commands.ps1",
     [string]$ProductionMvpOperatorCommandPhaseManifestPath = "artifacts\release\production-mvp-next-action-packet\operator-command-phases.manifest.json",
     [string]$ProductionMvpNextActionPacketValidationReportPath = "artifacts\release\production-mvp-next-action-packet-validation-report.json",
+    [string]$ProductionMvpCloseoutFailureHandoffValidationReportPath = "artifacts\release\production-mvp-closeout-failure-handoff-validation-report.json",
     [string]$OutputPath = "artifacts\release\token-ready-mvp-completion-audit-report.json",
     [string]$MarkdownOutputPath = "artifacts\release\token-ready-mvp-completion-audit-report.md",
     [switch]$NoFail
@@ -468,6 +469,7 @@ $files = [ordered]@{
     production_mvp_operator_commands = New-FileEvidence -Id "production_mvp_operator_commands" -Path $ProductionMvpOperatorCommandsPath
     production_mvp_operator_command_phase_manifest = New-FileEvidence -Id "production_mvp_operator_command_phase_manifest" -Path $ProductionMvpOperatorCommandPhaseManifestPath
     production_mvp_next_action_packet_validation = New-FileEvidence -Id "production_mvp_next_action_packet_validation" -Path $ProductionMvpNextActionPacketValidationReportPath
+    production_mvp_closeout_failure_handoff_validation = New-FileEvidence -Id "production_mvp_closeout_failure_handoff_validation" -Path $ProductionMvpCloseoutFailureHandoffValidationReportPath
 }
 
 $preMvp = Read-JsonFile -Path $files.pre_mvp_internal_verification.path
@@ -925,7 +927,7 @@ $items += New-AuditItem `
     -Source "Final Closeout" `
     -Requirement "Production MVP closeout has passed with filled production provisioning, ready ProductionMvp report, and RequireReady release evidence." `
     -Status $(if ($null -eq $closeout) { "missing" } elseif ($closeout.passed -eq $true) { "passed" } else { "blocked" }) `
-    -EvidenceIds @("production_mvp_closeout", "production_mvp_readiness", "production_mvp_outstanding_work", "production_mvp_next_action_packet_manifest", "production_mvp_next_action_plan", "production_mvp_operator_input_matrix", "production_mvp_operator_commands", "production_mvp_operator_command_phase_manifest", "production_mvp_next_action_packet_validation") `
+    -EvidenceIds @("production_mvp_closeout", "production_mvp_readiness", "production_mvp_outstanding_work", "production_mvp_next_action_packet_manifest", "production_mvp_next_action_plan", "production_mvp_operator_input_matrix", "production_mvp_operator_commands", "production_mvp_operator_command_phase_manifest", "production_mvp_next_action_packet_validation", "production_mvp_closeout_failure_handoff_validation") `
     -Blockers @($closeout.failures | ForEach-Object { ConvertTo-AuditText -Value $_ }) `
     -OperatorActions $closeoutActions `
     -RemainingWorkType "production_closeout" `

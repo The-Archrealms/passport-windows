@@ -13,6 +13,7 @@ param(
     [string]$ProductionMvpOperatorCommandsPath = "artifacts\release\production-mvp-next-action-packet\operator-commands.ps1",
     [string]$ProductionMvpOperatorCommandPhaseManifestPath = "artifacts\release\production-mvp-next-action-packet\operator-command-phases.manifest.json",
     [string]$ProductionMvpNextActionPacketValidationReportPath = "artifacts\release\production-mvp-next-action-packet-validation-report.json",
+    [string]$ProductionMvpCloseoutFailureHandoffValidationReportPath = "artifacts\release\production-mvp-closeout-failure-handoff-validation-report.json",
     [string]$ReportPath = "artifacts\release\token-ready-mvp-completion-audit-report.json",
     [string]$MarkdownPath = "artifacts\release\token-ready-mvp-completion-audit-report.md",
     [string]$OutputPath = "artifacts\release\token-ready-mvp-completion-audit-validation-report.json",
@@ -153,6 +154,7 @@ function New-CompletionAuditFixture {
     $operatorCommandsPath = Join-Path $fixtureRoot "operator-commands.ps1"
     $operatorCommandPhaseManifestPath = Join-Path $fixtureRoot "operator-command-phases.manifest.json"
     $nextActionValidationPath = Join-Path $fixtureRoot "production-mvp-next-action-packet-validation-report.json"
+    $closeoutFailureHandoffValidationPath = Join-Path $fixtureRoot "production-mvp-closeout-failure-handoff-validation-report.json"
     $reportPath = Join-Path $fixtureRoot "token-ready-mvp-completion-audit-report.json"
     $markdownPath = Join-Path $fixtureRoot "token-ready-mvp-completion-audit-report.md"
     $validationPath = Join-Path $fixtureRoot "token-ready-mvp-completion-audit-validation-report.json"
@@ -361,6 +363,24 @@ function New-CompletionAuditFixture {
             }
         )
     })
+    Write-JsonFile -Path $closeoutFailureHandoffValidationPath -Value ([pscustomobject][ordered]@{
+        schema = "archrealms.passport.production_mvp_closeout_failure_handoff_validation.v1"
+        created_utc = $createdUtc
+        repo_root = $repoRoot
+        app_commit = $fixtureAppCommit
+        passed = $true
+        failed_check_count = 0
+        checks = @(
+            [pscustomobject][ordered]@{
+                id = "failure_handoff_phase_manifest_validation"
+                passed = $true
+                failures = @()
+                evidence = [pscustomobject][ordered]@{
+                    fixture = $true
+                }
+            }
+        )
+    })
 
     return [pscustomobject][ordered]@{
         pre_mvp_internal_verification = $preMvpPath
@@ -377,6 +397,7 @@ function New-CompletionAuditFixture {
         production_mvp_operator_commands = $operatorCommandsPath
         production_mvp_operator_command_phase_manifest = $operatorCommandPhaseManifestPath
         production_mvp_next_action_packet_validation = $nextActionValidationPath
+        production_mvp_closeout_failure_handoff_validation = $closeoutFailureHandoffValidationPath
         completion_audit_report = $reportPath
         completion_audit_markdown = $markdownPath
         completion_audit_validation = $validationPath
@@ -413,6 +434,7 @@ function Invoke-CompletionAuditGenerator {
         [string]$ProductionMvpOperatorCommandsPath,
         [string]$ProductionMvpOperatorCommandPhaseManifestPath,
         [string]$ProductionMvpNextActionPacketValidationPath,
+        [string]$ProductionMvpCloseoutFailureHandoffValidationPath,
         [string]$JsonPath,
         [string]$MarkdownOutputPath
     )
@@ -453,6 +475,8 @@ function Invoke-CompletionAuditGenerator {
         $ProductionMvpOperatorCommandPhaseManifestPath,
         "-ProductionMvpNextActionPacketValidationReportPath",
         $ProductionMvpNextActionPacketValidationPath,
+        "-ProductionMvpCloseoutFailureHandoffValidationReportPath",
+        $ProductionMvpCloseoutFailureHandoffValidationPath,
         "-OutputPath",
         $JsonPath,
         "-MarkdownOutputPath",
@@ -608,6 +632,7 @@ $resolvedProductionMvpOperatorInputMatrixMarkdownPath = Resolve-RepoPath -Path $
 $resolvedProductionMvpOperatorCommandsPath = Resolve-RepoPath -Path $ProductionMvpOperatorCommandsPath
 $resolvedProductionMvpOperatorCommandPhaseManifestPath = Resolve-RepoPath -Path $ProductionMvpOperatorCommandPhaseManifestPath
 $resolvedProductionMvpNextActionPacketValidationReportPath = Resolve-RepoPath -Path $ProductionMvpNextActionPacketValidationReportPath
+$resolvedProductionMvpCloseoutFailureHandoffValidationReportPath = Resolve-RepoPath -Path $ProductionMvpCloseoutFailureHandoffValidationReportPath
 $resolvedReportPath = Resolve-RepoPath -Path $ReportPath
 $resolvedMarkdownPath = Resolve-RepoPath -Path $MarkdownPath
 $resolvedOutputPath = Resolve-RepoPath -Path $OutputPath
@@ -629,6 +654,7 @@ if ($UseGeneratedFixture) {
     $resolvedProductionMvpOperatorCommandsPath = $fixture.production_mvp_operator_commands
     $resolvedProductionMvpOperatorCommandPhaseManifestPath = $fixture.production_mvp_operator_command_phase_manifest
     $resolvedProductionMvpNextActionPacketValidationReportPath = $fixture.production_mvp_next_action_packet_validation
+    $resolvedProductionMvpCloseoutFailureHandoffValidationReportPath = $fixture.production_mvp_closeout_failure_handoff_validation
     $resolvedReportPath = $fixture.completion_audit_report
     $resolvedMarkdownPath = $fixture.completion_audit_markdown
     $resolvedOutputPath = $fixture.completion_audit_validation
@@ -653,6 +679,7 @@ if ($Generate) {
         -ProductionMvpOperatorCommandsPath $resolvedProductionMvpOperatorCommandsPath `
         -ProductionMvpOperatorCommandPhaseManifestPath $resolvedProductionMvpOperatorCommandPhaseManifestPath `
         -ProductionMvpNextActionPacketValidationPath $resolvedProductionMvpNextActionPacketValidationReportPath `
+        -ProductionMvpCloseoutFailureHandoffValidationPath $resolvedProductionMvpCloseoutFailureHandoffValidationReportPath `
         -JsonPath $resolvedReportPath `
         -MarkdownOutputPath $resolvedMarkdownPath
     $checks += Add-Check -Id "generator_exit_code" -Condition ($generatorResult.exit_code -eq 0) -Failure "completion audit generator failed" -Evidence $generatorResult
@@ -692,7 +719,8 @@ $requiredSourceFileIds = @(
     "production_mvp_operator_input_matrix_markdown",
     "production_mvp_operator_commands",
     "production_mvp_operator_command_phase_manifest",
-    "production_mvp_next_action_packet_validation"
+    "production_mvp_next_action_packet_validation",
+    "production_mvp_closeout_failure_handoff_validation"
 )
 
 foreach ($sourceId in $requiredSourceFileIds) {
@@ -763,7 +791,8 @@ $commitSourceIds = @(
     "production_mvp_next_action_plan",
     "production_mvp_operator_input_matrix",
     "production_mvp_operator_command_phase_manifest",
-    "production_mvp_next_action_packet_validation"
+    "production_mvp_next_action_packet_validation",
+    "production_mvp_closeout_failure_handoff_validation"
 )
 $sourceCommitFailures = @()
 foreach ($sourceId in $commitSourceIds) {
@@ -895,6 +924,33 @@ else {
     }
 }
 $checks += New-Check -Id "next_action_packet_handoff_validation" -Passed ($packetValidationFailures.Count -eq 0) -Failures $packetValidationFailures -Evidence $packetValidationSource
+
+$closeoutFailureHandoffValidationSource = Get-SourceFile -Report $report -Id "production_mvp_closeout_failure_handoff_validation"
+$closeoutFailureHandoffValidation = $(if ($null -ne $closeoutFailureHandoffValidationSource) { Read-JsonFile -Path ([string]$closeoutFailureHandoffValidationSource.path) } else { $null })
+$closeoutFailureHandoffValidationFailures = @()
+if ($null -eq $closeoutFailureHandoffValidation) {
+    $closeoutFailureHandoffValidationFailures += "closeout failure-handoff validation report is missing or unreadable"
+}
+else {
+    if ([string]$closeoutFailureHandoffValidation.schema -ne "archrealms.passport.production_mvp_closeout_failure_handoff_validation.v1") {
+        $closeoutFailureHandoffValidationFailures += "closeout failure-handoff validation schema is unexpected"
+    }
+    if ($closeoutFailureHandoffValidation.passed -ne $true) {
+        $closeoutFailureHandoffValidationFailures += "closeout failure-handoff validation did not pass"
+    }
+    if ([int]$closeoutFailureHandoffValidation.failed_check_count -ne 0) {
+        $closeoutFailureHandoffValidationFailures += "closeout failure-handoff validation reports failed checks"
+    }
+
+    $phaseManifestChecks = @(Get-ObjectArray -Object $closeoutFailureHandoffValidation -Name "checks" | Where-Object { [string]$_.id -eq "failure_handoff_phase_manifest_validation" })
+    if ($phaseManifestChecks.Count -eq 0) {
+        $closeoutFailureHandoffValidationFailures += "closeout failure-handoff validation is missing failure_handoff_phase_manifest_validation"
+    }
+    elseif (@($phaseManifestChecks | Where-Object { $_.passed -eq $true }).Count -eq 0) {
+        $closeoutFailureHandoffValidationFailures += "closeout failure-handoff validation failure_handoff_phase_manifest_validation did not pass"
+    }
+}
+$checks += New-Check -Id "closeout_failure_handoff_validation" -Passed ($closeoutFailureHandoffValidationFailures.Count -eq 0) -Failures $closeoutFailureHandoffValidationFailures -Evidence $closeoutFailureHandoffValidationSource
 
 $reportedCompletionReady = Get-ObjectBool -Object $report -Name "completion_ready"
 $reportedLocalImplementationReadyForActions = Get-ObjectBool -Object $report -Name "local_implementation_ready"
