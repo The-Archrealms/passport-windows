@@ -171,6 +171,22 @@ function Add-UniqueString {
     }
 }
 
+function Get-SafeFileNamePart {
+    param([string]$Value)
+
+    $safe = ([string]$Value).ToLowerInvariant() -replace '[^a-z0-9]+', '-'
+    $safe = $safe.Trim('-')
+    if ([string]::IsNullOrWhiteSpace($safe)) {
+        return "phase"
+    }
+
+    if ($safe.Length -gt 80) {
+        $safe = $safe.Substring(0, 80).Trim('-')
+    }
+
+    return $safe
+}
+
 function New-CommandGroupRecords {
     param([object[]]$Actions)
 
@@ -241,6 +257,7 @@ $manifestPath = Join-Path $resolvedOutputDirectory "production-mvp-next-action-p
 $planPath = Join-Path $resolvedOutputDirectory "next-action-plan.json"
 $markdownPath = Join-Path $resolvedOutputDirectory "next-action-plan.md"
 $commandsPath = Join-Path $resolvedOutputDirectory "operator-commands.ps1"
+$phaseCommandDirectory = Join-Path $resolvedOutputDirectory "operator-command-phases"
 $matrixPath = Join-Path $resolvedOutputDirectory "operator-input-matrix.json"
 $matrixMarkdownPath = Join-Path $resolvedOutputDirectory "operator-input-matrix.md"
 
@@ -283,6 +300,54 @@ $sourceReportRecord = [pscustomobject][ordered]@{
     operator_placeholder_count = [int]$operatorPlaceholderCount
 }
 
+New-Item -ItemType Directory -Force -Path $phaseCommandDirectory | Out-Null
+foreach ($stalePhaseScript in @(Get-ChildItem -LiteralPath $phaseCommandDirectory -Filter "*.ps1" -File -ErrorAction SilentlyContinue)) {
+    Remove-Item -LiteralPath $stalePhaseScript.FullName -Force
+}
+
+$phaseScriptRecords = @()
+$phaseCommandGroups = @($commandGroups | Group-Object -Property latest_phase_order | Sort-Object @{ Expression = { [int]$_.Name }; Ascending = $true })
+foreach ($phaseGroup in $phaseCommandGroups) {
+    $phaseCommands = @($phaseGroup.Group | Sort-Object @{ Expression = { [int]$_.sequence }; Ascending = $true })
+    if ($phaseCommands.Count -eq 0) {
+        continue
+    }
+
+    $phaseOrder = [int]$phaseGroup.Name
+    $phaseNames = @($phaseCommands | ForEach-Object { Get-ObjectArray -Object $_ -Name "phases" } | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | Sort-Object -Unique)
+    $phaseNamePart = Get-SafeFileNamePart -Value ($phaseNames -join "-")
+    $phaseScriptPath = Join-Path $phaseCommandDirectory ("phase-{0:d3}-{1}.ps1" -f $phaseOrder, $phaseNamePart)
+
+    $phaseLines = New-Object System.Collections.Generic.List[string]
+    $phaseLines.Add("# Production MVP phase command checklist.")
+    $phaseLines.Add("# Commands are commented intentionally because they require filled external evidence and secrets.")
+    $phaseLines.Add("# Phase order: $phaseOrder")
+    $phaseLines.Add("# Phases: $($phaseNames -join ', ')")
+    $phaseLines.Add("")
+
+    foreach ($group in $phaseCommands) {
+        $phaseLines.Add("# Step $($group.sequence)")
+        $phaseLines.Add("# Phase order window: $($group.earliest_phase_order)-$($group.latest_phase_order)")
+        $phaseLines.Add("# Actions: $((@($group.action_ids) -join ', '))")
+        $phaseLines.Add("# Blockers: $((@($group.blocker_ids) -join ', '))")
+        if (@($group.placeholder_tokens).Count -gt 0) {
+            $phaseLines.Add("# Placeholders: $((@($group.placeholder_tokens) -join ', '))")
+        }
+        $phaseLines.Add("# $($group.command)")
+        $phaseLines.Add("")
+    }
+
+    Set-Content -LiteralPath $phaseScriptPath -Value $phaseLines -Encoding UTF8
+    $phaseScriptRecords += [pscustomobject][ordered]@{
+        phase_order = $phaseOrder
+        phases = @($phaseNames)
+        path = $phaseScriptPath
+        sha256 = Get-Sha256Hex -Path $phaseScriptPath
+        command_count = $phaseCommands.Count
+        command_sequences = @($phaseCommands | ForEach-Object { [int]$_.sequence })
+    }
+}
+
 $plan = [pscustomobject][ordered]@{
     schema = "archrealms.passport.production_mvp_next_action_plan.v1"
     created_utc = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
@@ -292,8 +357,10 @@ $plan = [pscustomobject][ordered]@{
         action_count = $actions.Count
         unique_operator_command_count = $commandGroups.Count
         duplicate_operator_command_count = [Math]::Max(0, (($actions | ForEach-Object { @(Get-ObjectArray -Object $_ -Name "commands").Count } | Measure-Object -Sum).Sum) - $commandGroups.Count)
+        operator_command_phase_count = $phaseScriptRecords.Count
     }
     deduplicated_operator_commands = @($commandGroups)
+    operator_command_phase_scripts = @($phaseScriptRecords)
     actions = @($actions)
 }
 
@@ -355,6 +422,24 @@ else {
         $markdown.Add('```powershell')
         $markdown.Add([string]$group.command)
         $markdown.Add('```')
+        $markdown.Add("")
+    }
+
+    if ($phaseScriptRecords.Count -gt 0) {
+        $markdown.Add("## Phase Command Scripts")
+        $markdown.Add("")
+        $markdown.Add("Each file is a comment-only checklist for one dependency phase. Replace placeholders and run the uncommented command text only after the phase evidence is available.")
+        $markdown.Add("")
+        Add-MarkdownRow -Lines $markdown -Cells @("Phase order", "Phases", "Commands", "Script")
+        Add-MarkdownRow -Lines $markdown -Cells @("---", "---", "---", "---")
+        foreach ($phaseScript in $phaseScriptRecords) {
+            Add-MarkdownRow -Lines $markdown -Cells @(
+                [string]$phaseScript.phase_order,
+                (Join-StringArray -Values (Get-ObjectArray -Object $phaseScript -Name "phases")),
+                [string]$phaseScript.command_count,
+                [string]$phaseScript.path
+            )
+        }
         $markdown.Add("")
     }
 
@@ -552,7 +637,11 @@ $manifest = [pscustomobject][ordered]@{
         New-FileRecord -Id "operator_input_matrix_json" -Path $matrixPath
         New-FileRecord -Id "operator_input_matrix_markdown" -Path $matrixMarkdownPath
         New-FileRecord -Id "operator_commands" -Path $commandsPath
+        @($phaseScriptRecords | ForEach-Object {
+            New-FileRecord -Id ("operator_command_phase_{0:d3}" -f [int]$_.phase_order) -Path ([string]$_.path)
+        })
     )
+    operator_command_phase_scripts = @($phaseScriptRecords)
 }
 Write-JsonFile -Path $manifestPath -Value $manifest
 
@@ -571,6 +660,9 @@ $result = [pscustomobject][ordered]@{
     operator_input_matrix_markdown_sha256 = Get-Sha256Hex -Path $matrixMarkdownPath
     operator_commands_path = $commandsPath
     operator_commands_sha256 = Get-Sha256Hex -Path $commandsPath
+    operator_command_phase_directory = $phaseCommandDirectory
+    operator_command_phase_count = $phaseScriptRecords.Count
+    operator_command_phase_scripts = @($phaseScriptRecords)
     action_count = $actions.Count
     unique_operator_command_count = $commandGroups.Count
     blocker_count = $blockers.Count

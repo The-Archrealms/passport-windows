@@ -207,6 +207,7 @@ $manifestPath = Join-Path $resolvedPacketRoot "production-mvp-next-action-packet
 $planPath = Join-Path $resolvedPacketRoot "next-action-plan.json"
 $markdownPath = Join-Path $resolvedPacketRoot "next-action-plan.md"
 $commandsPath = Join-Path $resolvedPacketRoot "operator-commands.ps1"
+$phaseCommandDirectory = Join-Path $resolvedPacketRoot "operator-command-phases"
 $matrixPath = Join-Path $resolvedPacketRoot "operator-input-matrix.json"
 $matrixMarkdownPath = Join-Path $resolvedPacketRoot "operator-input-matrix.md"
 $currentCommit = Get-CurrentCommit
@@ -430,6 +431,9 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
         if ([int]$plan.summary.duplicate_operator_command_count -ne $expectedDuplicateCount) {
             $commandSequenceFailures += "plan summary duplicate_operator_command_count does not match duplicate command count."
         }
+        if (-not $plan.summary.PSObject.Properties["operator_command_phase_count"]) {
+            $commandSequenceFailures += "plan summary is missing operator_command_phase_count."
+        }
     }
 
     $deduplicatedCommands = @(Get-ObjectArray -Object $plan -Name "deduplicated_operator_commands")
@@ -491,6 +495,103 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
         action_command_count = $packetCommands.Count
         unique_operator_command_count = $uniquePacketCommands.Count
         duplicate_operator_command_count = [Math]::Max(0, $packetCommands.Count - $uniquePacketCommands.Count)
+    })
+
+    $phaseScriptFailures = @()
+    $phaseScriptRecords = @(Get-ObjectArray -Object $plan -Name "operator_command_phase_scripts")
+    $expectedPhaseGroups = @($deduplicatedCommands | Group-Object -Property latest_phase_order | Sort-Object @{ Expression = { [int]$_.Name }; Ascending = $true })
+    if ($plan.PSObject.Properties["summary"] -and $plan.summary.PSObject.Properties["operator_command_phase_count"]) {
+        if ([int]$plan.summary.operator_command_phase_count -ne $expectedPhaseGroups.Count) {
+            $phaseScriptFailures += "plan summary operator_command_phase_count does not match expected phase script count."
+        }
+    }
+    if ($phaseScriptRecords.Count -ne $expectedPhaseGroups.Count) {
+        $phaseScriptFailures += "operator_command_phase_scripts count does not match expected phase groups."
+    }
+    if ($null -ne $manifest) {
+        $manifestPhaseRecords = @(Get-ObjectArray -Object $manifest -Name "operator_command_phase_scripts")
+        if ($manifestPhaseRecords.Count -ne $phaseScriptRecords.Count) {
+            $phaseScriptFailures += "manifest operator_command_phase_scripts count does not match plan."
+        }
+        elseif ((Convert-ForCompare -Value $manifestPhaseRecords) -ne (Convert-ForCompare -Value $phaseScriptRecords)) {
+            $phaseScriptFailures += "manifest operator_command_phase_scripts does not match plan."
+        }
+    }
+
+    $phaseRecordsByOrder = @{}
+    foreach ($record in $phaseScriptRecords) {
+        $phaseOrder = [int]$record.phase_order
+        if ($phaseRecordsByOrder.ContainsKey($phaseOrder)) {
+            $phaseScriptFailures += "duplicate phase script record for phase order $phaseOrder."
+        }
+        else {
+            $phaseRecordsByOrder[$phaseOrder] = $record
+        }
+    }
+
+    foreach ($expectedGroup in $expectedPhaseGroups) {
+        $phaseOrder = [int]$expectedGroup.Name
+        if (-not $phaseRecordsByOrder.ContainsKey($phaseOrder)) {
+            $phaseScriptFailures += "missing phase script record for phase order $phaseOrder."
+            continue
+        }
+
+        $record = $phaseRecordsByOrder[$phaseOrder]
+        $expectedCommands = @($expectedGroup.Group | Sort-Object @{ Expression = { [int]$_.sequence }; Ascending = $true })
+        $expectedSequences = @($expectedCommands | ForEach-Object { [int]$_.sequence })
+        $actualSequences = @(Get-ObjectArray -Object $record -Name "command_sequences" | ForEach-Object { [int]$_ })
+        if ((Join-ArrayForCompare -Values $actualSequences) -ne (Join-ArrayForCompare -Values $expectedSequences)) {
+            $phaseScriptFailures += "phase script $phaseOrder command_sequences do not match expected command sequence."
+        }
+        if ([int]$record.command_count -ne $expectedCommands.Count) {
+            $phaseScriptFailures += "phase script $phaseOrder command_count does not match expected command count."
+        }
+
+        $expectedPhases = @($expectedCommands | ForEach-Object { Get-ObjectArray -Object $_ -Name "phases" } | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | Sort-Object -Unique)
+        $actualPhases = @(Get-ObjectArray -Object $record -Name "phases" | ForEach-Object { [string]$_ } | Sort-Object -Unique)
+        if ((Join-ArrayForCompare -Values $actualPhases) -ne (Join-ArrayForCompare -Values $expectedPhases)) {
+            $phaseScriptFailures += "phase script $phaseOrder phases do not match expected phases."
+        }
+
+        $recordPath = [string]$record.path
+        if ([string]::IsNullOrWhiteSpace($recordPath)) {
+            $phaseScriptFailures += "phase script $phaseOrder is missing path."
+            continue
+        }
+        $resolvedRecordPath = [System.IO.Path]::GetFullPath($recordPath)
+        $resolvedPhaseDirectory = [System.IO.Path]::GetFullPath($phaseCommandDirectory)
+        if (-not $resolvedRecordPath.StartsWith($resolvedPhaseDirectory, [System.StringComparison]::OrdinalIgnoreCase)) {
+            $phaseScriptFailures += "phase script $phaseOrder path is outside operator-command-phases directory: $recordPath"
+        }
+        if (-not (Test-Path -LiteralPath $recordPath -PathType Leaf)) {
+            $phaseScriptFailures += "phase script $phaseOrder file is missing: $recordPath"
+            continue
+        }
+        if ([string]$record.sha256 -ne (Get-Sha256Hex -Path $recordPath)) {
+            $phaseScriptFailures += "phase script $phaseOrder SHA-256 does not match file."
+        }
+
+        $phaseText = Get-Content -LiteralPath $recordPath -Raw
+        foreach ($line in Get-Content -LiteralPath $recordPath) {
+            $trimmed = $line.Trim()
+            if ([string]::IsNullOrWhiteSpace($trimmed)) {
+                continue
+            }
+            if (-not $trimmed.StartsWith("#")) {
+                $phaseScriptFailures += "phase script $phaseOrder has executable non-comment line: $trimmed"
+            }
+        }
+        foreach ($commandGroup in $expectedCommands) {
+            $commandText = [string]$commandGroup.command
+            if ($phaseText -notmatch [regex]::Escape("# $commandText")) {
+                $phaseScriptFailures += "phase script $phaseOrder is missing commented command sequence $($commandGroup.sequence): $commandText"
+            }
+        }
+    }
+    $checks += New-Check -Id "operator_command_phase_scripts" -Passed ($phaseScriptFailures.Count -eq 0) -Failures $phaseScriptFailures -Evidence ([pscustomobject][ordered]@{
+        expected_phase_script_count = $expectedPhaseGroups.Count
+        actual_phase_script_count = $phaseScriptRecords.Count
+        phase_command_directory = $phaseCommandDirectory
     })
 
     $simulationHashFailures = @()
@@ -576,6 +677,9 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
 
     $generatedFileFailures = @()
     $expectedFileIds = @("next_action_plan_json", "next_action_plan_markdown", "operator_input_matrix_json", "operator_input_matrix_markdown", "operator_commands")
+    foreach ($phaseScript in @(Get-ObjectArray -Object $plan -Name "operator_command_phase_scripts")) {
+        $expectedFileIds += ("operator_command_phase_{0:d3}" -f [int]$phaseScript.phase_order)
+    }
     $generatedFiles = @(Get-ObjectArray -Object $manifest -Name "generated_files")
     foreach ($expectedFileId in $expectedFileIds) {
         $record = @($generatedFiles | Where-Object { [string]$_.id -eq $expectedFileId } | Select-Object -First 1)
@@ -617,6 +721,13 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
             foreach ($actionId in @(Get-ObjectArray -Object $group -Name "action_ids")) {
                 if (-not [string]::IsNullOrWhiteSpace([string]$actionId) -and $markdown -notmatch [regex]::Escape([string]$actionId)) {
                     $markdownFailures += "Markdown is missing deduplicated command action id: $actionId"
+                }
+            }
+        }
+        foreach ($phaseScript in @(Get-ObjectArray -Object $plan -Name "operator_command_phase_scripts")) {
+            foreach ($value in @("## Phase Command Scripts", [string]$phaseScript.phase_order, [string]$phaseScript.command_count, [string]$phaseScript.path)) {
+                if (-not [string]::IsNullOrWhiteSpace($value) -and $markdown -notmatch [regex]::Escape($value)) {
+                    $markdownFailures += "Markdown is missing phase script metadata: $value"
                 }
             }
         }
@@ -768,6 +879,8 @@ $validation = [pscustomobject][ordered]@{
     operator_input_matrix_markdown_sha256 = Get-Sha256Hex -Path $matrixMarkdownPath
     operator_commands_path = $commandsPath
     operator_commands_sha256 = Get-Sha256Hex -Path $commandsPath
+    operator_command_phase_directory = $phaseCommandDirectory
+    operator_command_phase_count = @(Get-ObjectArray -Object $plan -Name "operator_command_phase_scripts").Count
     generated = [bool]$Generate
     used_generated_fixture = [bool]$UseGeneratedFixture
     passed = ($failedChecks.Count -eq 0)
