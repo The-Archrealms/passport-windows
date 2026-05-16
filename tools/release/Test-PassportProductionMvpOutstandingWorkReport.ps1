@@ -394,6 +394,29 @@ if ($null -ne $report) {
     }
     $checks += New-Check -Id "operator_action_command_coverage" -Passed ($actionFailures.Count -eq 0) -Failures $actionFailures
 
+    $sourceFileFailures = @()
+    if ($null -eq $report.source_files) {
+        $sourceFileFailures += "source_files is missing."
+    }
+    else {
+        foreach ($property in @($report.source_files.PSObject.Properties)) {
+            $sourceFile = $property.Value
+            $sourceId = [string]$sourceFile.id
+            if ([string]::IsNullOrWhiteSpace($sourceId)) {
+                $sourceFileFailures += "source file record $($property.Name) is missing id."
+            }
+
+            if ([string]::IsNullOrWhiteSpace([string]$sourceFile.path)) {
+                $sourceFileFailures += "source file record $($property.Name) is missing path."
+            }
+
+            if ([bool]$sourceFile.exists -and [string]$sourceFile.sha256 -notmatch '^[0-9a-f]{64}$') {
+                $sourceFileFailures += "source file record $($property.Name) exists but has no valid SHA-256."
+            }
+        }
+    }
+    $checks += New-Check -Id "source_file_contract" -Passed ($sourceFileFailures.Count -eq 0) -Failures $sourceFileFailures
+
     $blockerContractFailures = @()
     $seenBlockerIds = @{}
     foreach ($blocker in $blockers) {
@@ -440,9 +463,20 @@ if ($null -ne $report) {
         $markdown = Get-Content -LiteralPath $resolvedMarkdownPath -Raw
         $markdownFailures = @()
         if ($markdown -notmatch '# Production MVP Outstanding Work') { $markdownFailures += "Markdown title is missing." }
-        foreach ($section in @("## Blockers", "## Operator Input Matrix", "## Readiness Gates", "## Provisioning Packet", "## Release Evidence", "## Next Command")) {
+        foreach ($section in @("## Source Files", "## Blockers", "## Operator Input Matrix", "## Readiness Gates", "## Provisioning Packet", "## Release Evidence", "## Next Command")) {
             if ($markdown -notmatch [regex]::Escape($section)) {
                 $markdownFailures += "Markdown section is missing: $section"
+            }
+        }
+        if ($null -ne $report.source_files) {
+            foreach ($property in @($report.source_files.PSObject.Properties)) {
+                $sourceFile = $property.Value
+                if (-not [string]::IsNullOrWhiteSpace([string]$sourceFile.id) -and $markdown -notmatch [regex]::Escape([string]$sourceFile.id)) {
+                    $markdownFailures += "Markdown does not include source file id: $($sourceFile.id)"
+                }
+                if (-not [string]::IsNullOrWhiteSpace([string]$sourceFile.sha256) -and $markdown -notmatch [regex]::Escape([string]$sourceFile.sha256)) {
+                    $markdownFailures += "Markdown does not include source file SHA-256: $($sourceFile.id)"
+                }
             }
         }
         foreach ($blocker in $blockers) {

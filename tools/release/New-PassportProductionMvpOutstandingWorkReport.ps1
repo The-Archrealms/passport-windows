@@ -1085,6 +1085,17 @@ if (-not [string]::IsNullOrWhiteSpace($MarkdownOutputPath)) {
     $lines.Add("- Failed release-evidence checks: $($failedReleaseEvidenceChecks.Count)")
     $lines.Add("- Provisioning report source: $provisioningReportSource")
     $lines.Add("")
+    $lines.Add("## Source Files")
+    foreach ($sourceFile in @($files.Values)) {
+        $existsText = ([bool]$sourceFile.exists).ToString().ToLowerInvariant()
+        $lines.Add("- ``$($sourceFile.id)``")
+        $lines.Add("  - Path: ``$($sourceFile.path)``")
+        $lines.Add("  - Exists: $existsText")
+        if (-not [string]::IsNullOrWhiteSpace([string]$sourceFile.sha256)) {
+            $lines.Add("  - SHA-256: ``$($sourceFile.sha256)``")
+        }
+    }
+    $lines.Add("")
     if ($inputWarnings.Count -gt 0) {
         $lines.Add("## Input Warnings")
         foreach ($warning in $inputWarnings) {
