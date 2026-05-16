@@ -2,6 +2,7 @@ param(
     [string]$Repo = "The-Archrealms/passport-windows",
     [string]$CertificatePfxPath,
     [string]$CertificatePassword,
+    [string]$CertificatePasswordFile,
     [string]$SecretPrefix = "PASSPORT_WINDOWS_MSIX"
 )
 
@@ -11,8 +12,16 @@ if (-not $CertificatePfxPath) {
     throw "CertificatePfxPath is required."
 }
 
+if (-not $CertificatePassword -and $CertificatePasswordFile) {
+    $resolvedPasswordPath = (Resolve-Path -LiteralPath $CertificatePasswordFile).Path
+    $CertificatePassword = (Get-Content -LiteralPath $resolvedPasswordPath -Raw).Trim()
+    if ([string]::IsNullOrWhiteSpace($CertificatePassword)) {
+        throw "CertificatePasswordFile is empty: $resolvedPasswordPath"
+    }
+}
+
 if (-not $CertificatePassword) {
-    throw "CertificatePassword is required."
+    throw "CertificatePassword or CertificatePasswordFile is required."
 }
 
 $resolvedPfxPath = (Resolve-Path -LiteralPath $CertificatePfxPath).Path
@@ -33,6 +42,7 @@ $result = [pscustomobject]@{
     repo = $Repo
     secret_prefix = $SecretPrefix
     pfx_path = $resolvedPfxPath
+    password_source = if ($CertificatePasswordFile) { "file" } else { "argument" }
     updated_utc = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
     secrets = @(
         $SecretPrefix + "_PFX_BASE64",

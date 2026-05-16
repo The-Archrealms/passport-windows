@@ -5,7 +5,9 @@ param(
     [string]$TimestampConfigured = "false",
     [string]$CertificatePfxPath,
     [string]$CertificatePfxBase64,
+    [string]$CertificatePfxBase64File,
     [string]$CertificatePassword,
+    [string]$CertificatePasswordFile,
     [string]$PackagePublisher,
     [string]$TimestampUrl,
     [int]$EndpointTimeoutSeconds = 10,
@@ -93,6 +95,25 @@ function Get-FirstEnvironmentValue {
     }
 
     return ""
+}
+
+function Read-TrimmedTextFile {
+    param(
+        [string]$Path,
+        [string]$Description
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        return ""
+    }
+
+    $resolvedPath = (Resolve-Path -LiteralPath $Path).Path
+    $value = Get-Content -LiteralPath $resolvedPath -Raw
+    if ([string]::IsNullOrWhiteSpace($value)) {
+        throw "$Description file is empty: $resolvedPath"
+    }
+
+    return $value.Trim()
 }
 
 function New-Gate {
@@ -222,6 +243,9 @@ function Test-PackageSigning {
     }
 
     $pfxBase64 = $CertificatePfxBase64
+    if (-not $pfxBase64 -and $CertificatePfxBase64File) {
+        $pfxBase64 = Read-TrimmedTextFile -Path $CertificatePfxBase64File -Description "PFX base64"
+    }
     if (-not $pfxBase64) {
         $pfxBase64 = Get-FirstEnvironmentValue -Names @(
             "PASSPORT_WINDOWS_MSIX_PFX_BASE64",
@@ -231,6 +255,9 @@ function Test-PackageSigning {
     }
 
     $password = $CertificatePassword
+    if (-not $password -and $CertificatePasswordFile) {
+        $password = Read-TrimmedTextFile -Path $CertificatePasswordFile -Description "PFX password"
+    }
     if (-not $password) {
         $password = Get-FirstEnvironmentValue -Names @(
             "PASSPORT_WINDOWS_MSIX_PFX_PASSWORD",
@@ -1285,6 +1312,8 @@ $report = [pscustomobject][ordered]@{
     environment_file_variable_count = $loadedEnvironmentVariables.Count
     environment_file_variables = $loadedEnvironmentVariables
     endpoint_timeout_seconds = $EndpointTimeoutSeconds
+    pfx_base64_file_configured = -not [string]::IsNullOrWhiteSpace($CertificatePfxBase64File)
+    certificate_password_file_configured = -not [string]::IsNullOrWhiteSpace($CertificatePasswordFile)
     ready = ($failed.Count -eq 0)
     failed_gate_count = $failed.Count
     package_signing_certificate = $script:packageSigningCertificateReport

@@ -403,11 +403,17 @@ function Get-OperatorPlaceholderInputKind {
     if ($Name -match "(?i)^filled-.*root$") {
         return "filled_evidence_root"
     }
+    if ($Name -match "(?i)(PASSWORD|SECRET|KEY).*(FILE|PATH)$") {
+        return "secret_file"
+    }
     if ($Name -match "(?i)(ROOT|PATH)$") {
         return "filesystem_path"
     }
     if ($Name -match "(?i)(ENV|ENVIRONMENT)") {
         return "environment_file"
+    }
+    if ($Name -match "(?i)(URL|URI)$") {
+        return "url"
     }
 
     return "operator_value"
@@ -423,8 +429,10 @@ function Get-OperatorPlaceholderValidationHint {
         "digest" { return "Replace with a lowercase 64-character SHA-256 digest that matches the referenced generated artifact." }
         "controlled_packet_root" { return "Replace with the controlled production provisioning packet root after it passes Test-PassportProductionProvisioningPacket.ps1 -RequireNoPlaceholders." }
         "filled_evidence_root" { return "Replace with the filled evidence or provisioning packet root after its owning validator passes with -RequireNoPlaceholders." }
+        "secret_file" { return "Replace with an existing secure local secret file path; do not commit the file or paste its contents into the command." }
         "filesystem_path" { return "Replace with an existing absolute or repo-relative filesystem path approved for the production lane." }
         "environment_file" { return "Replace with the approved environment file path for the target release lane." }
+        "url" { return "Replace with the approved HTTPS URL for the target release lane." }
         default { return "Replace with the approved production-lane operator value before running the command." }
     }
 }
@@ -764,7 +772,7 @@ $readinessActionMap = @{
         -Action "Acquire the production MSIX signing certificate, configure PFX material or secure PFX path plus password, set publisher and timestamp URL, and validate the signing certificate report." `
         -Commands @(
             "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportPackageSigningProvisioning.ps1 -PackageSigningPath <filled-package-signing-root> -RequireNoPlaceholders",
-            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportWindowsSigningCertificate.ps1 -EnvironmentFile artifacts\release\production-mvp.env -OutputPath artifacts\release\production-signing-certificate-report.json"
+            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportWindowsSigningCertificate.ps1 -PfxPath <approved-msix-signing-pfx-path> -PasswordFile <approved-msix-signing-password-file> -ExpectedPublisher ""CN=The Archrealms"" -TimestampUrl <approved-timestamp-url> -OutputPath artifacts\release\production-signing-certificate-report.json"
         )
     release_lane_endpoints = New-Action `
         -Id "release_lane_endpoints" `
@@ -988,7 +996,7 @@ $packageSigningReleaseEvidenceAction = New-Action `
     -Title "Attach package-signing certificate evidence" `
     -Action "Validate the production MSIX signing certificate and regenerate release evidence so certificate details are included." `
     -Commands @(
-        "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportWindowsSigningCertificate.ps1 -EnvironmentFile artifacts\release\production-mvp.env -OutputPath artifacts\release\production-signing-certificate-report.json",
+        "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportWindowsSigningCertificate.ps1 -PfxPath <approved-msix-signing-pfx-path> -PasswordFile <approved-msix-signing-password-file> -ExpectedPublisher ""CN=The Archrealms"" -TimestampUrl <approved-timestamp-url> -OutputPath artifacts\release\production-signing-certificate-report.json",
         "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\New-PassportProductionMvpReleaseEvidencePacket.ps1 -EnvironmentFile artifacts\release\production-mvp.env -OutputDirectory artifacts\release\production-mvp-release-evidence-packet -Force"
     )
 

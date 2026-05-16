@@ -2,7 +2,9 @@ param(
     [string]$EnvironmentFile,
     [string]$PfxPath,
     [string]$PfxBase64,
+    [string]$PfxBase64File,
     [string]$Password,
+    [string]$PasswordFile,
     [string]$ExpectedPublisher,
     [string]$TimestampUrl,
     [int]$MinimumDaysValid = 30,
@@ -68,7 +70,28 @@ function Get-FirstEnvironmentValue {
     return ""
 }
 
+function Read-TrimmedTextFile {
+    param(
+        [string]$Path,
+        [string]$Description
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        return ""
+    }
+
+    $resolvedPath = (Resolve-Path -LiteralPath $Path).Path
+    $value = Get-Content -LiteralPath $resolvedPath -Raw
+    if ([string]::IsNullOrWhiteSpace($value)) {
+        throw "$Description file is empty: $resolvedPath"
+    }
+
+    return $value.Trim()
+}
+
 $loadedEnvironmentVariables = Import-EnvironmentFile -Path $EnvironmentFile
+$pfxBase64FileLoaded = $false
+$passwordFileLoaded = $false
 
 if (-not $PfxPath) {
     $PfxPath = Get-FirstEnvironmentValue -Names @(
@@ -78,12 +101,22 @@ if (-not $PfxPath) {
     )
 }
 
+if (-not $PfxBase64 -and $PfxBase64File) {
+    $PfxBase64 = Read-TrimmedTextFile -Path $PfxBase64File -Description "PFX base64"
+    $pfxBase64FileLoaded = $true
+}
+
 if (-not $PfxBase64) {
     $PfxBase64 = Get-FirstEnvironmentValue -Names @(
         "PASSPORT_WINDOWS_MSIX_PFX_BASE64",
         "PASSPORT_WINDOWS_SIDELOAD_PFX_BASE64",
         "PASSPORT_WINDOWS_STORE_PFX_BASE64"
     )
+}
+
+if (-not $Password -and $PasswordFile) {
+    $Password = Read-TrimmedTextFile -Path $PasswordFile -Description "PFX password"
+    $passwordFileLoaded = $true
 }
 
 if (-not $Password) {
@@ -126,6 +159,8 @@ $report = Test-PassportWindowsSigningCertificateInput `
 $report | Add-Member -NotePropertyName environment_file_loaded -NotePropertyValue (-not [string]::IsNullOrWhiteSpace($EnvironmentFile))
 $report | Add-Member -NotePropertyName environment_file_variable_count -NotePropertyValue $loadedEnvironmentVariables.Count
 $report | Add-Member -NotePropertyName environment_file_variables -NotePropertyValue $loadedEnvironmentVariables
+$report | Add-Member -NotePropertyName pfx_base64_file_loaded -NotePropertyValue $pfxBase64FileLoaded
+$report | Add-Member -NotePropertyName password_file_loaded -NotePropertyValue $passwordFileLoaded
 
 $json = $report | ConvertTo-Json -Depth 8
 if ($OutputPath) {

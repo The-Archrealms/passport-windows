@@ -40,8 +40,13 @@ Before ProductionMvp packaging:
 
 ```powershell
 .\tools\release\Test-PassportWindowsSigningCertificate.ps1 `
-  -EnvironmentFile <production-env> `
+  -PfxPath <approved-msix-signing-pfx-path> `
+  -PasswordFile <approved-msix-signing-password-file> `
+  -ExpectedPublisher "CN=The Archrealms" `
+  -TimestampUrl <timestamp-url> `
   -OutputPath .\artifacts\release\production-signing-certificate-report.json
 ```
 
 The report must return `passed=true`. If `self_signed=true`, release approval must explicitly limit use to controlled sideload testing and require client trust installation.
+
+If the release lane uses an environment file, the same values must also be present as `PASSPORT_WINDOWS_MSIX_PFX_PATH` or `PASSPORT_WINDOWS_MSIX_PFX_BASE64`, `PASSPORT_WINDOWS_MSIX_PFX_PASSWORD`, `PASSPORT_WINDOWS_MSIX_PUBLISHER`, and `PASSPORT_WINDOWS_MSIX_TIMESTAMP_URL` before the `ProductionMvp` readiness gate or MSIX publishing run is executed.

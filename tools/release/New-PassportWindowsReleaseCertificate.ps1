@@ -4,6 +4,8 @@ param(
     [int]$YearsValid = 5,
     [string]$OutputDirectory,
     [string]$Password,
+    [string]$PasswordFilePath,
+    [switch]$IncludePasswordInMetadata,
     [switch]$Force
 )
 
@@ -19,9 +21,13 @@ New-Item -ItemType Directory -Force -Path $resolvedOutputDirectory | Out-Null
 $pfxPath = Join-Path $resolvedOutputDirectory "passport-windows-signing.pfx"
 $cerPath = Join-Path $resolvedOutputDirectory "passport-windows-signing.cer"
 $metadataPath = Join-Path $resolvedOutputDirectory "passport-windows-signing.json"
+if (-not $PasswordFilePath) {
+    $PasswordFilePath = Join-Path $resolvedOutputDirectory "passport-windows-signing.password.txt"
+}
+$resolvedPasswordFilePath = [System.IO.Path]::GetFullPath($PasswordFilePath)
 
 if (-not $Force) {
-    foreach ($path in @($pfxPath, $cerPath, $metadataPath)) {
+    foreach ($path in @($pfxPath, $cerPath, $metadataPath, $resolvedPasswordFilePath)) {
         if (Test-Path -LiteralPath $path) {
             throw "Signing artifact already exists: $path. Use -Force to overwrite."
         }
@@ -33,6 +39,11 @@ if (-not $Password) {
 }
 
 $securePassword = ConvertTo-SecureString -String $Password -AsPlainText -Force
+$passwordDirectory = Split-Path -Parent $resolvedPasswordFilePath
+if ($passwordDirectory) {
+    New-Item -ItemType Directory -Force -Path $passwordDirectory | Out-Null
+}
+Set-Content -LiteralPath $resolvedPasswordFilePath -Value $Password -Encoding UTF8
 
 $certificate = New-SelfSignedCertificate `
     -Type Custom `
@@ -50,7 +61,7 @@ $certificate = New-SelfSignedCertificate `
 Export-PfxCertificate -Cert $certificate -FilePath $pfxPath -Password $securePassword | Out-Null
 Export-Certificate -Cert $certificate -FilePath $cerPath | Out-Null
 
-$metadata = [pscustomobject]@{
+$metadata = [ordered]@{
     created_utc = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
     subject = $certificate.Subject
     friendly_name = $FriendlyName
@@ -59,8 +70,14 @@ $metadata = [pscustomobject]@{
     pfx_path = $pfxPath
     cer_path = $cerPath
     output_directory = $resolvedOutputDirectory
-    password = $Password
+    password_file_path = $resolvedPasswordFilePath
+    password_in_metadata = $IncludePasswordInMetadata.IsPresent
 }
 
-$metadata | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $metadataPath -Encoding UTF8
+if ($IncludePasswordInMetadata) {
+    $metadata.password = $Password
+}
+
+$metadataObject = [pscustomobject]$metadata
+$metadataObject | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $metadataPath -Encoding UTF8
 Get-Content -LiteralPath $metadataPath

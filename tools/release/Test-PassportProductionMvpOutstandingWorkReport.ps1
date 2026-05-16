@@ -191,11 +191,17 @@ function Get-ExpectedOperatorPlaceholderInputKind {
     if ($Name -match "(?i)^filled-.*root$") {
         return "filled_evidence_root"
     }
+    if ($Name -match "(?i)(PASSWORD|SECRET|KEY).*(FILE|PATH)$") {
+        return "secret_file"
+    }
     if ($Name -match "(?i)(ROOT|PATH)$") {
         return "filesystem_path"
     }
     if ($Name -match "(?i)(ENV|ENVIRONMENT)") {
         return "environment_file"
+    }
+    if ($Name -match "(?i)(URL|URI)$") {
+        return "url"
     }
 
     return "operator_value"
@@ -211,8 +217,10 @@ function Get-ExpectedOperatorPlaceholderValidationHint {
         "digest" { return "Replace with a lowercase 64-character SHA-256 digest that matches the referenced generated artifact." }
         "controlled_packet_root" { return "Replace with the controlled production provisioning packet root after it passes Test-PassportProductionProvisioningPacket.ps1 -RequireNoPlaceholders." }
         "filled_evidence_root" { return "Replace with the filled evidence or provisioning packet root after its owning validator passes with -RequireNoPlaceholders." }
+        "secret_file" { return "Replace with an existing secure local secret file path; do not commit the file or paste its contents into the command." }
         "filesystem_path" { return "Replace with an existing absolute or repo-relative filesystem path approved for the production lane." }
         "environment_file" { return "Replace with the approved environment file path for the target release lane." }
+        "url" { return "Replace with the approved HTTPS URL for the target release lane." }
         default { return "Replace with the approved production-lane operator value before running the command." }
     }
 }

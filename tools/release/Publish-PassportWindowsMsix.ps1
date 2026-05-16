@@ -23,7 +23,9 @@ param(
     [string]$TimestampUrl,
     [string]$CertificatePfxPath,
     [string]$CertificatePassword,
+    [string]$CertificatePasswordFile,
     [string]$CertificatePfxBase64,
+    [string]$CertificatePfxBase64File,
     [int]$ProductionMvpReadinessEndpointTimeoutSeconds = 10,
     [string]$ProductionMvpReadinessBypassReason,
     [bool]$SelfContained = $true,
@@ -72,6 +74,25 @@ function Import-EnvironmentFile {
     }
 
     return $loaded
+}
+
+function Read-TrimmedTextFile {
+    param(
+        [string]$Path,
+        [string]$Description
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        return ""
+    }
+
+    $resolvedPath = (Resolve-Path -LiteralPath $Path).Path
+    $value = Get-Content -LiteralPath $resolvedPath -Raw
+    if ([string]::IsNullOrWhiteSpace($value)) {
+        throw "$Description file is empty: $resolvedPath"
+    }
+
+    return $value.Trim()
 }
 
 $loadedEnvironmentVariables = Import-EnvironmentFile -Path $EnvironmentFile
@@ -431,7 +452,19 @@ if (-not $CertificatePfxPath) {
 }
 
 if (-not $CertificatePfxBase64) {
+    if ($CertificatePfxBase64File) {
+        $CertificatePfxBase64 = Read-TrimmedTextFile -Path $CertificatePfxBase64File -Description "PFX base64"
+    }
+}
+
+if (-not $CertificatePfxBase64) {
     $CertificatePfxBase64 = Get-ChannelEnvironmentValue -Channel $Channel -Name "PFX_BASE64"
+}
+
+if (-not $CertificatePassword) {
+    if ($CertificatePasswordFile) {
+        $CertificatePassword = Read-TrimmedTextFile -Path $CertificatePasswordFile -Description "PFX password"
+    }
 }
 
 if (-not $CertificatePassword) {

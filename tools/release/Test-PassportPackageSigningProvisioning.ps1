@@ -78,6 +78,7 @@ $checks += Test-Document -Id "readme_contract" -Path $readmePath -RequiredText @
     "PASSPORT_WINDOWS_MSIX_PFX_PASSWORD",
     "PASSPORT_WINDOWS_MSIX_PUBLISHER",
     "PASSPORT_WINDOWS_MSIX_TIMESTAMP_URL",
+    "PasswordFile",
     "Test-PassportWindowsSigningCertificate.ps1"
 )
 $checks += Test-Document -Id "production_msix_signing_request_contract" -Path $signingRequestPath -RequiredText @(
@@ -86,6 +87,7 @@ $checks += Test-Document -Id "production_msix_signing_request_contract" -Path $s
     "Code Signing",
     "1.3.6.1.5.5.7.3.3",
     "publisher-subject match",
+    "PasswordFile",
     "Test-PassportWindowsSigningCertificate.ps1"
 )
 $checks += Test-Document -Id "sideload_trust_policy_contract" -Path $sideloadPolicyPath -RequiredText @(
