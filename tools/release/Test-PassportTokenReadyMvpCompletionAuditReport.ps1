@@ -427,6 +427,19 @@ function Get-SourceFile {
     return $Report.source_files.$Id
 }
 
+function Get-Check {
+    param(
+        [object]$Report,
+        [string]$Id
+    )
+
+    if ($null -eq $Report -or -not $Report.PSObject.Properties["checks"]) {
+        return $null
+    }
+
+    return @($Report.checks | Where-Object { [string]$_.id -eq $Id } | Select-Object -First 1)
+}
+
 $resolvedPreMvpInternalVerificationReportPath = Resolve-RepoPath -Path $PreMvpInternalVerificationReportPath
 $resolvedStagingReadinessReportPath = Resolve-RepoPath -Path $StagingReadinessReportPath
 $resolvedCanaryMvpReadinessReportPath = Resolve-RepoPath -Path $CanaryMvpReadinessReportPath
@@ -634,6 +647,54 @@ foreach ($item in $checklist) {
             }
             elseif (([string]$item.status -eq "passed" -or [string]$item.status -eq "partial") -and -not $preMvpPassedCheckSet.ContainsKey($coverageCheckId)) {
                 $itemFailures += "$id is $($item.status) but pre-MVP coverage check did not pass: $coverageCheckId"
+            }
+        }
+
+        $coverageEvidence = @(Get-ObjectArray -Object $item -Name "coverage_evidence")
+        $coverageEvidenceIds = @($coverageEvidence | ForEach-Object { [string]$_.check_id })
+        $missingCoverageEvidenceIds = @($coverageCheckIds | Where-Object { $coverageEvidenceIds -notcontains $_ })
+        $unexpectedCoverageEvidenceIds = @($coverageEvidenceIds | Where-Object { $coverageCheckIds -notcontains $_ })
+        $duplicateCoverageEvidenceIds = @($coverageEvidenceIds | Group-Object | Where-Object { $_.Count -gt 1 } | ForEach-Object { $_.Name })
+
+        foreach ($missingCoverageEvidenceId in $missingCoverageEvidenceIds) {
+            $itemFailures += "$id is missing coverage evidence for check id: $missingCoverageEvidenceId"
+        }
+        foreach ($unexpectedCoverageEvidenceId in $unexpectedCoverageEvidenceIds) {
+            $itemFailures += "$id includes unexpected coverage evidence for check id: $unexpectedCoverageEvidenceId"
+        }
+        foreach ($duplicateCoverageEvidenceId in $duplicateCoverageEvidenceIds) {
+            $itemFailures += "$id includes duplicate coverage evidence for check id: $duplicateCoverageEvidenceId"
+        }
+
+        foreach ($coverage in $coverageEvidence) {
+            $coverageId = [string]$coverage.check_id
+            if ([string]::IsNullOrWhiteSpace($coverageId)) {
+                $itemFailures += "$id coverage evidence includes a blank check_id"
+                continue
+            }
+
+            $preMvpCheck = Get-Check -Report $preMvpReport -Id $coverageId
+            $expectedPresent = $null -ne $preMvpCheck
+            if ([bool]$coverage.present -ne $expectedPresent) {
+                $itemFailures += "$id coverage evidence present flag does not match pre-MVP report for check id: $coverageId"
+            }
+
+            $expectedPassed = $expectedPresent -and $preMvpCheck.passed -eq $true
+            if ([bool]$coverage.passed -ne $expectedPassed) {
+                $itemFailures += "$id coverage evidence passed flag does not match pre-MVP report for check id: $coverageId"
+            }
+
+            if ($expectedPresent -and [string]::IsNullOrWhiteSpace([string]$coverage.description)) {
+                $itemFailures += "$id coverage evidence description is missing for check id: $coverageId"
+            }
+
+            if ($expectedPresent -and -not $coverage.PSObject.Properties["evidence"]) {
+                $itemFailures += "$id coverage evidence payload is missing for check id: $coverageId"
+            }
+
+            $coverageFailures = Get-ObjectArray -Object $coverage -Name "failures"
+            if ([int]$coverage.failure_count -ne $coverageFailures.Count) {
+                $itemFailures += "$id coverage evidence failure_count does not match failures length for check id: $coverageId"
             }
         }
     }

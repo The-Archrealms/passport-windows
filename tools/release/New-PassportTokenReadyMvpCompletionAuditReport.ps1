@@ -207,6 +207,7 @@ function New-AuditItem {
         [string]$Status,
         [string[]]$EvidenceIds = @(),
         [string[]]$CoverageCheckIds = @(),
+        [object[]]$CoverageEvidence = @(),
         [string[]]$EvidenceNotes = @(),
         [string[]]$Blockers = @(),
         [object[]]$OperatorActions = @()
@@ -219,10 +220,52 @@ function New-AuditItem {
         status = $Status
         evidence_ids = @($EvidenceIds)
         coverage_check_ids = @($CoverageCheckIds | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
+        coverage_evidence = @($CoverageEvidence)
         evidence_notes = @($EvidenceNotes | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
         blockers = @($Blockers | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
         operator_actions = @($OperatorActions)
     }
+}
+
+function Get-CoverageEvidence {
+    param(
+        [object]$PreMvpReport,
+        [string[]]$CheckIds
+    )
+
+    $coverage = @()
+    foreach ($checkId in @($CheckIds | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })) {
+        $check = Get-Check -Report $PreMvpReport -Id $checkId
+        if ($null -eq $check) {
+            $coverage += [pscustomobject][ordered]@{
+                check_id = $checkId
+                present = $false
+                passed = $false
+                description = ""
+                failure_count = 1
+                failures = @("coverage check missing from pre-MVP report")
+                evidence = $null
+            }
+            continue
+        }
+
+        $failures = @()
+        if ($check.PSObject.Properties["failures"]) {
+            $failures = @($check.failures | ForEach-Object { ConvertTo-AuditText -Value $_ })
+        }
+
+        $coverage += [pscustomobject][ordered]@{
+            check_id = $checkId
+            present = $true
+            passed = ($check.passed -eq $true)
+            description = ConvertTo-AuditText -Value $check.description
+            failure_count = $failures.Count
+            failures = $failures
+            evidence = $(if ($check.PSObject.Properties["evidence"]) { $check.evidence } else { $null })
+        }
+    }
+
+    return @($coverage)
 }
 
 function Get-StatusFromCheckIds {
@@ -347,9 +390,9 @@ $monetaryCoverageCheckIds = @("core_monetary_protocol_targeted_tests", "windows_
 $ledgerCoverageCheckIds = @("core_monetary_protocol_targeted_tests", "windows_monetary_ledger_targeted_tests", "ledger_verifier_build")
 $aiCoverageCheckIds = @("hosted_ai_targeted_tests", "windows_ai_gateway_targeted_tests", "open_weight_ai_runtime_deployment_validation")
 
-$items += New-AuditItem -Id "prd_success_identity_recovery" -Source "PRD Success Criteria" -Requirement "A citizen can create or recover a Passport identity." -Status (Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds $identityCoverageCheckIds) -EvidenceIds @("pre_mvp_internal_verification") -CoverageCheckIds $identityCoverageCheckIds -EvidenceNotes @("Covered by targeted Windows identity/recovery tests in the pre-MVP report.")
-$items += New-AuditItem -Id "prd_success_device_authorization" -Source "PRD Success Criteria" -Requirement "A citizen can authorize a device." -Status (Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds $deviceCoverageCheckIds) -EvidenceIds @("pre_mvp_internal_verification") -CoverageCheckIds $deviceCoverageCheckIds -EvidenceNotes @("Covered by targeted Windows device authorization tests in the pre-MVP report.")
-$items += New-AuditItem -Id "prd_success_wallet_key_binding" -Source "PRD Success Criteria" -Requirement "A citizen can bind a wallet key." -Status (Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds $walletCoverageCheckIds) -EvidenceIds @("pre_mvp_internal_verification") -CoverageCheckIds $walletCoverageCheckIds -EvidenceNotes @("Covered by targeted Windows wallet-key and Core wallet authorization tests.")
+$items += New-AuditItem -Id "prd_success_identity_recovery" -Source "PRD Success Criteria" -Requirement "A citizen can create or recover a Passport identity." -Status (Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds $identityCoverageCheckIds) -EvidenceIds @("pre_mvp_internal_verification") -CoverageCheckIds $identityCoverageCheckIds -CoverageEvidence (Get-CoverageEvidence -PreMvpReport $preMvp -CheckIds $identityCoverageCheckIds) -EvidenceNotes @("Covered by targeted Windows identity/recovery tests in the pre-MVP report.")
+$items += New-AuditItem -Id "prd_success_device_authorization" -Source "PRD Success Criteria" -Requirement "A citizen can authorize a device." -Status (Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds $deviceCoverageCheckIds) -EvidenceIds @("pre_mvp_internal_verification") -CoverageCheckIds $deviceCoverageCheckIds -CoverageEvidence (Get-CoverageEvidence -PreMvpReport $preMvp -CheckIds $deviceCoverageCheckIds) -EvidenceNotes @("Covered by targeted Windows device authorization tests in the pre-MVP report.")
+$items += New-AuditItem -Id "prd_success_wallet_key_binding" -Source "PRD Success Criteria" -Requirement "A citizen can bind a wallet key." -Status (Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds $walletCoverageCheckIds) -EvidenceIds @("pre_mvp_internal_verification") -CoverageCheckIds $walletCoverageCheckIds -CoverageEvidence (Get-CoverageEvidence -PreMvpReport $preMvp -CheckIds $walletCoverageCheckIds) -EvidenceNotes @("Covered by targeted Windows wallet-key and Core wallet authorization tests.")
 
 $issuerBlockers = Get-OutstandingGateFailures -OutstandingReport $outstanding -Id "issuer_capacity_genesis_secrets"
 $items += New-AuditItem `
@@ -359,6 +402,7 @@ $items += New-AuditItem `
     -Status $(if ((Get-Gate -Report $productionReadiness -Id "issuer_capacity_genesis_secrets").passed -eq $true) { "passed" } else { "blocked" }) `
     -EvidenceIds @("pre_mvp_internal_verification", "production_mvp_readiness", "production_mvp_outstanding_work") `
     -CoverageCheckIds $monetaryCoverageCheckIds `
+    -CoverageEvidence (Get-CoverageEvidence -PreMvpReport $preMvp -CheckIds $monetaryCoverageCheckIds) `
     -EvidenceNotes @("Implementation coverage is tied to targeted monetary protocol and Windows ledger checks; production ARCH requires the approved genesis manifest and ledger namespace.") `
     -Blockers $issuerBlockers `
     -OperatorActions (Get-OutstandingGateAction -OutstandingReport $outstanding -Id "issuer_capacity_genesis_secrets")
@@ -370,6 +414,7 @@ $items += New-AuditItem `
     -Status $(if ((Get-Gate -Report $productionReadiness -Id "issuer_capacity_genesis_secrets").passed -eq $true) { "passed" } else { "blocked" }) `
     -EvidenceIds @("pre_mvp_internal_verification", "production_mvp_readiness", "production_mvp_outstanding_work") `
     -CoverageCheckIds $monetaryCoverageCheckIds `
+    -CoverageEvidence (Get-CoverageEvidence -PreMvpReport $preMvp -CheckIds $monetaryCoverageCheckIds) `
     -EvidenceNotes @("Implementation coverage is tied to targeted monetary protocol and Windows ledger checks; production CC requires issuer/capacity/genesis and production ledger namespace values.") `
     -Blockers $issuerBlockers `
     -OperatorActions (Get-OutstandingGateAction -OutstandingReport $outstanding -Id "issuer_capacity_genesis_secrets")
@@ -388,6 +433,7 @@ $items += New-AuditItem `
     -Status $(if ($storageStatus -eq "passed" -and $storageBlockers.Count -eq 0) { "passed" } elseif ($storageStatus -eq "passed") { "partial" } else { $storageStatus }) `
     -EvidenceIds @("pre_mvp_internal_verification", "production_mvp_readiness", "production_mvp_outstanding_work") `
     -CoverageCheckIds $storageCoverageCheckIds `
+    -CoverageEvidence (Get-CoverageEvidence -PreMvpReport $preMvp -CheckIds $storageCoverageCheckIds) `
     -EvidenceNotes @("Storage redemption implementation is covered by targeted storage-redemption and Windows monetary ledger checks; production service delivery remains gated on managed storage provisioning/status.") `
     -Blockers $storageBlockers `
     -OperatorActions $storageActions
@@ -399,16 +445,18 @@ $items += New-AuditItem `
     -Status $(if ($storageStatus -eq "passed" -and $storageBlockers.Count -eq 0) { "passed" } elseif ($storageStatus -eq "passed") { "partial" } else { $storageStatus }) `
     -EvidenceIds @("pre_mvp_internal_verification", "production_mvp_readiness", "production_mvp_outstanding_work") `
     -CoverageCheckIds $storageCoverageCheckIds `
+    -CoverageEvidence (Get-CoverageEvidence -PreMvpReport $preMvp -CheckIds $storageCoverageCheckIds) `
     -EvidenceNotes @("Proof-linked redemption and remedy paths are covered by targeted storage-redemption and Windows monetary ledger checks; production storage status is still blocked.") `
     -Blockers $storageBlockers `
     -OperatorActions $storageActions
 
-$items += New-AuditItem -Id "prd_success_resource_contribution" -Source "PRD Success Criteria" -Requirement "Resource contribution is optional, revocable, and disclosed." -Status (Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds $resourceCoverageCheckIds) -EvidenceIds @("pre_mvp_internal_verification") -CoverageCheckIds $resourceCoverageCheckIds -EvidenceNotes @("Covered by targeted Windows resource contribution tests and lane artifact validation.")
-$items += New-AuditItem -Id "prd_success_arch_cc_conversion" -Source "PRD Success Criteria" -Requirement "ARCH/CC conversion is available only where floating-rate liquidity exists and is disclosed." -Status (Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds $monetaryCoverageCheckIds) -EvidenceIds @("pre_mvp_internal_verification") -CoverageCheckIds $monetaryCoverageCheckIds -EvidenceNotes @("Conversion quote/execution validation is covered by targeted monetary protocol and Windows ledger checks; external liquidity is not required by the MVP unless configured.")
-$items += New-AuditItem -Id "prd_success_no_post_genesis_arch_mint" -Source "PRD/ARD Monetary Invariants" -Requirement "No post-genesis ARCH mint path exists." -Status (Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds $monetaryCoverageCheckIds) -EvidenceIds @("pre_mvp_internal_verification") -CoverageCheckIds $monetaryCoverageCheckIds
-$items += New-AuditItem -Id "prd_success_cc_capacity_constrained" -Source "PRD/ARD Monetary Invariants" -Requirement "CC issuance is constrained by conservative deliverable service capacity." -Status (Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds @($monetaryCoverageCheckIds + "production_monetary_provisioning_validation")) -EvidenceIds @("pre_mvp_internal_verification") -CoverageCheckIds @($monetaryCoverageCheckIds + "production_monetary_provisioning_validation")
-$items += New-AuditItem -Id "prd_success_cc_does_not_create_arch" -Source "PRD/ARD Monetary Invariants" -Requirement "CC issuance cannot create ARCH or add ARCH to Crown reserves." -Status (Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds @($monetaryCoverageCheckIds + "production_monetary_provisioning_validation")) -EvidenceIds @("pre_mvp_internal_verification") -CoverageCheckIds @($monetaryCoverageCheckIds + "production_monetary_provisioning_validation")
-$items += New-AuditItem -Id "prd_success_ledger_export_auditability" -Source "PRD/ARD Ledger and Export" -Requirement "Ledger events are signed, replayable, exportable, and correction-safe." -Status (Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds $ledgerCoverageCheckIds) -EvidenceIds @("pre_mvp_internal_verification") -CoverageCheckIds $ledgerCoverageCheckIds
+$capacityCoverageCheckIds = @($monetaryCoverageCheckIds + "production_monetary_provisioning_validation")
+$items += New-AuditItem -Id "prd_success_resource_contribution" -Source "PRD Success Criteria" -Requirement "Resource contribution is optional, revocable, and disclosed." -Status (Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds $resourceCoverageCheckIds) -EvidenceIds @("pre_mvp_internal_verification") -CoverageCheckIds $resourceCoverageCheckIds -CoverageEvidence (Get-CoverageEvidence -PreMvpReport $preMvp -CheckIds $resourceCoverageCheckIds) -EvidenceNotes @("Covered by targeted Windows resource contribution tests and lane artifact validation.")
+$items += New-AuditItem -Id "prd_success_arch_cc_conversion" -Source "PRD Success Criteria" -Requirement "ARCH/CC conversion is available only where floating-rate liquidity exists and is disclosed." -Status (Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds $monetaryCoverageCheckIds) -EvidenceIds @("pre_mvp_internal_verification") -CoverageCheckIds $monetaryCoverageCheckIds -CoverageEvidence (Get-CoverageEvidence -PreMvpReport $preMvp -CheckIds $monetaryCoverageCheckIds) -EvidenceNotes @("Conversion quote/execution validation is covered by targeted monetary protocol and Windows ledger checks; external liquidity is not required by the MVP unless configured.")
+$items += New-AuditItem -Id "prd_success_no_post_genesis_arch_mint" -Source "PRD/ARD Monetary Invariants" -Requirement "No post-genesis ARCH mint path exists." -Status (Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds $monetaryCoverageCheckIds) -EvidenceIds @("pre_mvp_internal_verification") -CoverageCheckIds $monetaryCoverageCheckIds -CoverageEvidence (Get-CoverageEvidence -PreMvpReport $preMvp -CheckIds $monetaryCoverageCheckIds)
+$items += New-AuditItem -Id "prd_success_cc_capacity_constrained" -Source "PRD/ARD Monetary Invariants" -Requirement "CC issuance is constrained by conservative deliverable service capacity." -Status (Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds $capacityCoverageCheckIds) -EvidenceIds @("pre_mvp_internal_verification") -CoverageCheckIds $capacityCoverageCheckIds -CoverageEvidence (Get-CoverageEvidence -PreMvpReport $preMvp -CheckIds $capacityCoverageCheckIds)
+$items += New-AuditItem -Id "prd_success_cc_does_not_create_arch" -Source "PRD/ARD Monetary Invariants" -Requirement "CC issuance cannot create ARCH or add ARCH to Crown reserves." -Status (Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds $capacityCoverageCheckIds) -EvidenceIds @("pre_mvp_internal_verification") -CoverageCheckIds $capacityCoverageCheckIds -CoverageEvidence (Get-CoverageEvidence -PreMvpReport $preMvp -CheckIds $capacityCoverageCheckIds)
+$items += New-AuditItem -Id "prd_success_ledger_export_auditability" -Source "PRD/ARD Ledger and Export" -Requirement "Ledger events are signed, replayable, exportable, and correction-safe." -Status (Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds $ledgerCoverageCheckIds) -EvidenceIds @("pre_mvp_internal_verification") -CoverageCheckIds $ledgerCoverageCheckIds -CoverageEvidence (Get-CoverageEvidence -PreMvpReport $preMvp -CheckIds $ledgerCoverageCheckIds)
 
 $aiBlockers = @()
 $aiBlockers += @(Get-OutstandingGateFailures -OutstandingReport $outstanding -Id "open_weight_ai_runtime")
@@ -424,6 +472,7 @@ $items += New-AuditItem `
     -Status $(if ($aiImplementationStatus -eq "passed" -and $aiBlockers.Count -eq 0) { "passed" } elseif ($aiImplementationStatus -eq "passed") { "partial" } else { $aiImplementationStatus }) `
     -EvidenceIds @("pre_mvp_internal_verification", "production_mvp_readiness", "production_mvp_outstanding_work") `
     -CoverageCheckIds $aiCoverageCheckIds `
+    -CoverageEvidence (Get-CoverageEvidence -PreMvpReport $preMvp -CheckIds $aiCoverageCheckIds) `
     -EvidenceNotes @("Hosted AI implementation coverage is tied to targeted hosted AI, Windows AI gateway, and open-weight runtime deployment checks; production open-weight model runtime and live probe remain blocked until provisioned.") `
     -Blockers $aiBlockers `
     -OperatorActions $aiActions
@@ -520,6 +569,12 @@ if (-not [string]::IsNullOrWhiteSpace($MarkdownOutputPath)) {
         }
         if (@($item.coverage_check_ids).Count -gt 0) {
             $lines.Add("  - Coverage checks: $((@($item.coverage_check_ids) -join ', '))")
+        }
+        foreach ($coverage in @($item.coverage_evidence | Select-Object -First 3)) {
+            $lines.Add("  - Coverage evidence: $($coverage.check_id) present=$($coverage.present) passed=$($coverage.passed)")
+        }
+        if (@($item.coverage_evidence).Count -gt 3) {
+            $lines.Add("  - ...$(@($item.coverage_evidence).Count - 3) more coverage evidence records in JSON report")
         }
         foreach ($note in @($item.evidence_notes | Select-Object -First 2)) {
             $lines.Add("  - Note: $note")
