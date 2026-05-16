@@ -7,6 +7,10 @@ namespace ArchrealmsPassport.Windows.ViewModels
 {
     public sealed partial class PassportMainViewModel : INotifyPropertyChanged
     {
+        public const string AiDisclosure =
+            "AI can be wrong. It is not legal, financial, tax, accounting, securities, custody, or medical advice. " +
+            "It cannot change wallet or credit status. Do not share secrets or sensitive files unless Passport explicitly asks for a support flow.";
+
         private readonly PassportSettingsStore _settingsStore;
         private readonly PassportStatusService _statusService;
         private readonly ILocalNodeService _localNodeService;

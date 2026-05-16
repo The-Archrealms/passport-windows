@@ -10,12 +10,22 @@ using System.Threading;
 using System.Threading.Tasks;
 using ArchrealmsPassport.Windows.Services;
 using ArchrealmsPassport.Windows.Tests.Infrastructure;
+using ArchrealmsPassport.Windows.ViewModels;
 using Xunit;
 
 namespace ArchrealmsPassport.Windows.Tests;
 
 public sealed class PassportAiGatewayServiceTests
 {
+    [Fact]
+    public void AiDisclosureStatesAuthorityPrivacyAndAdviceBoundaries()
+    {
+        Assert.Contains("AI can be wrong", PassportMainViewModel.AiDisclosure, StringComparison.Ordinal);
+        Assert.Contains("not legal, financial, tax, accounting, securities, custody, or medical advice", PassportMainViewModel.AiDisclosure, StringComparison.Ordinal);
+        Assert.Contains("cannot change wallet or credit status", PassportMainViewModel.AiDisclosure, StringComparison.Ordinal);
+        Assert.Contains("Do not share secrets or sensitive files", PassportMainViewModel.AiDisclosure, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void AiGatewayCreatesSignedRequestAndShortLivedSessionWithoutStoringBearerToken()
     {

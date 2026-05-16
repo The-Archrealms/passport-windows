@@ -338,6 +338,7 @@ namespace ArchrealmsPassport.Windows.ViewModels
         public string MonetaryExportText { get { return _monetaryExportText; } private set { SetField(ref _monetaryExportText, value); } }
         public string AiGatewayUrl { get { return _aiGatewayUrl; } set { SetField(ref _aiGatewayUrl, value); } }
         public string AiKnowledgePackId { get { return _aiKnowledgePackId; } set { SetField(ref _aiKnowledgePackId, value); } }
+        public string AiDisclosureText { get { return AiDisclosure; } }
         public bool AiDiagnosticsUploadOptIn { get { return _aiDiagnosticsUploadOptIn; } set { SetField(ref _aiDiagnosticsUploadOptIn, value); } }
         public string AiSessionStatusText { get { return _aiSessionStatusText; } private set { SetField(ref _aiSessionStatusText, value); } }
         public string AiQuotaSummaryText { get { return _aiQuotaSummaryText; } private set { SetField(ref _aiQuotaSummaryText, value); } }

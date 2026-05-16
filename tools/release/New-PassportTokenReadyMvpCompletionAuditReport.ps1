@@ -875,6 +875,16 @@ $items += New-AuditItem `
     -EvidenceNotes @("The hosted AI no-authority boundary is covered by hosted AI and Windows AI gateway targeted tests.")
 
 $items += New-AuditItem `
+    -Id "ard_ai_user_disclosure_acceptance" `
+    -Source "Hosted AI Authority/Privacy ARD" `
+    -Requirement "Passport states that AI can be wrong, is not legal/financial/tax/accounting/securities/custody/medical advice, cannot change wallet or credit status, and should not receive secrets or sensitive files unless explicitly requested for support." `
+    -Status $aiImplementationStatus `
+    -EvidenceIds @("pre_mvp_internal_verification") `
+    -CoverageCheckIds @("windows_ai_gateway_targeted_tests") `
+    -CoverageEvidence (Get-CoverageEvidence -PreMvpReport $preMvp -CheckIds @("windows_ai_gateway_targeted_tests")) `
+    -EvidenceNotes @("The AI user disclosure is bound into the Windows AI surface and covered by the targeted Windows AI gateway tests.")
+
+$items += New-AuditItem `
     -Id "ard_ai_lane_runtime_probe_acceptance" `
     -Source "Hosted Open-Weight AI ARD Acceptance Criteria" `
     -Requirement "Staging and production use separate endpoints, logs, model artifacts, vector stores, and telemetry; the hosted gateway exposes non-secret runtime readiness status and an operator-protected non-mutating runtime probe for the approved model runtime." `

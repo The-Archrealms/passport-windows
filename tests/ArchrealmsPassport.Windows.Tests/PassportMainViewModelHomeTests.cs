@@ -181,6 +181,29 @@ public sealed class PassportMainViewModelHomeTests
     }
 
     [Fact]
+    public void AiDisclosureStatesAuthorityPrivacyAndAdviceBoundaries()
+    {
+        RunOnStaThread(delegate
+        {
+            var localNodeService = new FakeLocalNodeService();
+            using var viewModel = new PassportMainViewModel(
+                new PassportSettingsStore(),
+                new PassportStatusService(localNodeService),
+                localNodeService,
+                new PassportRecordService(),
+                new PassportCryptoService(),
+                new NetworkUsageService());
+
+            Assert.Contains("AI can be wrong", viewModel.AiDisclosureText, StringComparison.Ordinal);
+            Assert.Contains("not legal, financial, tax, accounting, securities, custody, or medical advice", viewModel.AiDisclosureText, StringComparison.Ordinal);
+            Assert.Contains("cannot change wallet or credit status", viewModel.AiDisclosureText, StringComparison.Ordinal);
+            Assert.Contains("Do not share secrets or sensitive files", viewModel.AiDisclosureText, StringComparison.Ordinal);
+
+            return Task.CompletedTask;
+        });
+    }
+
+    [Fact]
     public void PrimaryActionOnlyHidesAfterRegistrationWhenStorageIsRunning()
     {
         Assert.Equal(Visibility.Visible, PassportMainViewModel.BuildPrimaryActionVisibility(false, true, true, true, true));

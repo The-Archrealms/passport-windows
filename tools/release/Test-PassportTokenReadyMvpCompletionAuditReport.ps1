@@ -934,6 +934,7 @@ $requiredChecklistIds = @(
     "ard_ai_prompt_secret_rejection_acceptance",
     "ard_ai_knowledge_privacy_quota_acceptance",
     "ard_ai_no_authority_acceptance",
+    "ard_ai_user_disclosure_acceptance",
     "ard_ai_lane_runtime_probe_acceptance",
     "ard_release_legal_tax_accounting_custody_privacy_security",
     "production_mvp_closeout"
@@ -1019,6 +1020,7 @@ $requiredCoverageByChecklistId = @{
     ard_ai_prompt_secret_rejection_acceptance = @("hosted_ai_targeted_tests", "windows_ai_gateway_targeted_tests")
     ard_ai_knowledge_privacy_quota_acceptance = @("hosted_ai_targeted_tests", "windows_ai_gateway_targeted_tests", "open_weight_ai_runtime_deployment_validation")
     ard_ai_no_authority_acceptance = @("hosted_ai_targeted_tests", "windows_ai_gateway_targeted_tests")
+    ard_ai_user_disclosure_acceptance = @("windows_ai_gateway_targeted_tests")
     ard_ai_lane_runtime_probe_acceptance = @("hosted_ai_targeted_tests", "windows_ai_gateway_targeted_tests", "open_weight_ai_runtime_deployment_validation")
 }
 

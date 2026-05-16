@@ -202,6 +202,10 @@
                                 Style="{StaticResource CardStyle}">
                             <StackPanel>
                                 <TextBlock Style="{StaticResource SectionTitleStyle}" Text="AI" />
+                                <TextBlock AutomationProperties.AutomationId="AiDisclosureText"
+                                           Margin="0,8,0,0"
+                                           Style="{StaticResource CaptionStyle}"
+                                           Text="{Binding AiDisclosureText}" />
 
                                 <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Gateway URL" />
                                 <TextBox AutomationProperties.AutomationId="AiGatewayUrlTextBox"
