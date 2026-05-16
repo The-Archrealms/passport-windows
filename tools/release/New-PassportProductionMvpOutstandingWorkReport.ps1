@@ -193,6 +193,32 @@ function Get-ActionCommandArray {
     return ,[string[]]$commands
 }
 
+function New-Blocker {
+    param(
+        [string]$Id,
+        [string]$Category,
+        [string]$Title,
+        [string]$Source,
+        [string[]]$SourceIds = @(),
+        [string[]]$Failures = @(),
+        [object]$OperatorAction = $null
+    )
+
+    return [pscustomobject][ordered]@{
+        id = $Id
+        category = $Category
+        title = ConvertTo-ReportText -Value $Title
+        status = "blocked"
+        source = $Source
+        source_ids = @($SourceIds | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | ForEach-Object { [string]$_ })
+        failures = @($Failures | ForEach-Object { ConvertTo-ReportText -Value $_ })
+        operator_action_id = $(if ($null -ne $OperatorAction -and $OperatorAction.PSObject.Properties["id"]) { [string]$OperatorAction.id } else { "" })
+        operator_action_title = $(if ($null -ne $OperatorAction -and $OperatorAction.PSObject.Properties["title"]) { [string]$OperatorAction.title } else { "" })
+        operator_action = $(if ($null -ne $OperatorAction -and $OperatorAction.PSObject.Properties["action"]) { [string]$OperatorAction.action } else { "" })
+        operator_action_commands = Get-ActionCommandArray -Action $OperatorAction
+    }
+}
+
 function Get-ReportReferenceRefreshRecord {
     param(
         [string]$GateId,
@@ -837,6 +863,86 @@ if ($null -eq $failedProvisioningChildCheckCount) {
     $failedProvisioningChildCheckCount = 0
 }
 
+$nextCloseoutCommand = "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Complete-PassportProductionMvpCloseout.ps1 -EnvironmentFile artifacts\release\production-mvp.env -ProductionProvisioningPacketRoot <controlled-production-packet-root> -OutputDirectory artifacts\release\production-mvp-closeout -Force"
+$inputFailureAction = New-Action `
+    -Id "restore_outstanding_work_inputs" `
+    -Title "Restore outstanding-work input reports" `
+    -Action "Regenerate the missing production closeout, readiness, provisioning, or release-evidence reports before rerunning the outstanding-work report." `
+    -Commands @($nextCloseoutCommand)
+$closeoutFailureAction = New-Action `
+    -Id "production_mvp_closeout" `
+    -Title "Rerun production MVP closeout" `
+    -Action "Resolve the upstream readiness, provisioning, and release-evidence blockers, then rerun the production closeout command." `
+    -Commands @($nextCloseoutCommand)
+
+$blockers = @()
+for ($index = 0; $index -lt $inputFailures.Count; $index++) {
+    $blockers += New-Blocker `
+        -Id ("input_failure_{0:000}" -f ($index + 1)) `
+        -Category "input_failure" `
+        -Title "Restore required outstanding-work input" `
+        -Source "outstanding_work_report_inputs" `
+        -SourceIds @("input_failures") `
+        -Failures @([string]$inputFailures[$index]) `
+        -OperatorAction $inputFailureAction
+}
+
+for ($index = 0; $index -lt $closeoutFailures.Count; $index++) {
+    $blockers += New-Blocker `
+        -Id ("closeout_failure_{0:000}" -f ($index + 1)) `
+        -Category "closeout_failure" `
+        -Title "Resolve production MVP closeout failure" `
+        -Source "closeout_failures" `
+        -SourceIds @("production_mvp_closeout") `
+        -Failures @([string]$closeoutFailures[$index]) `
+        -OperatorAction $closeoutFailureAction
+}
+
+foreach ($gate in $failedReadinessGates) {
+    $title = if ($null -ne $gate.operator_action -and -not [string]::IsNullOrWhiteSpace([string]$gate.operator_action.title)) { [string]$gate.operator_action.title } else { [string]$gate.description }
+    $blockers += New-Blocker `
+        -Id "readiness_gate_$($gate.id)" `
+        -Category "readiness_gate" `
+        -Title $title `
+        -Source "failed_readiness_gates" `
+        -SourceIds @([string]$gate.id) `
+        -Failures @($gate.missing) `
+        -OperatorAction $gate.operator_action
+}
+
+foreach ($check in $failedProvisioningChecks) {
+    $failures = @($check.failures)
+    foreach ($child in @($check.child_failed_checks)) {
+        $childMessage = (@($child.failures) -join "; ")
+        if ([string]::IsNullOrWhiteSpace($childMessage)) {
+            $childMessage = "failed"
+        }
+        $failures += "$($child.id): $childMessage"
+    }
+
+    $title = if (-not [string]::IsNullOrWhiteSpace([string]$check.operator_action_text)) { [string]$check.operator_action_text } else { [string]$check.description }
+    $blockers += New-Blocker `
+        -Id "provisioning_check_$($check.id)" `
+        -Category "provisioning_check" `
+        -Title $title `
+        -Source "failed_provisioning_checks" `
+        -SourceIds @([string]$check.id) `
+        -Failures $failures `
+        -OperatorAction $check.operator_action
+}
+
+foreach ($check in $failedReleaseEvidenceChecks) {
+    $title = if (-not [string]::IsNullOrWhiteSpace([string]$check.operator_action_text)) { [string]$check.operator_action_text } else { [string]$check.id }
+    $blockers += New-Blocker `
+        -Id "release_evidence_check_$($check.id)" `
+        -Category "release_evidence_check" `
+        -Title $title `
+        -Source "failed_release_evidence_checks" `
+        -SourceIds @([string]$check.id) `
+        -Failures @($check.failures) `
+        -OperatorAction $check.operator_action
+}
+
 $readinessEvidenceItemCommandCount = @($readinessEvidenceItems | Where-Object { @($_.operator_action_commands).Count -gt 0 }).Count
 $releaseEvidenceItemCommandCount = @($releaseEvidenceItems | Where-Object { @($_.operator_action_commands).Count -gt 0 }).Count
 
@@ -854,6 +960,11 @@ foreach ($item in @($releaseEvidenceItems)) {
 foreach ($item in @($reportReferenceRefreshes)) {
     if ($item.operator_action_commands -isnot [array]) {
         $contractFailures += "report_reference_refreshes operator_action_commands must serialize as an array for $($item.readiness_gate_id)."
+    }
+}
+foreach ($item in @($blockers)) {
+    if ($item.operator_action_commands -isnot [array]) {
+        $contractFailures += "blockers operator_action_commands must serialize as an array for $($item.id)."
     }
 }
 if ($UseGeneratedFixture -and @($reportReferenceRefreshes).Count -eq 0) {
@@ -888,6 +999,7 @@ $report = [pscustomobject][ordered]@{
         release_evidence_passed = $(if ($null -ne $releaseEvidence -and $releaseEvidence.PSObject.Properties["passed"]) { [bool]$releaseEvidence.passed } else { $false })
         release_evidence_failed_check_count = $(if ($null -ne $releaseEvidence -and $releaseEvidence.PSObject.Properties["failed_check_count"]) { [int]$releaseEvidence.failed_check_count } else { $null })
         closeout_failure_count = $closeoutFailures.Count
+        blocker_count = $blockers.Count
         failed_readiness_gate_count = $failedReadinessGates.Count
         failed_provisioning_check_count = $failedProvisioningChecks.Count
         failed_provisioning_child_check_count = [int]$failedProvisioningChildCheckCount
@@ -901,6 +1013,7 @@ $report = [pscustomobject][ordered]@{
         required_release_evidence_item_command_count = $releaseEvidenceItemCommandCount
     }
     closeout_failures = $closeoutFailures
+    blockers = $blockers
     failed_readiness_gates = $failedReadinessGates
     failed_provisioning_checks = $failedProvisioningChecks
     failed_release_evidence_checks = $failedReleaseEvidenceChecks
@@ -911,7 +1024,7 @@ $report = [pscustomobject][ordered]@{
         provisioning_evidence_files = $requiredProvisioningEvidenceFiles
         release_evidence_items = $releaseEvidenceItems
     }
-    next_closeout_command = "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Complete-PassportProductionMvpCloseout.ps1 -EnvironmentFile artifacts\release\production-mvp.env -ProductionProvisioningPacketRoot <controlled-production-packet-root> -OutputDirectory artifacts\release\production-mvp-closeout -Force"
+    next_closeout_command = $nextCloseoutCommand
 }
 
 $resolvedOutputPath = Resolve-RepoPath -Path $OutputPath
@@ -935,6 +1048,7 @@ if (-not [string]::IsNullOrWhiteSpace($MarkdownOutputPath)) {
     $lines.Add("- Generated UTC: $($report.created_utc)")
     $lines.Add("- App commit: $($report.app_commit)")
     $lines.Add("- Ready for production testing: $($report.ready_for_production_testing.ToString().ToLowerInvariant())")
+    $lines.Add("- Blockers: $($blockers.Count)")
     $lines.Add("- Failed readiness gates: $($failedReadinessGates.Count)")
     $lines.Add("- Failed provisioning checks: $($failedProvisioningChecks.Count)")
     $lines.Add("- Failed provisioning child checks: $failedProvisioningChildCheckCount")
@@ -956,6 +1070,30 @@ if (-not [string]::IsNullOrWhiteSpace($MarkdownOutputPath)) {
     else {
         foreach ($failure in $closeoutFailures) {
             $lines.Add("- $failure")
+        }
+    }
+
+    $lines.Add("")
+    $lines.Add("## Blockers")
+    if ($blockers.Count -eq 0) {
+        $lines.Add("- None")
+    }
+    else {
+        foreach ($blocker in @($blockers)) {
+            $lines.Add("- ``$($blocker.id)`` [$($blocker.category)]: $($blocker.title)")
+            foreach ($failure in @($blocker.failures | Select-Object -First 3)) {
+                if (-not [string]::IsNullOrWhiteSpace([string]$failure)) {
+                    $lines.Add("  - $failure")
+                }
+            }
+            if (-not [string]::IsNullOrWhiteSpace([string]$blocker.operator_action)) {
+                $lines.Add("  - Action: $($blocker.operator_action)")
+            }
+            foreach ($command in @($blocker.operator_action_commands | Select-Object -First 2)) {
+                if (-not [string]::IsNullOrWhiteSpace($command)) {
+                    $lines.Add("  - Next command: ``$command``")
+                }
+            }
         }
     }
 
@@ -1108,6 +1246,7 @@ $result = [pscustomobject][ordered]@{
     output_sha256 = Get-Sha256Hex -Path $resolvedOutputPath
     markdown_output_path = $(if ([string]::IsNullOrWhiteSpace($MarkdownOutputPath)) { "" } else { Resolve-RepoPath -Path $MarkdownOutputPath })
     markdown_output_sha256 = $(if ([string]::IsNullOrWhiteSpace($MarkdownOutputPath)) { "" } else { Get-Sha256Hex -Path (Resolve-RepoPath -Path $MarkdownOutputPath) })
+    blocker_count = $blockers.Count
     failed_readiness_gate_count = $failedReadinessGates.Count
     failed_provisioning_check_count = $failedProvisioningChecks.Count
     failed_provisioning_child_check_count = [int]$failedProvisioningChildCheckCount

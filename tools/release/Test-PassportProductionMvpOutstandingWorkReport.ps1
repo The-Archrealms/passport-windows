@@ -298,8 +298,10 @@ if ($reportExists) {
 
 if ($null -ne $report) {
     $checks += Add-Check -Id "schema" -Condition ([string]$report.schema -eq "archrealms.passport.production_mvp_outstanding_work_report.v1") -Failure "unexpected outstanding-work report schema"
-    $checks += Add-Check -Id "input_failures_absent" -Condition ((Get-ObjectArray -Object $report -Name "input_failures").Count -eq 0) -Failure "outstanding-work report has input failures"
+    $inputFailures = @(Get-ObjectArray -Object $report -Name "input_failures")
+    $checks += Add-Check -Id "input_failures_absent" -Condition ($inputFailures.Count -eq 0) -Failure "outstanding-work report has input failures"
 
+    $blockers = @(Get-ObjectArray -Object $report -Name "blockers")
     $failedReadinessGates = @(Get-ObjectArray -Object $report -Name "failed_readiness_gates")
     $failedProvisioningChecks = @(Get-ObjectArray -Object $report -Name "failed_provisioning_checks")
     $failedReleaseEvidenceChecks = @(Get-ObjectArray -Object $report -Name "failed_release_evidence_checks")
@@ -314,6 +316,7 @@ if ($null -ne $report) {
 
     $countFailures = @()
     if ((Read-ObjectInt -Object $summary -Name "closeout_failure_count") -ne $closeoutFailures.Count) { $countFailures += "closeout_failure_count does not match closeout_failures." }
+    if ((Read-ObjectInt -Object $summary -Name "blocker_count") -ne $blockers.Count) { $countFailures += "blocker_count does not match blockers." }
     if ((Read-ObjectInt -Object $summary -Name "failed_readiness_gate_count") -ne $failedReadinessGates.Count) { $countFailures += "failed_readiness_gate_count does not match failed_readiness_gates." }
     if ((Read-ObjectInt -Object $summary -Name "failed_provisioning_check_count") -ne $failedProvisioningChecks.Count) { $countFailures += "failed_provisioning_check_count does not match failed_provisioning_checks." }
     if ((Read-ObjectInt -Object $summary -Name "failed_release_evidence_check_count") -ne $failedReleaseEvidenceChecks.Count) { $countFailures += "failed_release_evidence_check_count does not match failed_release_evidence_checks." }
@@ -329,6 +332,11 @@ if ($null -ne $report) {
     }
     if ((Read-ObjectInt -Object $summary -Name "failed_provisioning_child_check_count") -ne $childFailedCheckCount) {
         $countFailures += "failed_provisioning_child_check_count does not match child_failed_checks."
+    }
+
+    $expectedBlockerCount = $inputFailures.Count + $closeoutFailures.Count + $failedReadinessGates.Count + $failedProvisioningChecks.Count + $failedReleaseEvidenceChecks.Count
+    if ($blockers.Count -ne $expectedBlockerCount) {
+        $countFailures += "blockers does not cover each input failure, closeout failure, failed readiness gate, failed provisioning check, and failed release-evidence check."
     }
 
     $readinessEvidenceItemsWithCommands = @($readinessEvidenceItems | Where-Object { (Get-ObjectArray -Object $_ -Name "operator_action_commands").Count -gt 0 }).Count
@@ -347,6 +355,9 @@ if ($null -ne $report) {
     }
     foreach ($check in $failedReleaseEvidenceChecks) {
         Add-ActionCommandRecords -Records $commandRecords -Source "failed_release_evidence_checks.$($check.id)" -Action $check.operator_action
+    }
+    foreach ($blocker in $blockers) {
+        Add-CommandArrayRecords -Records $commandRecords -Source "blockers.$($blocker.id)" -Commands (Get-ObjectArray -Object $blocker -Name "operator_action_commands")
     }
     foreach ($item in $reportReferenceRefreshes) {
         Add-CommandArrayRecords -Records $commandRecords -Source "report_reference_refreshes.$($item.readiness_gate_id)" -Commands (Get-ObjectArray -Object $item -Name "operator_action_commands")
@@ -383,7 +394,44 @@ if ($null -ne $report) {
     }
     $checks += New-Check -Id "operator_action_command_coverage" -Passed ($actionFailures.Count -eq 0) -Failures $actionFailures
 
-    $checks += Add-Check -Id "ready_consistency" -Condition (-not [bool]$report.ready_for_production_testing -or ($closeoutFailures.Count -eq 0 -and $failedReadinessGates.Count -eq 0 -and $failedProvisioningChecks.Count -eq 0 -and $failedReleaseEvidenceChecks.Count -eq 0)) -Failure "ready_for_production_testing=true while outstanding blockers remain"
+    $blockerContractFailures = @()
+    $seenBlockerIds = @{}
+    foreach ($blocker in $blockers) {
+        $blockerId = [string]$blocker.id
+        if ([string]::IsNullOrWhiteSpace($blockerId)) {
+            $blockerContractFailures += "blocker id is missing."
+        }
+        elseif ($seenBlockerIds.ContainsKey($blockerId)) {
+            $blockerContractFailures += "duplicate blocker id: $blockerId"
+        }
+        else {
+            $seenBlockerIds[$blockerId] = $true
+        }
+
+        foreach ($fieldName in @("category", "title", "source")) {
+            if ([string]::IsNullOrWhiteSpace([string]$blocker.$fieldName)) {
+                $blockerContractFailures += "blocker $blockerId is missing $fieldName."
+            }
+        }
+        if ([string]$blocker.status -ne "blocked") {
+            $blockerContractFailures += "blocker $blockerId status must be blocked."
+        }
+        if ((Get-ObjectArray -Object $blocker -Name "failures").Count -eq 0) {
+            $blockerContractFailures += "blocker $blockerId lacks failures."
+        }
+        if ((Get-ObjectArray -Object $blocker -Name "operator_action_commands").Count -eq 0) {
+            $blockerContractFailures += "blocker $blockerId lacks operator action commands."
+        }
+    }
+    if (-not [bool]$report.ready_for_production_testing -and $blockers.Count -eq 0) {
+        $blockerContractFailures += "ready_for_production_testing=false but blockers is empty."
+    }
+    if ([bool]$report.ready_for_production_testing -and $blockers.Count -gt 0) {
+        $blockerContractFailures += "ready_for_production_testing=true but blockers is not empty."
+    }
+    $checks += New-Check -Id "blocker_contract" -Passed ($blockerContractFailures.Count -eq 0) -Failures $blockerContractFailures -Evidence ([pscustomobject][ordered]@{ blocker_count = $blockers.Count })
+
+    $checks += Add-Check -Id "ready_consistency" -Condition (-not [bool]$report.ready_for_production_testing -or ($blockers.Count -eq 0 -and $inputFailures.Count -eq 0 -and $closeoutFailures.Count -eq 0 -and $failedReadinessGates.Count -eq 0 -and $failedProvisioningChecks.Count -eq 0 -and $failedReleaseEvidenceChecks.Count -eq 0)) -Failure "ready_for_production_testing=true while outstanding blockers remain"
     if ($RequireReady) {
         $checks += Add-Check -Id "require_ready" -Condition ([bool]$report.ready_for_production_testing) -Failure "outstanding-work report is not ready for production testing"
     }
@@ -392,9 +440,14 @@ if ($null -ne $report) {
         $markdown = Get-Content -LiteralPath $resolvedMarkdownPath -Raw
         $markdownFailures = @()
         if ($markdown -notmatch '# Production MVP Outstanding Work') { $markdownFailures += "Markdown title is missing." }
-        foreach ($section in @("## Operator Input Matrix", "## Readiness Gates", "## Provisioning Packet", "## Release Evidence", "## Next Command")) {
+        foreach ($section in @("## Blockers", "## Operator Input Matrix", "## Readiness Gates", "## Provisioning Packet", "## Release Evidence", "## Next Command")) {
             if ($markdown -notmatch [regex]::Escape($section)) {
                 $markdownFailures += "Markdown section is missing: $section"
+            }
+        }
+        foreach ($blocker in $blockers) {
+            if ($markdown -notmatch [regex]::Escape([string]$blocker.id)) {
+                $markdownFailures += "Markdown does not include blocker id: $($blocker.id)"
             }
         }
         foreach ($gate in $failedReadinessGates) {
