@@ -705,6 +705,25 @@ $checks += New-Check -Id "source_file_freshness" -Passed ($sourceFreshnessFailur
     source_ids = $requiredSourceFileIds
 })
 
+$sourceFixtureFailures = @()
+if (-not $UseGeneratedFixture) {
+    foreach ($sourceId in $requiredSourceFileIds) {
+        $source = Get-SourceFile -Report $report -Id $sourceId
+        if ($null -eq $source) {
+            continue
+        }
+
+        $resolvedSourcePath = Resolve-RepoPath -Path ([string]$source.path)
+        if ($resolvedSourcePath -match '(?i)(^|[\\/])[^\\/]*fixture[^\\/]*([\\/]|$)') {
+            $sourceFixtureFailures += "$sourceId points at fixture evidence in real audit mode: $resolvedSourcePath"
+        }
+    }
+}
+$checks += New-Check -Id "source_file_not_fixture" -Passed ($sourceFixtureFailures.Count -eq 0) -Failures $sourceFixtureFailures -Evidence ([pscustomobject][ordered]@{
+    use_generated_fixture = [bool]$UseGeneratedFixture
+    source_ids = $requiredSourceFileIds
+})
+
 $commitSourceIds = @(
     "production_mvp_outstanding_work",
     "production_mvp_next_action_packet_manifest",
