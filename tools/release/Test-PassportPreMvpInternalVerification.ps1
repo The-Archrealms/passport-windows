@@ -1100,6 +1100,53 @@ else {
         -Description "Staging readiness evidence packet templates validate operational drill, rollback drill, and promotion approval contracts." `
         -Result (Invoke-Tool -FilePath "powershell" -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "tools\release\Test-PassportStagingReadinessEvidencePacket.ps1", "-OutputPath", "artifacts\release\staging-readiness-evidence-template-validation-report.json"))
     $checks += New-ToolCheck `
+        -Id "staging_readiness_evidence_fill_helper_validation" `
+        -Description "Staging readiness evidence fill helper generates a completed packet with explicit confirmations and validates hashes before operator closeout." `
+        -Result (Invoke-Tool -FilePath "powershell" -Arguments @(
+            "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "tools\release\Set-PassportStagingReadinessEvidencePacket.ps1",
+            "-PacketRoot", "artifacts\release\staging-readiness-evidence-fill-validation\packet",
+            "-EngineeringSignoffId", "engineering-signoff-validation",
+            "-SecurityPrivacySignoffId", "security-privacy-signoff-validation",
+            "-CrownMonetaryAuthoritySignoffId", "crown-monetary-authority-signoff-validation",
+            "-ApiBaseUrl", "https://staging-api.validation.archrealms.invalid",
+            "-AiGatewayUrl", "https://staging-ai.validation.archrealms.invalid",
+            "-TelemetryDestination", "staging-telemetry-validation",
+            "-PackageVersion", "staging-package-validation",
+            "-Operator", "staging-operator-validation",
+            "-IncidentResponseOwner", "staging-incident-owner-validation",
+            "-OperationalEvidenceReference", "evidence://validation/upgrade;evidence://validation/failover;evidence://validation/ledger",
+            "-RollbackReasonCode", "staging-validation-rollback-drill",
+            "-RollbackApprover", "engineering-approver-validation;security-privacy-approver-validation",
+            "-RollbackUserFacingStatus", "Staging rollback validation status",
+            "-ConfirmOperationalDrillCompleted",
+            "-ConfirmProductionCandidateUpgradeValidated",
+            "-ConfirmEndpointFailoverValidated",
+            "-ConfirmSigningVerificationValidated",
+            "-ConfirmLedgerExportReplayValidated",
+            "-ConfirmRecoveryRevocationValidated",
+            "-ConfirmStorageProofValidationCompleted",
+            "-ConfirmStorageRedemptionDryRunCompleted",
+            "-ConfirmConversionDisclosureDryRunCompleted",
+            "-ConfirmTelemetryPrivacyValidated",
+            "-ConfirmIncidentResponseValidated",
+            "-ConfirmSupportAccessControlsValidated",
+            "-ConfirmAiGatewayAuthPrivacyValidated",
+            "-ConfirmProhibitedClaimsBlocked",
+            "-ConfirmRollbackDrillCompleted",
+            "-ConfirmNewOperationsDisabledOrRouted",
+            "-ConfirmLedgerEventsPreserved",
+            "-ConfirmNoDeletionMutationOrBackdating",
+            "-ConfirmPendingEscrowResolvedByPolicy",
+            "-ConfirmExportAccessPreserved",
+            "-ConfirmProductionRecordsUntouched",
+            "-ConfirmCanaryOrProductionReleaseApproved",
+            "-ConfirmProductApprovalSigned",
+            "-ConfirmEngineeringSignoffSigned",
+            "-ConfirmSecurityPrivacySignoffSigned",
+            "-ConfirmCrownMonetaryAuthoritySignoffSigned",
+            "-Force"
+        ))
+    $checks += New-ToolCheck `
         -Id "staging_readiness_closeout_validation" `
         -Description "Staging readiness closeout validates a filled staging packet and produces the report/hash inputs required by canary and production." `
         -Result (Invoke-Tool -FilePath "powershell" -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "tools\release\Complete-PassportStagingReadinessEvidencePacket.ps1", "-UseGeneratedFixture"))
@@ -1111,6 +1158,50 @@ else {
         -Id "canary_mvp_readiness_evidence_packet_validation" `
         -Description "Canary MVP readiness evidence packet templates validate policy, incident, balance, service-delivery, support, and production approval contracts." `
         -Result (Invoke-Tool -FilePath "powershell" -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "tools\release\Test-PassportCanaryMvpReadinessEvidencePacket.ps1", "-OutputPath", "artifacts\release\canary-mvp-readiness-evidence-template-validation-report.json"))
+    $checks += New-ToolCheck `
+        -Id "canary_mvp_readiness_evidence_fill_helper_validation" `
+        -Description "Canary MVP readiness evidence fill helper generates a completed packet with explicit confirmations and validates hashes before operator closeout." `
+        -Result (Invoke-Tool -FilePath "powershell" -Arguments @(
+            "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "tools\release\Set-PassportCanaryMvpReadinessEvidencePacket.ps1",
+            "-PacketRoot", "artifacts\release\canary-mvp-readiness-evidence-fill-validation\packet",
+            "-SupportOwner", "canary-support-owner-validation",
+            "-IncidentResponseOwner", "canary-incident-owner-validation",
+            "-RollbackPolicyId", "canary-rollback-policy-validation",
+            "-EngineeringSignoffId", "engineering-signoff-validation",
+            "-SecurityPrivacySignoffId", "security-privacy-signoff-validation",
+            "-CrownMonetaryAuthoritySignoffId", "crown-monetary-authority-signoff-validation",
+            "-PolicyEvidenceReference", "evidence://validation/canary-policy",
+            "-IncidentEvidenceReference", "evidence://validation/canary-incident",
+            "-BalanceEvidenceReference", "evidence://validation/canary-balance",
+            "-ServiceDeliveryEvidenceReference", "evidence://validation/canary-service-delivery",
+            "-SupportEvidenceReference", "evidence://validation/canary-support",
+            "-ApprovalNotes", "Canary production approval validation notes",
+            "-ConfirmProductionIntended",
+            "-ConfirmProductionLedger",
+            "-ConfirmAllowlistedCitizensOnly",
+            "-ConfirmIncidentReviewCompleted",
+            "-ConfirmNoUnresolvedCriticalIncidents",
+            "-ConfirmNoUnresolvedHighIncidents",
+            "-ConfirmBalancesReconciled",
+            "-ConfirmEscrowReconciled",
+            "-ConfirmBurnRefundRecreditReconciled",
+            "-ConfirmCrownReserveReconciled",
+            "-ConfirmNoNegativeBalances",
+            "-ConfirmNoUnapprovedIssuance",
+            "-ConfirmNoStagingRecordsDetected",
+            "-ConfirmServiceDeliveryReconciled",
+            "-ConfirmStorageRedemptionsReconciled",
+            "-ConfirmStorageProofsReconciled",
+            "-ConfirmBurnsMatchVerifiedEpochs",
+            "-ConfirmRefundsRecreditsExtensionsReconciled",
+            "-ConfirmSupportReady",
+            "-ConfirmSupportQueueReviewed",
+            "-ConfirmRecoverySupportReady",
+            "-ConfirmEscalationPathReady",
+            "-ConfirmSupportAccessControlsValidated",
+            "-ConfirmProductionMvpReleaseApproved",
+            "-Force"
+        ))
     $checks += New-ToolCheck `
         -Id "canary_mvp_readiness_closeout_validation" `
         -Description "Canary MVP readiness closeout validates a filled canary packet and produces the report/hash inputs required by ProductionMvp readiness." `
@@ -1266,10 +1357,10 @@ $requirements = @(
     New-Requirement -Id "staff_steward_pilot_report_validator" -Description "The final staff/steward pilot report has a standalone validator before it is used to close the pre-MVP external evidence gate." -CheckIds @("staff_steward_pilot_report_validation") -Checks $checks -Evidence "Pilot report validation verifies the report schema, SHA-256, confirmations, hashed evidence files, and filled pilot evidence packet content without accepting dry-run evidence as final signoff."
     New-Requirement -Id "staff_steward_pilot_closeout" -Description "The filled staff/steward pilot handoff has a single fail-closed closeout path before the external pilot evidence gate is accepted." -CheckIds @("staff_steward_pilot_closeout_validation") -Checks $checks -Evidence "Pilot closeout validation accepts a completed evidence packet, verifies filled evidence, generates the final pilot report, validates its hash, and reruns the pre-MVP gate for real operator closeout."
     New-Requirement -Id "staging_readiness_gate" -Description "The staging readiness gate can prove staging artifact isolation, staging endpoint configuration, operational drill evidence, rollback evidence, and signed promotion approvals before canary or production release." -CheckIds @("staging_readiness_gate_validation") -Checks $checks -Evidence "Staging readiness validator uses synthetic fixtures to exercise report/hash validation, staging artifact validation, endpoint isolation, operational drill evidence, rollback evidence, promotion approvals, and no staging-to-production migration checks."
-    New-Requirement -Id "staging_readiness_evidence_packet" -Description "The staging readiness evidence packet can be generated and validated before staging readiness values are loaded." -CheckIds @("staging_readiness_evidence_packet_validation") -Checks $checks -Evidence "Staging readiness evidence packet validation checks operational drill, rollback drill, promotion approval, hashes, and cross-references."
+    New-Requirement -Id "staging_readiness_evidence_packet" -Description "The staging readiness evidence packet can be generated, filled, and validated before staging readiness values are loaded." -CheckIds @("staging_readiness_evidence_packet_validation", "staging_readiness_evidence_fill_helper_validation") -Checks $checks -Evidence "Staging readiness evidence packet validation checks operational drill, rollback drill, promotion approval, hashes, and cross-references; the fill helper requires explicit operator confirmations and recomputes source report hashes."
     New-Requirement -Id "staging_readiness_closeout" -Description "The filled staging readiness packet has a single fail-closed closeout path before canary or production readiness can depend on it." -CheckIds @("staging_readiness_closeout_validation") -Checks $checks -Evidence "Staging closeout validation verifies a filled packet, generates a closeout environment, runs staging readiness, and emits the staging readiness report path and SHA-256 needed downstream."
     New-Requirement -Id "canary_mvp_readiness_gate" -Description "The Canary MVP readiness gate can prove incident review, balance reconciliation, service-delivery reconciliation, support readiness, and signed production-promotion approvals before ProductionMvp release." -CheckIds @("canary_mvp_readiness_gate_validation") -Checks $checks -Evidence "Canary MVP readiness validator uses synthetic fixtures to exercise staging evidence, CanaryMvp artifact validation, policy limits, incident review, balance reconciliation, service delivery reconciliation, support readiness, and production-promotion approval checks."
-    New-Requirement -Id "canary_mvp_readiness_evidence_packet" -Description "The Canary MVP readiness evidence packet can be generated and validated before canary readiness values are loaded." -CheckIds @("canary_mvp_readiness_evidence_packet_validation") -Checks $checks -Evidence "Canary readiness evidence packet validation checks policy limits, incident review, balance reconciliation, service delivery reconciliation, support readiness, production approval, hashes, and cross-references."
+    New-Requirement -Id "canary_mvp_readiness_evidence_packet" -Description "The Canary MVP readiness evidence packet can be generated, filled, and validated before canary readiness values are loaded." -CheckIds @("canary_mvp_readiness_evidence_packet_validation", "canary_mvp_readiness_evidence_fill_helper_validation") -Checks $checks -Evidence "Canary readiness evidence packet validation checks policy limits, incident review, balance reconciliation, service delivery reconciliation, support readiness, production approval, hashes, and cross-references; the fill helper requires explicit operator confirmations and recomputes source report hashes."
     New-Requirement -Id "canary_mvp_readiness_closeout" -Description "The filled Canary MVP readiness packet has a single fail-closed closeout path before ProductionMvp readiness can depend on it." -CheckIds @("canary_mvp_readiness_closeout_validation") -Checks $checks -Evidence "Canary closeout validation verifies a filled packet, generates a closeout environment, runs canary readiness, and emits the canary readiness report path and SHA-256 needed downstream."
     New-Requirement -Id "production_readiness_fail_closed" -Description "The ProductionMvp readiness gate fails closed instead of passing live probes when production endpoints, operator secrets, storage status, or managed signing custody inputs are absent." -CheckIds @("production_readiness_fail_closed_validation") -Checks $checks -Evidence "Fail-closed validation clears all production readiness variables and verifies every ProductionMvp gate fails, including hosted runtime/operator/AI, managed storage, and managed signing probe gates."
     New-Requirement -Id "production_mvp_artifact_policy" -Description "ProductionMvp artifacts cannot validate if packaging skipped the readiness gate or omitted readiness evidence." -CheckIds @("production_mvp_artifact_policy_validation") -Checks $checks -Evidence "ProductionMvp artifact policy validation creates synthetic release artifacts and verifies artifact validation rejects missing/skipped readiness evidence while accepting an artifact that records a passing readiness gate."

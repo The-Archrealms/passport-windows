@@ -24,6 +24,16 @@ Generate a controlled canary evidence packet, fill every placeholder, approve th
   -CanaryArtifactValidationReportSha256 "<canary-artifact-validation-report-sha256>"
 ```
 
+After canary policy, reconciliation, support, and approval evidence exists, prefer the structured helper to fill the packet. It requires explicit confirmation switches for every readiness claim and recomputes the staging readiness and canary artifact report hashes when their report paths are supplied:
+
+```powershell
+.\tools\release\Set-PassportCanaryMvpReadinessEvidencePacket.ps1 `
+  -PacketRoot .\artifacts\release\canary-mvp-readiness-evidence `
+  -StagingReadinessReportPath .\artifacts\release\staging-readiness-report.json `
+  -CanaryArtifactValidationReportPath .\artifacts\release\canary-artifact-validation-report.json `
+  -Force
+```
+
 Validate the filled packet before running the canary readiness gate:
 
 ```powershell

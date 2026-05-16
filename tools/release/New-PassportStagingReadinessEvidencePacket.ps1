@@ -151,6 +151,12 @@ if ((-not (Test-Path -LiteralPath $readmePath -PathType Leaf)) -or $Force) {
         ''
         'Fill the three JSON files in this folder after the staging operational and rollback drills are complete.'
         ''
+        'Prefer the structured helper so hashes and required confirmations are filled consistently:'
+        ''
+        '```powershell'
+        ('.\tools\release\Set-PassportStagingReadinessEvidencePacket.ps1 -PacketRoot "{0}" -Force' -f $resolvedOutput)
+        '```'
+        ''
         'Validate with:'
         ''
         '```powershell'

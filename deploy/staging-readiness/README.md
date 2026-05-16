@@ -20,6 +20,16 @@ Generate a controlled staging evidence packet, fill every placeholder, approve t
   -PromotionApprovalId <staging-promotion-approval-id>
 ```
 
+After the drills and approvals exist, prefer the structured helper to fill the three JSON records. It requires explicit confirmation switches for every readiness claim and recomputes the pre-MVP and staging artifact report hashes when their report paths are supplied:
+
+```powershell
+.\tools\release\Set-PassportStagingReadinessEvidencePacket.ps1 `
+  -PacketRoot C:\secure\passport-staging `
+  -PreMvpReportPath .\artifacts\release\pre-mvp-internal-verification-report.json `
+  -StagingArtifactValidationReportPath .\artifacts\release\staging-artifact-validation-report.json `
+  -Force
+```
+
 Validate the filled packet before running the staging readiness gate:
 
 ```powershell

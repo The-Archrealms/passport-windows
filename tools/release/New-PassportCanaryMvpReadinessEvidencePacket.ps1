@@ -203,6 +203,12 @@ if ((-not (Test-Path -LiteralPath $readmePath -PathType Leaf)) -or $Force) {
         'Do not mark policy, incident, balance, service delivery, support, or production approval fields complete until the supporting evidence exists.'
         'After editing any evidence file, update the matching SHA-256 fields in canary-production-approval-record.json.'
         ''
+        'Prefer the structured helper so hashes and required confirmations are filled consistently:'
+        ''
+        '```powershell'
+        ('.\tools\release\Set-PassportCanaryMvpReadinessEvidencePacket.ps1 -PacketRoot "{0}" -Force' -f $resolvedOutput)
+        '```'
+        ''
         'Validate with:'
         ''
         '```powershell'
