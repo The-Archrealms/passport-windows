@@ -206,6 +206,7 @@ function New-AuditItem {
         [string]$Requirement,
         [string]$Status,
         [string[]]$EvidenceIds = @(),
+        [string[]]$CoverageCheckIds = @(),
         [string[]]$EvidenceNotes = @(),
         [string[]]$Blockers = @(),
         [object[]]$OperatorActions = @()
@@ -217,6 +218,7 @@ function New-AuditItem {
         requirement = $Requirement
         status = $Status
         evidence_ids = @($EvidenceIds)
+        coverage_check_ids = @($CoverageCheckIds | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
         evidence_notes = @($EvidenceNotes | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
         blockers = @($Blockers | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
         operator_actions = @($OperatorActions)
@@ -341,6 +343,11 @@ $items += New-AuditItem -Id "prd_success_identity_recovery" -Source "PRD Success
 $items += New-AuditItem -Id "prd_success_device_authorization" -Source "PRD Success Criteria" -Requirement "A citizen can authorize a device." -Status $identityStatus -EvidenceIds @("pre_mvp_internal_verification") -EvidenceNotes @("Covered by Windows Passport automated tests in the pre-MVP report.")
 $items += New-AuditItem -Id "prd_success_wallet_key_binding" -Source "PRD Success Criteria" -Requirement "A citizen can bind a wallet key." -Status $identityStatus -EvidenceIds @("pre_mvp_internal_verification") -EvidenceNotes @("Covered by Windows Passport automated tests and Core wallet authorization tests.")
 
+$storageCoverageCheckIds = @("storage_redemption_targeted_tests", "windows_monetary_ledger_targeted_tests")
+$monetaryCoverageCheckIds = @("core_monetary_protocol_targeted_tests", "windows_monetary_ledger_targeted_tests")
+$ledgerCoverageCheckIds = @("core_monetary_protocol_targeted_tests", "windows_monetary_ledger_targeted_tests", "ledger_verifier_build")
+$aiCoverageCheckIds = @("hosted_ai_targeted_tests", "windows_ai_gateway_targeted_tests", "open_weight_ai_runtime_deployment_validation")
+
 $issuerBlockers = Get-OutstandingGateFailures -OutstandingReport $outstanding -Id "issuer_capacity_genesis_secrets"
 $items += New-AuditItem `
     -Id "prd_success_real_arch" `
@@ -348,7 +355,8 @@ $items += New-AuditItem `
     -Requirement "Passport can hold, display, and export real fixed-genesis ARCH." `
     -Status $(if ((Get-Gate -Report $productionReadiness -Id "issuer_capacity_genesis_secrets").passed -eq $true) { "passed" } else { "blocked" }) `
     -EvidenceIds @("pre_mvp_internal_verification", "production_mvp_readiness", "production_mvp_outstanding_work") `
-    -EvidenceNotes @("Implementation tests pass, but production ARCH requires the approved genesis manifest and ledger namespace.") `
+    -CoverageCheckIds $monetaryCoverageCheckIds `
+    -EvidenceNotes @("Implementation coverage is tied to targeted monetary protocol and Windows ledger checks; production ARCH requires the approved genesis manifest and ledger namespace.") `
     -Blockers $issuerBlockers `
     -OperatorActions (Get-OutstandingGateAction -OutstandingReport $outstanding -Id "issuer_capacity_genesis_secrets")
 
@@ -358,11 +366,12 @@ $items += New-AuditItem `
     -Requirement "Passport can hold, display, and export real Crown Credit." `
     -Status $(if ((Get-Gate -Report $productionReadiness -Id "issuer_capacity_genesis_secrets").passed -eq $true) { "passed" } else { "blocked" }) `
     -EvidenceIds @("pre_mvp_internal_verification", "production_mvp_readiness", "production_mvp_outstanding_work") `
-    -EvidenceNotes @("Implementation tests pass, but production CC requires issuer/capacity/genesis and production ledger namespace values.") `
+    -CoverageCheckIds $monetaryCoverageCheckIds `
+    -EvidenceNotes @("Implementation coverage is tied to targeted monetary protocol and Windows ledger checks; production CC requires issuer/capacity/genesis and production ledger namespace values.") `
     -Blockers $issuerBlockers `
     -OperatorActions (Get-OutstandingGateAction -OutstandingReport $outstanding -Id "issuer_capacity_genesis_secrets")
 
-$storageStatus = Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds @("windows_tests")
+$storageStatus = Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds $storageCoverageCheckIds
 $storageBlockers = @()
 $storageBlockers += @(Get-OutstandingGateFailures -OutstandingReport $outstanding -Id "managed_storage_status")
 $storageBlockers += @(Get-OutstandingGateFailures -OutstandingReport $outstanding -Id "managed_storage_backups")
@@ -375,7 +384,8 @@ $items += New-AuditItem `
     -Requirement "Passport can redeem CC for listed Crown-administered storage service." `
     -Status $(if ($storageStatus -eq "passed" -and $storageBlockers.Count -eq 0) { "passed" } elseif ($storageStatus -eq "passed") { "partial" } else { $storageStatus }) `
     -EvidenceIds @("pre_mvp_internal_verification", "production_mvp_readiness", "production_mvp_outstanding_work") `
-    -EvidenceNotes @("Storage redemption implementation is covered by Windows tests; production service delivery remains gated on managed storage provisioning/status.") `
+    -CoverageCheckIds $storageCoverageCheckIds `
+    -EvidenceNotes @("Storage redemption implementation is covered by targeted storage-redemption and Windows monetary ledger checks; production service delivery remains gated on managed storage provisioning/status.") `
     -Blockers $storageBlockers `
     -OperatorActions $storageActions
 
@@ -385,16 +395,17 @@ $items += New-AuditItem `
     -Requirement "CC redemption uses escrow, verified service delivery, burn, refund, and re-credit records." `
     -Status $(if ($storageStatus -eq "passed" -and $storageBlockers.Count -eq 0) { "passed" } elseif ($storageStatus -eq "passed") { "partial" } else { $storageStatus }) `
     -EvidenceIds @("pre_mvp_internal_verification", "production_mvp_readiness", "production_mvp_outstanding_work") `
-    -EvidenceNotes @("Proof-linked redemption and remedy paths are covered by Windows tests; production storage status is still blocked.") `
+    -CoverageCheckIds $storageCoverageCheckIds `
+    -EvidenceNotes @("Proof-linked redemption and remedy paths are covered by targeted storage-redemption and Windows monetary ledger checks; production storage status is still blocked.") `
     -Blockers $storageBlockers `
     -OperatorActions $storageActions
 
 $items += New-AuditItem -Id "prd_success_resource_contribution" -Source "PRD Success Criteria" -Requirement "Resource contribution is optional, revocable, and disclosed." -Status $storageStatus -EvidenceIds @("pre_mvp_internal_verification") -EvidenceNotes @("Covered by Windows storage contribution tests and lane artifact validation.")
-$items += New-AuditItem -Id "prd_success_arch_cc_conversion" -Source "PRD Success Criteria" -Requirement "ARCH/CC conversion is available only where floating-rate liquidity exists and is disclosed." -Status (Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds @("windows_tests", "core_tests")) -EvidenceIds @("pre_mvp_internal_verification") -EvidenceNotes @("Conversion quote/execution validation is covered by Core and Windows tests; external liquidity is not required by the MVP unless configured.")
-$items += New-AuditItem -Id "prd_success_no_post_genesis_arch_mint" -Source "PRD/ARD Monetary Invariants" -Requirement "No post-genesis ARCH mint path exists." -Status (Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds @("core_tests", "windows_tests")) -EvidenceIds @("pre_mvp_internal_verification")
-$items += New-AuditItem -Id "prd_success_cc_capacity_constrained" -Source "PRD/ARD Monetary Invariants" -Requirement "CC issuance is constrained by conservative deliverable service capacity." -Status (Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds @("core_tests", "windows_tests", "production_monetary_provisioning_validation")) -EvidenceIds @("pre_mvp_internal_verification")
-$items += New-AuditItem -Id "prd_success_cc_does_not_create_arch" -Source "PRD/ARD Monetary Invariants" -Requirement "CC issuance cannot create ARCH or add ARCH to Crown reserves." -Status (Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds @("core_tests", "windows_tests", "production_monetary_provisioning_validation")) -EvidenceIds @("pre_mvp_internal_verification")
-$items += New-AuditItem -Id "prd_success_ledger_export_auditability" -Source "PRD/ARD Ledger and Export" -Requirement "Ledger events are signed, replayable, exportable, and correction-safe." -Status (Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds @("core_tests", "windows_tests", "ledger_verifier_build")) -EvidenceIds @("pre_mvp_internal_verification")
+$items += New-AuditItem -Id "prd_success_arch_cc_conversion" -Source "PRD Success Criteria" -Requirement "ARCH/CC conversion is available only where floating-rate liquidity exists and is disclosed." -Status (Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds $monetaryCoverageCheckIds) -EvidenceIds @("pre_mvp_internal_verification") -CoverageCheckIds $monetaryCoverageCheckIds -EvidenceNotes @("Conversion quote/execution validation is covered by targeted monetary protocol and Windows ledger checks; external liquidity is not required by the MVP unless configured.")
+$items += New-AuditItem -Id "prd_success_no_post_genesis_arch_mint" -Source "PRD/ARD Monetary Invariants" -Requirement "No post-genesis ARCH mint path exists." -Status (Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds $monetaryCoverageCheckIds) -EvidenceIds @("pre_mvp_internal_verification") -CoverageCheckIds $monetaryCoverageCheckIds
+$items += New-AuditItem -Id "prd_success_cc_capacity_constrained" -Source "PRD/ARD Monetary Invariants" -Requirement "CC issuance is constrained by conservative deliverable service capacity." -Status (Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds @($monetaryCoverageCheckIds + "production_monetary_provisioning_validation")) -EvidenceIds @("pre_mvp_internal_verification") -CoverageCheckIds @($monetaryCoverageCheckIds + "production_monetary_provisioning_validation")
+$items += New-AuditItem -Id "prd_success_cc_does_not_create_arch" -Source "PRD/ARD Monetary Invariants" -Requirement "CC issuance cannot create ARCH or add ARCH to Crown reserves." -Status (Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds @($monetaryCoverageCheckIds + "production_monetary_provisioning_validation")) -EvidenceIds @("pre_mvp_internal_verification") -CoverageCheckIds @($monetaryCoverageCheckIds + "production_monetary_provisioning_validation")
+$items += New-AuditItem -Id "prd_success_ledger_export_auditability" -Source "PRD/ARD Ledger and Export" -Requirement "Ledger events are signed, replayable, exportable, and correction-safe." -Status (Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds $ledgerCoverageCheckIds) -EvidenceIds @("pre_mvp_internal_verification") -CoverageCheckIds $ledgerCoverageCheckIds
 
 $aiBlockers = @()
 $aiBlockers += @(Get-OutstandingGateFailures -OutstandingReport $outstanding -Id "open_weight_ai_runtime")
@@ -402,13 +413,15 @@ $aiBlockers += @(Get-OutstandingGateFailures -OutstandingReport $outstanding -Id
 $aiActions = @()
 $aiActions += @(Get-OutstandingGateAction -OutstandingReport $outstanding -Id "open_weight_ai_runtime")
 $aiActions += @(Get-OutstandingGateAction -OutstandingReport $outstanding -Id "hosted_ai_runtime_probe")
+$aiImplementationStatus = Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds $aiCoverageCheckIds
 $items += New-AuditItem `
     -Id "prd_success_hosted_ai" `
     -Source "PRD Success Criteria" `
     -Requirement "Hosted AI is authenticated, privacy-bounded, non-authoritative, and quota-controlled." `
-    -Status $(if ((Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds @("hosted_service_tests", "windows_tests", "open_weight_ai_runtime_deployment_validation")) -eq "passed" -and $aiBlockers.Count -eq 0) { "passed" } else { "partial" }) `
+    -Status $(if ($aiImplementationStatus -eq "passed" -and $aiBlockers.Count -eq 0) { "passed" } elseif ($aiImplementationStatus -eq "passed") { "partial" } else { $aiImplementationStatus }) `
     -EvidenceIds @("pre_mvp_internal_verification", "production_mvp_readiness", "production_mvp_outstanding_work") `
-    -EvidenceNotes @("Hosted/Windows implementation tests pass; production open-weight model runtime and live probe remain blocked until provisioned.") `
+    -CoverageCheckIds $aiCoverageCheckIds `
+    -EvidenceNotes @("Hosted AI implementation coverage is tied to targeted hosted AI, Windows AI gateway, and open-weight runtime deployment checks; production open-weight model runtime and live probe remain blocked until provisioned.") `
     -Blockers $aiBlockers `
     -OperatorActions $aiActions
 
@@ -501,6 +514,9 @@ if (-not [string]::IsNullOrWhiteSpace($MarkdownOutputPath)) {
         $lines.Add("- ``$($item.id)`` [$($item.status)]: $($item.requirement)")
         if (@($item.evidence_ids).Count -gt 0) {
             $lines.Add("  - Evidence: $((@($item.evidence_ids) -join ', '))")
+        }
+        if (@($item.coverage_check_ids).Count -gt 0) {
+            $lines.Add("  - Coverage checks: $((@($item.coverage_check_ids) -join ', '))")
         }
         foreach ($note in @($item.evidence_notes | Select-Object -First 2)) {
             $lines.Add("  - Note: $note")

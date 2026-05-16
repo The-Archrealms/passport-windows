@@ -130,6 +130,11 @@ function New-CompletionAuditFixture {
         "windows_tests",
         "hosted_service_tests",
         "ledger_verifier_build",
+        "storage_redemption_targeted_tests",
+        "core_monetary_protocol_targeted_tests",
+        "windows_monetary_ledger_targeted_tests",
+        "hosted_ai_targeted_tests",
+        "windows_ai_gateway_targeted_tests",
         "production_monetary_provisioning_validation",
         "open_weight_ai_runtime_deployment_validation"
     )
@@ -138,6 +143,11 @@ function New-CompletionAuditFixture {
         New-FixtureRequirement -Id "passport_windows_user_flows" -CheckIds @("windows_tests")
         New-FixtureRequirement -Id "hosted_ai_service_contracts" -CheckIds @("hosted_service_tests")
         New-FixtureRequirement -Id "ledger_export_verifier" -CheckIds @("ledger_verifier_build")
+        New-FixtureRequirement -Id "storage_redemption_targeted_coverage" -CheckIds @("storage_redemption_targeted_tests")
+        New-FixtureRequirement -Id "core_monetary_protocol_targeted_coverage" -CheckIds @("core_monetary_protocol_targeted_tests")
+        New-FixtureRequirement -Id "windows_monetary_ledger_targeted_coverage" -CheckIds @("windows_monetary_ledger_targeted_tests")
+        New-FixtureRequirement -Id "hosted_ai_targeted_coverage" -CheckIds @("hosted_ai_targeted_tests")
+        New-FixtureRequirement -Id "windows_ai_gateway_targeted_coverage" -CheckIds @("windows_ai_gateway_targeted_tests")
         New-FixtureRequirement -Id "production_monetary_provisioning_package" -CheckIds @("production_monetary_provisioning_validation")
         New-FixtureRequirement -Id "open_weight_ai_runtime_deployment_package" -CheckIds @("open_weight_ai_runtime_deployment_validation")
     )
@@ -452,6 +462,7 @@ $checks += Add-Check -Id "report_exists" -Condition $reportExists -Failure "comp
 $checks += Add-Check -Id "markdown_exists" -Condition $markdownExists -Failure "completion audit Markdown report is missing" -Evidence ([pscustomobject][ordered]@{ path = $resolvedMarkdownPath })
 
 $report = Read-JsonFile -Path $resolvedReportPath
+$preMvpReport = Read-JsonFile -Path $resolvedPreMvpInternalVerificationReportPath
 $checks += Add-Check -Id "schema" -Condition ($null -ne $report -and [string]$report.schema -eq "archrealms.passport.token_ready_mvp_completion_audit.v1") -Failure "completion audit schema is invalid or missing"
 $checks += Add-Check -Id "app_commit" -Condition ($null -ne $report -and [string]$report.app_commit -match '^[0-9a-f]{7,40}$') -Failure "app_commit is missing or not a git commit hash" -Evidence ([pscustomobject][ordered]@{ app_commit = $(if ($null -eq $report) { "" } else { [string]$report.app_commit }) })
 
@@ -536,6 +547,33 @@ foreach ($sourceId in $requiredSourceFileIds) {
     $sourceFileSet[$sourceId] = $true
 }
 
+$preMvpCheckSet = @{}
+$preMvpPassedCheckSet = @{}
+if ($null -ne $preMvpReport -and $preMvpReport.PSObject.Properties["checks"]) {
+    foreach ($preMvpCheck in @($preMvpReport.checks)) {
+        $preMvpCheckId = [string]$preMvpCheck.id
+        if (-not [string]::IsNullOrWhiteSpace($preMvpCheckId)) {
+            $preMvpCheckSet[$preMvpCheckId] = $true
+            if ($preMvpCheck.passed -eq $true) {
+                $preMvpPassedCheckSet[$preMvpCheckId] = $true
+            }
+        }
+    }
+}
+
+$requiredCoverageByChecklistId = @{
+    prd_success_real_arch = @("core_monetary_protocol_targeted_tests", "windows_monetary_ledger_targeted_tests")
+    prd_success_real_cc = @("core_monetary_protocol_targeted_tests", "windows_monetary_ledger_targeted_tests")
+    prd_success_storage_redemption = @("storage_redemption_targeted_tests", "windows_monetary_ledger_targeted_tests")
+    prd_success_storage_escrow_burn_refund_recredit = @("storage_redemption_targeted_tests", "windows_monetary_ledger_targeted_tests")
+    prd_success_arch_cc_conversion = @("core_monetary_protocol_targeted_tests", "windows_monetary_ledger_targeted_tests")
+    prd_success_no_post_genesis_arch_mint = @("core_monetary_protocol_targeted_tests", "windows_monetary_ledger_targeted_tests")
+    prd_success_cc_capacity_constrained = @("core_monetary_protocol_targeted_tests", "windows_monetary_ledger_targeted_tests", "production_monetary_provisioning_validation")
+    prd_success_cc_does_not_create_arch = @("core_monetary_protocol_targeted_tests", "windows_monetary_ledger_targeted_tests", "production_monetary_provisioning_validation")
+    prd_success_ledger_export_auditability = @("core_monetary_protocol_targeted_tests", "windows_monetary_ledger_targeted_tests", "ledger_verifier_build")
+    prd_success_hosted_ai = @("hosted_ai_targeted_tests", "windows_ai_gateway_targeted_tests", "open_weight_ai_runtime_deployment_validation")
+}
+
 $itemFailures = @()
 foreach ($item in $checklist) {
     $id = [string]$item.id
@@ -559,6 +597,31 @@ foreach ($item in $checklist) {
     foreach ($evidenceId in Get-ObjectArray -Object $item -Name "evidence_ids") {
         if (-not $sourceFileSet.ContainsKey([string]$evidenceId)) {
             $itemFailures += "$id references unknown evidence id: $evidenceId"
+        }
+    }
+
+    $coverageCheckIds = @(Get-ObjectArray -Object $item -Name "coverage_check_ids" | ForEach-Object { [string]$_ })
+    if ($requiredCoverageByChecklistId.ContainsKey($id)) {
+        foreach ($requiredCoverageId in @($requiredCoverageByChecklistId[$id])) {
+            if ($coverageCheckIds -notcontains $requiredCoverageId) {
+                $itemFailures += "$id is missing required coverage check id: $requiredCoverageId"
+            }
+        }
+    }
+
+    if ($coverageCheckIds.Count -gt 0) {
+        $evidenceIds = @(Get-ObjectArray -Object $item -Name "evidence_ids" | ForEach-Object { [string]$_ })
+        if ($evidenceIds -notcontains "pre_mvp_internal_verification") {
+            $itemFailures += "$id has coverage_check_ids but does not reference pre_mvp_internal_verification evidence"
+        }
+
+        foreach ($coverageCheckId in $coverageCheckIds) {
+            if (-not $preMvpCheckSet.ContainsKey($coverageCheckId)) {
+                $itemFailures += "$id references unknown pre-MVP coverage check id: $coverageCheckId"
+            }
+            elseif (([string]$item.status -eq "passed" -or [string]$item.status -eq "partial") -and -not $preMvpPassedCheckSet.ContainsKey($coverageCheckId)) {
+                $itemFailures += "$id is $($item.status) but pre-MVP coverage check did not pass: $coverageCheckId"
+            }
         }
     }
 
