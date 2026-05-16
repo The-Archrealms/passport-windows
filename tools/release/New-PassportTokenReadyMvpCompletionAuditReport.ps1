@@ -338,15 +338,18 @@ $items += New-AuditItem `
     -Blockers (Get-OutstandingGateFailures -OutstandingReport $outstanding -Id "package_signing") `
     -OperatorActions (Get-OutstandingGateAction -OutstandingReport $outstanding -Id "package_signing")
 
-$identityStatus = Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds @("windows_tests")
-$items += New-AuditItem -Id "prd_success_identity_recovery" -Source "PRD Success Criteria" -Requirement "A citizen can create or recover a Passport identity." -Status $identityStatus -EvidenceIds @("pre_mvp_internal_verification") -EvidenceNotes @("Covered by Windows Passport automated tests in the pre-MVP report.")
-$items += New-AuditItem -Id "prd_success_device_authorization" -Source "PRD Success Criteria" -Requirement "A citizen can authorize a device." -Status $identityStatus -EvidenceIds @("pre_mvp_internal_verification") -EvidenceNotes @("Covered by Windows Passport automated tests in the pre-MVP report.")
-$items += New-AuditItem -Id "prd_success_wallet_key_binding" -Source "PRD Success Criteria" -Requirement "A citizen can bind a wallet key." -Status $identityStatus -EvidenceIds @("pre_mvp_internal_verification") -EvidenceNotes @("Covered by Windows Passport automated tests and Core wallet authorization tests.")
-
+$identityCoverageCheckIds = @("windows_identity_recovery_targeted_tests")
+$deviceCoverageCheckIds = @("windows_device_authorization_targeted_tests")
+$walletCoverageCheckIds = @("windows_wallet_key_targeted_tests", "core_wallet_binding_targeted_tests")
+$resourceCoverageCheckIds = @("windows_resource_contribution_targeted_tests")
 $storageCoverageCheckIds = @("storage_redemption_targeted_tests", "windows_monetary_ledger_targeted_tests")
 $monetaryCoverageCheckIds = @("core_monetary_protocol_targeted_tests", "windows_monetary_ledger_targeted_tests")
 $ledgerCoverageCheckIds = @("core_monetary_protocol_targeted_tests", "windows_monetary_ledger_targeted_tests", "ledger_verifier_build")
 $aiCoverageCheckIds = @("hosted_ai_targeted_tests", "windows_ai_gateway_targeted_tests", "open_weight_ai_runtime_deployment_validation")
+
+$items += New-AuditItem -Id "prd_success_identity_recovery" -Source "PRD Success Criteria" -Requirement "A citizen can create or recover a Passport identity." -Status (Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds $identityCoverageCheckIds) -EvidenceIds @("pre_mvp_internal_verification") -CoverageCheckIds $identityCoverageCheckIds -EvidenceNotes @("Covered by targeted Windows identity/recovery tests in the pre-MVP report.")
+$items += New-AuditItem -Id "prd_success_device_authorization" -Source "PRD Success Criteria" -Requirement "A citizen can authorize a device." -Status (Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds $deviceCoverageCheckIds) -EvidenceIds @("pre_mvp_internal_verification") -CoverageCheckIds $deviceCoverageCheckIds -EvidenceNotes @("Covered by targeted Windows device authorization tests in the pre-MVP report.")
+$items += New-AuditItem -Id "prd_success_wallet_key_binding" -Source "PRD Success Criteria" -Requirement "A citizen can bind a wallet key." -Status (Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds $walletCoverageCheckIds) -EvidenceIds @("pre_mvp_internal_verification") -CoverageCheckIds $walletCoverageCheckIds -EvidenceNotes @("Covered by targeted Windows wallet-key and Core wallet authorization tests.")
 
 $issuerBlockers = Get-OutstandingGateFailures -OutstandingReport $outstanding -Id "issuer_capacity_genesis_secrets"
 $items += New-AuditItem `
@@ -400,7 +403,7 @@ $items += New-AuditItem `
     -Blockers $storageBlockers `
     -OperatorActions $storageActions
 
-$items += New-AuditItem -Id "prd_success_resource_contribution" -Source "PRD Success Criteria" -Requirement "Resource contribution is optional, revocable, and disclosed." -Status $storageStatus -EvidenceIds @("pre_mvp_internal_verification") -EvidenceNotes @("Covered by Windows storage contribution tests and lane artifact validation.")
+$items += New-AuditItem -Id "prd_success_resource_contribution" -Source "PRD Success Criteria" -Requirement "Resource contribution is optional, revocable, and disclosed." -Status (Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds $resourceCoverageCheckIds) -EvidenceIds @("pre_mvp_internal_verification") -CoverageCheckIds $resourceCoverageCheckIds -EvidenceNotes @("Covered by targeted Windows resource contribution tests and lane artifact validation.")
 $items += New-AuditItem -Id "prd_success_arch_cc_conversion" -Source "PRD Success Criteria" -Requirement "ARCH/CC conversion is available only where floating-rate liquidity exists and is disclosed." -Status (Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds $monetaryCoverageCheckIds) -EvidenceIds @("pre_mvp_internal_verification") -CoverageCheckIds $monetaryCoverageCheckIds -EvidenceNotes @("Conversion quote/execution validation is covered by targeted monetary protocol and Windows ledger checks; external liquidity is not required by the MVP unless configured.")
 $items += New-AuditItem -Id "prd_success_no_post_genesis_arch_mint" -Source "PRD/ARD Monetary Invariants" -Requirement "No post-genesis ARCH mint path exists." -Status (Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds $monetaryCoverageCheckIds) -EvidenceIds @("pre_mvp_internal_verification") -CoverageCheckIds $monetaryCoverageCheckIds
 $items += New-AuditItem -Id "prd_success_cc_capacity_constrained" -Source "PRD/ARD Monetary Invariants" -Requirement "CC issuance is constrained by conservative deliverable service capacity." -Status (Get-StatusFromCheckIds -PreMvpReport $preMvp -CheckIds @($monetaryCoverageCheckIds + "production_monetary_provisioning_validation")) -EvidenceIds @("pre_mvp_internal_verification") -CoverageCheckIds @($monetaryCoverageCheckIds + "production_monetary_provisioning_validation")

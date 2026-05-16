@@ -128,6 +128,11 @@ function New-CompletionAuditFixture {
     $preMvpCheckIds = @(
         "core_tests",
         "windows_tests",
+        "windows_identity_recovery_targeted_tests",
+        "windows_device_authorization_targeted_tests",
+        "windows_wallet_key_targeted_tests",
+        "core_wallet_binding_targeted_tests",
+        "windows_resource_contribution_targeted_tests",
         "hosted_service_tests",
         "ledger_verifier_build",
         "storage_redemption_targeted_tests",
@@ -141,6 +146,10 @@ function New-CompletionAuditFixture {
     $preMvpRequirements = @(
         New-FixtureRequirement -Id "passport_core_contracts" -CheckIds @("core_tests")
         New-FixtureRequirement -Id "passport_windows_user_flows" -CheckIds @("windows_tests")
+        New-FixtureRequirement -Id "identity_recovery_targeted_coverage" -CheckIds @("windows_identity_recovery_targeted_tests")
+        New-FixtureRequirement -Id "device_authorization_targeted_coverage" -CheckIds @("windows_device_authorization_targeted_tests")
+        New-FixtureRequirement -Id "wallet_key_binding_targeted_coverage" -CheckIds @("windows_wallet_key_targeted_tests", "core_wallet_binding_targeted_tests")
+        New-FixtureRequirement -Id "resource_contribution_targeted_coverage" -CheckIds @("windows_resource_contribution_targeted_tests")
         New-FixtureRequirement -Id "hosted_ai_service_contracts" -CheckIds @("hosted_service_tests")
         New-FixtureRequirement -Id "ledger_export_verifier" -CheckIds @("ledger_verifier_build")
         New-FixtureRequirement -Id "storage_redemption_targeted_coverage" -CheckIds @("storage_redemption_targeted_tests")
@@ -562,10 +571,14 @@ if ($null -ne $preMvpReport -and $preMvpReport.PSObject.Properties["checks"]) {
 }
 
 $requiredCoverageByChecklistId = @{
+    prd_success_identity_recovery = @("windows_identity_recovery_targeted_tests")
+    prd_success_device_authorization = @("windows_device_authorization_targeted_tests")
+    prd_success_wallet_key_binding = @("windows_wallet_key_targeted_tests", "core_wallet_binding_targeted_tests")
     prd_success_real_arch = @("core_monetary_protocol_targeted_tests", "windows_monetary_ledger_targeted_tests")
     prd_success_real_cc = @("core_monetary_protocol_targeted_tests", "windows_monetary_ledger_targeted_tests")
     prd_success_storage_redemption = @("storage_redemption_targeted_tests", "windows_monetary_ledger_targeted_tests")
     prd_success_storage_escrow_burn_refund_recredit = @("storage_redemption_targeted_tests", "windows_monetary_ledger_targeted_tests")
+    prd_success_resource_contribution = @("windows_resource_contribution_targeted_tests")
     prd_success_arch_cc_conversion = @("core_monetary_protocol_targeted_tests", "windows_monetary_ledger_targeted_tests")
     prd_success_no_post_genesis_arch_mint = @("core_monetary_protocol_targeted_tests", "windows_monetary_ledger_targeted_tests")
     prd_success_cc_capacity_constrained = @("core_monetary_protocol_targeted_tests", "windows_monetary_ledger_targeted_tests", "production_monetary_provisioning_validation")

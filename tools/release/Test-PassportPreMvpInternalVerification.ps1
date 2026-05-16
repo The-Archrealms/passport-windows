@@ -666,6 +666,31 @@ if ($SkipDotnetTests) {
         -Passed $false `
         -Failures @("Windows tests were skipped; pre-MVP verification cannot pass with skipped tests.")
     $checks += New-Check `
+        -Id "windows_identity_recovery_targeted_tests" `
+        -Description "Targeted Windows identity/recovery tests cover Passport identity creation, recovery guidance, freezes, deauthorization, and support override paths." `
+        -Passed $false `
+        -Failures @("Targeted Windows identity/recovery tests were skipped; pre-MVP verification cannot pass with skipped tests.")
+    $checks += New-Check `
+        -Id "windows_device_authorization_targeted_tests" `
+        -Description "Targeted Windows device authorization tests cover signed challenges, registry submission signing, and deauthorization effects." `
+        -Passed $false `
+        -Failures @("Targeted Windows device authorization tests were skipped; pre-MVP verification cannot pass with skipped tests.")
+    $checks += New-Check `
+        -Id "windows_wallet_key_targeted_tests" `
+        -Description "Targeted Windows wallet key tests cover separated wallet binding, payload signing, revocation, rotation, and inactive-wallet rejection." `
+        -Passed $false `
+        -Failures @("Targeted Windows wallet key tests were skipped; pre-MVP verification cannot pass with skipped tests.")
+    $checks += New-Check `
+        -Id "core_wallet_binding_targeted_tests" `
+        -Description "Targeted Core wallet binding tests cover separated wallet policy, prohibited scopes, and registry wallet binding inspection." `
+        -Passed $false `
+        -Failures @("Targeted Core wallet binding tests were skipped; pre-MVP verification cannot pass with skipped tests.")
+    $checks += New-Check `
+        -Id "windows_resource_contribution_targeted_tests" `
+        -Description "Targeted Windows resource contribution tests cover storage opt-in, storage readiness, capacity snapshots, metering, and unmetered-network enforcement." `
+        -Passed $false `
+        -Failures @("Targeted Windows resource contribution tests were skipped; pre-MVP verification cannot pass with skipped tests.")
+    $checks += New-Check `
         -Id "ledger_verifier_build" `
         -Description "Portable ledger verifier builds for independent export replay." `
         -Passed $false `
@@ -714,6 +739,26 @@ else {
         -Id "windows_tests" `
         -Description "Windows Passport tests cover onboarding, wallet, ledger, recovery, storage, conversion, registry, and UI behavior." `
         -Result (Invoke-Tool -FilePath $dotnet -Arguments @("test", "tests\ArchrealmsPassport.Windows.Tests\ArchrealmsPassport.Windows.Tests.csproj", "-c", $Configuration, "--no-restore"))
+    $checks += New-ToolCheck `
+        -Id "windows_identity_recovery_targeted_tests" `
+        -Description "Targeted Windows identity/recovery tests cover Passport identity creation, recovery guidance, freezes, deauthorization, and support override paths." `
+        -Result (Invoke-Tool -FilePath $dotnet -Arguments @("test", "tests\ArchrealmsPassport.Windows.Tests\ArchrealmsPassport.Windows.Tests.csproj", "-c", $Configuration, "--no-restore", "--filter", "FullyQualifiedName~PassportRecordServiceTests|FullyQualifiedName~PassportRecoveryServiceTests"))
+    $checks += New-ToolCheck `
+        -Id "windows_device_authorization_targeted_tests" `
+        -Description "Targeted Windows device authorization tests cover signed challenges, registry submission signing, and deauthorization effects." `
+        -Result (Invoke-Tool -FilePath $dotnet -Arguments @("test", "tests\ArchrealmsPassport.Windows.Tests\ArchrealmsPassport.Windows.Tests.csproj", "-c", $Configuration, "--no-restore", "--filter", "FullyQualifiedName~PassportCryptoServiceTests|FullyQualifiedName~PassportRecoveryServiceTests"))
+    $checks += New-ToolCheck `
+        -Id "windows_wallet_key_targeted_tests" `
+        -Description "Targeted Windows wallet key tests cover separated wallet binding, payload signing, revocation, rotation, and inactive-wallet rejection." `
+        -Result (Invoke-Tool -FilePath $dotnet -Arguments @("test", "tests\ArchrealmsPassport.Windows.Tests\ArchrealmsPassport.Windows.Tests.csproj", "-c", $Configuration, "--no-restore", "--filter", "FullyQualifiedName~PassportWalletKeyServiceTests"))
+    $checks += New-ToolCheck `
+        -Id "core_wallet_binding_targeted_tests" `
+        -Description "Targeted Core wallet binding tests cover separated wallet policy, prohibited scopes, and registry wallet binding inspection." `
+        -Result (Invoke-Tool -FilePath $dotnet -Arguments @("test", "tests\ArchrealmsPassport.Core.Tests\ArchrealmsPassport.Core.Tests.csproj", "-c", $Configuration, "--no-restore", "--filter", "FullyQualifiedName~PassportWalletKeyBindingValidatorTests|FullyQualifiedName~PassportMonetaryProtocolTests|FullyQualifiedName~PassportRegistryRecordInspectorTests"))
+    $checks += New-ToolCheck `
+        -Id "windows_resource_contribution_targeted_tests" `
+        -Description "Targeted Windows resource contribution tests cover storage opt-in, storage readiness, capacity snapshots, metering, and unmetered-network enforcement." `
+        -Result (Invoke-Tool -FilePath $dotnet -Arguments @("test", "tests\ArchrealmsPassport.Windows.Tests\ArchrealmsPassport.Windows.Tests.csproj", "-c", $Configuration, "--no-restore", "--filter", "FullyQualifiedName~PassportMainViewModelHomeTests|FullyQualifiedName~PassportRecordServiceTests|FullyQualifiedName~NetworkUsageServiceTests"))
     $checks += New-ToolCheck `
         -Id "ledger_verifier_build" `
         -Description "Portable ledger verifier builds for independent export replay." `
@@ -1083,25 +1128,29 @@ $checks += New-Check `
     -Evidence $staffPilotEvidence.evidence
 
 $requirements = @(
-    New-Requirement -Id "synthetic_users" -Description "Synthetic users are exercised before citizen-facing token release." -CheckIds @("windows_tests") -Checks $checks -Evidence "Windows tests use isolated PassportTestWorkspace identities and records."
+    New-Requirement -Id "synthetic_users" -Description "Synthetic users are exercised before citizen-facing token release." -CheckIds @("windows_tests", "windows_identity_recovery_targeted_tests") -Checks $checks -Evidence "Windows tests use isolated PassportTestWorkspace identities and records."
     New-Requirement -Id "simulation_runs" -Description "Pre-MVP simulation runs are completed and evidence-backed before citizen-facing token release." -CheckIds @("simulation_run_evidence") -Checks $checks -Evidence "A signed or controlled simulation-run report must prove the required adversarial, failure, recovery, storage, market, wallet, identity, and AI privacy scenarios ran without production records."
     New-Requirement -Id "staff_steward_pilots" -Description "Staff/steward pilots are completed and evidence-backed before citizen-facing token release." -CheckIds @("staff_steward_pilot_evidence") -Checks $checks -Evidence "A signed or controlled pilot report must prove staff/steward operators used Crown-owned devices, no production tokens, and validated recovery, storage, ledger export, and hosted AI privacy posture."
-    New-Requirement -Id "crown_owned_test_devices" -Description "Crown-owned test devices and device authorization flows are exercised." -CheckIds @("windows_tests", "hosted_service_tests") -Checks $checks -Evidence "Device authorization, deauthorization, and hosted recovery validation tests use synthetic device keys."
+    New-Requirement -Id "crown_owned_test_devices" -Description "Crown-owned test devices and device authorization flows are exercised." -CheckIds @("windows_tests", "hosted_service_tests", "windows_device_authorization_targeted_tests") -Checks $checks -Evidence "Device authorization, deauthorization, and hosted recovery validation tests use synthetic device keys."
+    New-Requirement -Id "identity_recovery_targeted_coverage" -Description "Passport identity creation and recovery user flows have targeted Windows coverage." -CheckIds @("windows_identity_recovery_targeted_tests") -Checks $checks -Evidence "Targeted Windows identity/recovery tests cover identity records, recovery guidance, freezes, deauthorization, and support override."
+    New-Requirement -Id "device_authorization_targeted_coverage" -Description "Passport device authorization and deauthorization user flows have targeted Windows coverage." -CheckIds @("windows_device_authorization_targeted_tests") -Checks $checks -Evidence "Targeted Windows device authorization tests cover signed challenges, registry package signing, and deauthorization effects."
+    New-Requirement -Id "wallet_key_binding_targeted_coverage" -Description "Passport wallet key binding, rotation, and revocation user flows have targeted Windows and Core coverage." -CheckIds @("windows_wallet_key_targeted_tests", "core_wallet_binding_targeted_tests") -Checks $checks -Evidence "Targeted wallet tests cover separated wallet authority, signing, revocation, rotation, and policy validation."
+    New-Requirement -Id "resource_contribution_targeted_coverage" -Description "Optional resource contribution and network-limit user flows have targeted Windows coverage." -CheckIds @("windows_resource_contribution_targeted_tests") -Checks $checks -Evidence "Targeted resource contribution tests cover storage opt-in, storage readiness summaries, capacity snapshots, metering, and unmetered-network enforcement."
     New-Requirement -Id "crown_owned_test_storage_nodes" -Description "Crown-owned storage-node paths are exercised before citizen payloads." -CheckIds @("windows_tests", "hosted_service_tests", "storage_redemption_targeted_tests") -Checks $checks -Evidence "Storage contribution, storage readiness, and storage delivery tests run against isolated local/hosted test roots."
     New-Requirement -Id "synthetic_storage_payloads" -Description "Storage proof and delivery tests use synthetic payloads." -CheckIds @("storage_redemption_targeted_tests") -Checks $checks -Evidence "Targeted storage redemption tests validate manifests, proof packages, delivery metering, and failed proof handling without citizen data."
     New-Requirement -Id "fake_balances" -Description "Fake/pre-MVP balances are isolated from production balances." -CheckIds @("core_monetary_protocol_targeted_tests", "windows_monetary_ledger_targeted_tests", "internal_verification_artifact_lane") -Checks $checks -Evidence "Release-lane tests and artifact validation reject production-token permissions for non-production lanes."
     New-Requirement -Id "fake_arch" -Description "Fake ARCH cannot migrate into production fixed-genesis ARCH." -CheckIds @("core_monetary_protocol_targeted_tests", "windows_monetary_ledger_targeted_tests", "internal_verification_artifact_lane") -Checks $checks -Evidence "Ledger replay rejects cross-lane records and post-genesis mint-like events."
     New-Requirement -Id "fake_cc" -Description "Fake CC cannot migrate into production Crown Credit." -CheckIds @("core_monetary_protocol_targeted_tests", "windows_monetary_ledger_targeted_tests", "internal_verification_artifact_lane") -Checks $checks -Evidence "Ledger replay and artifact validation isolate non-production CC records from production ledger namespaces."
     New-Requirement -Id "ledger_replay_tests" -Description "Ledger replay, export, hash-chain, nonce, and tamper checks pass." -CheckIds @("core_monetary_protocol_targeted_tests", "windows_monetary_ledger_targeted_tests", "ledger_verifier_build") -Checks $checks -Evidence "Targeted core and Windows ledger/export verifier tests cover replay-derived balances and tamper rejection."
-    New-Requirement -Id "key_recovery_attacks" -Description "Key recovery attack paths are exercised." -CheckIds @("windows_tests", "hosted_service_tests") -Checks $checks -Evidence "Recovery, wallet rotation, device deauthorization, support override, and AI-approved recovery rejection tests pass."
+    New-Requirement -Id "key_recovery_attacks" -Description "Key recovery attack paths are exercised." -CheckIds @("windows_tests", "hosted_service_tests", "windows_identity_recovery_targeted_tests", "windows_device_authorization_targeted_tests", "windows_wallet_key_targeted_tests") -Checks $checks -Evidence "Recovery, wallet rotation, device deauthorization, support override, and AI-approved recovery rejection tests pass."
     New-Requirement -Id "storage_proof_attacks" -Description "Storage proof attack paths are exercised." -CheckIds @("storage_redemption_targeted_tests", "hosted_service_tests") -Checks $checks -Evidence "Targeted storage proof package, quote-rate, burn, readiness, and service-delivery policy tests pass."
-    New-Requirement -Id "storage_revocation_and_wipe_tests" -Description "Storage revocation and wipe-oriented controls are exercised." -CheckIds @("windows_tests") -Checks $checks -Evidence "Home/recovery/storage tests cover storage pause scope, contribution lifecycle, and failed startup recovery paths."
-    New-Requirement -Id "bandwidth_limit_tests" -Description "Bandwidth and unmetered-network controls are exercised." -CheckIds @("windows_tests") -Checks $checks -Evidence "Network usage and storage contribution tests cover unmetered-network/bandwidth behavior."
+    New-Requirement -Id "storage_revocation_and_wipe_tests" -Description "Storage revocation and wipe-oriented controls are exercised." -CheckIds @("windows_tests", "windows_resource_contribution_targeted_tests") -Checks $checks -Evidence "Home/recovery/storage tests cover storage pause scope, contribution lifecycle, and failed startup recovery paths."
+    New-Requirement -Id "bandwidth_limit_tests" -Description "Bandwidth and unmetered-network controls are exercised." -CheckIds @("windows_tests", "windows_resource_contribution_targeted_tests") -Checks $checks -Evidence "Network usage and storage contribution tests cover unmetered-network/bandwidth behavior."
     New-Requirement -Id "escrow_burn_refund_recredit_tests" -Description "Escrow, burn, refund, and re-credit flows are exercised." -CheckIds @("core_monetary_protocol_targeted_tests", "windows_monetary_ledger_targeted_tests", "storage_redemption_targeted_tests") -Checks $checks -Evidence "Targeted monetary semantics and storage redemption tests cover CC escrow, burn, refund, and failed-epoch re-credit."
     New-Requirement -Id "market_manipulation_simulations" -Description "Market manipulation and thin-market issuance paths are exercised." -CheckIds @("core_monetary_protocol_targeted_tests", "windows_monetary_ledger_targeted_tests", "hosted_service_tests") -Checks $checks -Evidence "Capacity report tests reject thin-market zero-issuance and over-limit issuance paths."
     New-Requirement -Id "service_failure_simulations" -Description "Service failure, refund, re-credit, and extension paths are exercised." -CheckIds @("storage_redemption_targeted_tests") -Checks $checks -Evidence "Targeted storage failure remedy tests create refund, re-credit, service-extension, and admin release records."
-    New-Requirement -Id "wallet_compromise_simulations" -Description "Wallet compromise and revoked-wallet paths are exercised." -CheckIds @("windows_monetary_ledger_targeted_tests", "core_monetary_protocol_targeted_tests") -Checks $checks -Evidence "Wallet revocation and production ledger tests reject revoked wallet keys."
-    New-Requirement -Id "identity_compromise_simulations" -Description "Identity compromise and device deauthorization paths are exercised." -CheckIds @("windows_tests", "hosted_service_tests") -Checks $checks -Evidence "Recovery tests cover identity_compromise freezes, device deauthorization, and hosted recovery validation."
+    New-Requirement -Id "wallet_compromise_simulations" -Description "Wallet compromise and revoked-wallet paths are exercised." -CheckIds @("windows_monetary_ledger_targeted_tests", "core_monetary_protocol_targeted_tests", "windows_wallet_key_targeted_tests", "core_wallet_binding_targeted_tests") -Checks $checks -Evidence "Wallet revocation and production ledger tests reject revoked wallet keys."
+    New-Requirement -Id "identity_compromise_simulations" -Description "Identity compromise and device deauthorization paths are exercised." -CheckIds @("windows_tests", "hosted_service_tests", "windows_identity_recovery_targeted_tests", "windows_device_authorization_targeted_tests") -Checks $checks -Evidence "Recovery tests cover identity_compromise freezes, device deauthorization, and hosted recovery validation."
     New-Requirement -Id "ai_privacy_and_retention_tests" -Description "AI privacy, retention, quota, and non-authority controls are exercised." -CheckIds @("hosted_ai_targeted_tests", "windows_ai_gateway_targeted_tests", "core_tests") -Checks $checks -Evidence "Targeted hosted and Windows AI tests cover no-training defaults, raw-prompt retention metadata, token-hash-only records, quota enforcement, and non-authority boundaries."
     New-Requirement -Id "managed_signing_endpoint_contract_tests" -Description "Managed signing endpoint contract, key metadata, local-validation marker, and API-key controls are exercised." -CheckIds @("managed_signing_tests", "managed_signing_deployment_validation") -Checks $checks -Evidence "Managed signing tests cover response signature verification, custody metadata, local-validation marker reporting, API-key SHA-256 authorization, and deployment package posture."
     New-Requirement -Id "package_signing_provisioning_package" -Description "Package-signing provisioning templates are validated before production signing secrets are loaded into readiness." -CheckIds @("package_signing_provisioning_validation") -Checks $checks -Evidence "Package-signing provisioning validator checks MSIX signing request, sideload trust, Store signing, timestamp, publisher, and Code Signing evidence contracts."
