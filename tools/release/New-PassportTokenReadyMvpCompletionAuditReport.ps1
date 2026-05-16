@@ -5,6 +5,13 @@ param(
     [string]$ProductionMvpReadinessReportPath = "artifacts\release\production-mvp-readiness-report.json",
     [string]$ProductionMvpCloseoutManifestPath = "artifacts\release\production-mvp-closeout\production-mvp-closeout.manifest.json",
     [string]$ProductionMvpOutstandingWorkReportPath = "artifacts\release\production-mvp-outstanding-work-report.json",
+    [string]$ProductionMvpNextActionPacketManifestPath = "artifacts\release\production-mvp-next-action-packet\production-mvp-next-action-packet.manifest.json",
+    [string]$ProductionMvpNextActionPlanPath = "artifacts\release\production-mvp-next-action-packet\next-action-plan.json",
+    [string]$ProductionMvpNextActionPlanMarkdownPath = "artifacts\release\production-mvp-next-action-packet\next-action-plan.md",
+    [string]$ProductionMvpOperatorInputMatrixPath = "artifacts\release\production-mvp-next-action-packet\operator-input-matrix.json",
+    [string]$ProductionMvpOperatorInputMatrixMarkdownPath = "artifacts\release\production-mvp-next-action-packet\operator-input-matrix.md",
+    [string]$ProductionMvpOperatorCommandsPath = "artifacts\release\production-mvp-next-action-packet\operator-commands.ps1",
+    [string]$ProductionMvpNextActionPacketValidationReportPath = "artifacts\release\production-mvp-next-action-packet-validation-report.json",
     [string]$OutputPath = "artifacts\release\token-ready-mvp-completion-audit-report.json",
     [string]$MarkdownOutputPath = "artifacts\release\token-ready-mvp-completion-audit-report.md",
     [switch]$NoFail
@@ -362,6 +369,13 @@ $files = [ordered]@{
     production_mvp_readiness = New-FileEvidence -Id "production_mvp_readiness" -Path $ProductionMvpReadinessReportPath
     production_mvp_closeout = New-FileEvidence -Id "production_mvp_closeout" -Path $ProductionMvpCloseoutManifestPath
     production_mvp_outstanding_work = New-FileEvidence -Id "production_mvp_outstanding_work" -Path $ProductionMvpOutstandingWorkReportPath
+    production_mvp_next_action_packet_manifest = New-FileEvidence -Id "production_mvp_next_action_packet_manifest" -Path $ProductionMvpNextActionPacketManifestPath
+    production_mvp_next_action_plan = New-FileEvidence -Id "production_mvp_next_action_plan" -Path $ProductionMvpNextActionPlanPath
+    production_mvp_next_action_plan_markdown = New-FileEvidence -Id "production_mvp_next_action_plan_markdown" -Path $ProductionMvpNextActionPlanMarkdownPath
+    production_mvp_operator_input_matrix = New-FileEvidence -Id "production_mvp_operator_input_matrix" -Path $ProductionMvpOperatorInputMatrixPath
+    production_mvp_operator_input_matrix_markdown = New-FileEvidence -Id "production_mvp_operator_input_matrix_markdown" -Path $ProductionMvpOperatorInputMatrixMarkdownPath
+    production_mvp_operator_commands = New-FileEvidence -Id "production_mvp_operator_commands" -Path $ProductionMvpOperatorCommandsPath
+    production_mvp_next_action_packet_validation = New-FileEvidence -Id "production_mvp_next_action_packet_validation" -Path $ProductionMvpNextActionPacketValidationReportPath
 }
 
 $preMvp = Read-JsonFile -Path $files.pre_mvp_internal_verification.path
@@ -537,7 +551,7 @@ $items += New-AuditItem `
     -Source "ARD Release Gates" `
     -Requirement "Legal, tax, accounting, custody, privacy, and security reviews are complete for citizen-facing real ARCH and real CC." `
     -Status $(if ((Get-Gate -Report $productionReadiness -Id "production_release_approvals").passed -eq $true) { "passed" } else { "blocked" }) `
-    -EvidenceIds @("production_mvp_readiness", "production_mvp_outstanding_work") `
+    -EvidenceIds @("production_mvp_readiness", "production_mvp_outstanding_work", "production_mvp_operator_input_matrix", "production_mvp_next_action_packet_validation") `
     -Blockers $releaseApprovalBlockers `
     -OperatorActions (Get-OutstandingGateAction -OutstandingReport $outstanding -Id "production_release_approvals")
 
@@ -555,7 +569,7 @@ $items += New-AuditItem `
     -Source "Final Closeout" `
     -Requirement "Production MVP closeout has passed with filled production provisioning, ready ProductionMvp report, and RequireReady release evidence." `
     -Status $(if ($null -eq $closeout) { "missing" } elseif ($closeout.passed -eq $true) { "passed" } else { "blocked" }) `
-    -EvidenceIds @("production_mvp_closeout", "production_mvp_readiness", "production_mvp_outstanding_work") `
+    -EvidenceIds @("production_mvp_closeout", "production_mvp_readiness", "production_mvp_outstanding_work", "production_mvp_next_action_packet_manifest", "production_mvp_next_action_plan", "production_mvp_operator_input_matrix", "production_mvp_operator_commands", "production_mvp_next_action_packet_validation") `
     -Blockers @($closeout.failures | ForEach-Object { ConvertTo-AuditText -Value $_ }) `
     -OperatorActions $closeoutActions
 
@@ -612,6 +626,13 @@ if (-not [string]::IsNullOrWhiteSpace($MarkdownOutputPath)) {
         foreach ($failure in $inputFailures) {
             $lines.Add("- $failure")
         }
+    }
+
+    $lines.Add("")
+    $lines.Add("## Source Files")
+    foreach ($file in $files.Values) {
+        $lines.Add("- ``$($file.id)`` exists=$($file.exists) sha256=``$($file.sha256)``")
+        $lines.Add("  - Path: ``$($file.path)``")
     }
 
     $lines.Add("")

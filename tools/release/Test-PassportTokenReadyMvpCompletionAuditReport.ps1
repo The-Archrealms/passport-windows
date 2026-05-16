@@ -5,6 +5,13 @@ param(
     [string]$ProductionMvpReadinessReportPath = "artifacts\release\production-mvp-readiness-report.json",
     [string]$ProductionMvpCloseoutManifestPath = "artifacts\release\production-mvp-closeout\production-mvp-closeout.manifest.json",
     [string]$ProductionMvpOutstandingWorkReportPath = "artifacts\release\production-mvp-outstanding-work-report.json",
+    [string]$ProductionMvpNextActionPacketManifestPath = "artifacts\release\production-mvp-next-action-packet\production-mvp-next-action-packet.manifest.json",
+    [string]$ProductionMvpNextActionPlanPath = "artifacts\release\production-mvp-next-action-packet\next-action-plan.json",
+    [string]$ProductionMvpNextActionPlanMarkdownPath = "artifacts\release\production-mvp-next-action-packet\next-action-plan.md",
+    [string]$ProductionMvpOperatorInputMatrixPath = "artifacts\release\production-mvp-next-action-packet\operator-input-matrix.json",
+    [string]$ProductionMvpOperatorInputMatrixMarkdownPath = "artifacts\release\production-mvp-next-action-packet\operator-input-matrix.md",
+    [string]$ProductionMvpOperatorCommandsPath = "artifacts\release\production-mvp-next-action-packet\operator-commands.ps1",
+    [string]$ProductionMvpNextActionPacketValidationReportPath = "artifacts\release\production-mvp-next-action-packet-validation-report.json",
     [string]$ReportPath = "artifacts\release\token-ready-mvp-completion-audit-report.json",
     [string]$MarkdownPath = "artifacts\release\token-ready-mvp-completion-audit-report.md",
     [string]$OutputPath = "artifacts\release\token-ready-mvp-completion-audit-validation-report.json",
@@ -121,6 +128,13 @@ function New-CompletionAuditFixture {
     $productionReadinessPath = Join-Path $fixtureRoot "production-mvp-readiness-report.json"
     $closeoutPath = Join-Path $fixtureRoot "production-mvp-closeout.manifest.json"
     $outstandingPath = Join-Path $fixtureRoot "production-mvp-outstanding-work-report.json"
+    $nextActionManifestPath = Join-Path $fixtureRoot "production-mvp-next-action-packet.manifest.json"
+    $nextActionPlanPath = Join-Path $fixtureRoot "next-action-plan.json"
+    $nextActionPlanMarkdownPath = Join-Path $fixtureRoot "next-action-plan.md"
+    $operatorInputMatrixPath = Join-Path $fixtureRoot "operator-input-matrix.json"
+    $operatorInputMatrixMarkdownPath = Join-Path $fixtureRoot "operator-input-matrix.md"
+    $operatorCommandsPath = Join-Path $fixtureRoot "operator-commands.ps1"
+    $nextActionValidationPath = Join-Path $fixtureRoot "production-mvp-next-action-packet-validation-report.json"
     $reportPath = Join-Path $fixtureRoot "token-ready-mvp-completion-audit-report.json"
     $markdownPath = Join-Path $fixtureRoot "token-ready-mvp-completion-audit-report.md"
     $validationPath = Join-Path $fixtureRoot "token-ready-mvp-completion-audit-validation-report.json"
@@ -240,6 +254,55 @@ function New-CompletionAuditFixture {
         }
     })
 
+    Write-JsonFile -Path $nextActionPlanPath -Value ([pscustomobject][ordered]@{
+        schema = "archrealms.passport.production_mvp_next_action_plan.v1"
+        created_utc = $createdUtc
+        actions = @()
+    })
+    Set-Content -LiteralPath $nextActionPlanMarkdownPath -Value "# Production MVP Next Action Plan`n`nNo next actions are required by the complete-state fixture." -Encoding UTF8
+    Write-JsonFile -Path $operatorInputMatrixPath -Value ([pscustomobject][ordered]@{
+        schema = "archrealms.passport.production_mvp_operator_input_matrix.v1"
+        created_utc = $createdUtc
+        summary = [pscustomobject][ordered]@{
+            environment_variable_count = 0
+            report_reference_refresh_count = 0
+            readiness_evidence_item_count = 0
+            provisioning_evidence_file_count = 0
+            release_evidence_item_count = 0
+        }
+        environment_variables = @()
+        report_reference_refreshes = @()
+        readiness_evidence_items = @()
+        provisioning_evidence_files = @()
+        release_evidence_items = @()
+    })
+    Set-Content -LiteralPath $operatorInputMatrixMarkdownPath -Value "# Production MVP Operator Input Matrix`n`nNo operator inputs are required by the complete-state fixture." -Encoding UTF8
+    Set-Content -LiteralPath $operatorCommandsPath -Value "# Production MVP next-action command checklist.`n# No commands are required by the complete-state fixture." -Encoding UTF8
+    Write-JsonFile -Path $nextActionManifestPath -Value ([pscustomobject][ordered]@{
+        schema = "archrealms.passport.production_mvp_next_action_packet_manifest.v1"
+        created_utc = $createdUtc
+        generated_files = @()
+    })
+    Write-JsonFile -Path $nextActionValidationPath -Value ([pscustomobject][ordered]@{
+        schema = "archrealms.passport.production_mvp_next_action_packet_validation.v1"
+        created_utc = $createdUtc
+        passed = $true
+        failed_check_count = 0
+        manifest_path = $nextActionManifestPath
+        manifest_sha256 = Get-Sha256Hex -Path $nextActionManifestPath
+        plan_path = $nextActionPlanPath
+        plan_sha256 = Get-Sha256Hex -Path $nextActionPlanPath
+        markdown_path = $nextActionPlanMarkdownPath
+        markdown_sha256 = Get-Sha256Hex -Path $nextActionPlanMarkdownPath
+        operator_input_matrix_path = $operatorInputMatrixPath
+        operator_input_matrix_sha256 = Get-Sha256Hex -Path $operatorInputMatrixPath
+        operator_input_matrix_markdown_path = $operatorInputMatrixMarkdownPath
+        operator_input_matrix_markdown_sha256 = Get-Sha256Hex -Path $operatorInputMatrixMarkdownPath
+        operator_commands_path = $operatorCommandsPath
+        operator_commands_sha256 = Get-Sha256Hex -Path $operatorCommandsPath
+        checks = @()
+    })
+
     return [pscustomobject][ordered]@{
         pre_mvp_internal_verification = $preMvpPath
         staging_readiness = $stagingPath
@@ -247,6 +310,13 @@ function New-CompletionAuditFixture {
         production_mvp_readiness = $productionReadinessPath
         production_mvp_closeout = $closeoutPath
         production_mvp_outstanding_work = $outstandingPath
+        production_mvp_next_action_packet_manifest = $nextActionManifestPath
+        production_mvp_next_action_plan = $nextActionPlanPath
+        production_mvp_next_action_plan_markdown = $nextActionPlanMarkdownPath
+        production_mvp_operator_input_matrix = $operatorInputMatrixPath
+        production_mvp_operator_input_matrix_markdown = $operatorInputMatrixMarkdownPath
+        production_mvp_operator_commands = $operatorCommandsPath
+        production_mvp_next_action_packet_validation = $nextActionValidationPath
         completion_audit_report = $reportPath
         completion_audit_markdown = $markdownPath
         completion_audit_validation = $validationPath
@@ -275,6 +345,13 @@ function Invoke-CompletionAuditGenerator {
         [string]$ProductionMvpReadinessPath,
         [string]$ProductionMvpCloseoutPath,
         [string]$ProductionMvpOutstandingWorkPath,
+        [string]$ProductionMvpNextActionPacketManifestPath,
+        [string]$ProductionMvpNextActionPlanPath,
+        [string]$ProductionMvpNextActionPlanMarkdownPath,
+        [string]$ProductionMvpOperatorInputMatrixPath,
+        [string]$ProductionMvpOperatorInputMatrixMarkdownPath,
+        [string]$ProductionMvpOperatorCommandsPath,
+        [string]$ProductionMvpNextActionPacketValidationPath,
         [string]$JsonPath,
         [string]$MarkdownOutputPath
     )
@@ -299,6 +376,20 @@ function Invoke-CompletionAuditGenerator {
         $ProductionMvpCloseoutPath,
         "-ProductionMvpOutstandingWorkReportPath",
         $ProductionMvpOutstandingWorkPath,
+        "-ProductionMvpNextActionPacketManifestPath",
+        $ProductionMvpNextActionPacketManifestPath,
+        "-ProductionMvpNextActionPlanPath",
+        $ProductionMvpNextActionPlanPath,
+        "-ProductionMvpNextActionPlanMarkdownPath",
+        $ProductionMvpNextActionPlanMarkdownPath,
+        "-ProductionMvpOperatorInputMatrixPath",
+        $ProductionMvpOperatorInputMatrixPath,
+        "-ProductionMvpOperatorInputMatrixMarkdownPath",
+        $ProductionMvpOperatorInputMatrixMarkdownPath,
+        "-ProductionMvpOperatorCommandsPath",
+        $ProductionMvpOperatorCommandsPath,
+        "-ProductionMvpNextActionPacketValidationReportPath",
+        $ProductionMvpNextActionPacketValidationPath,
         "-OutputPath",
         $JsonPath,
         "-MarkdownOutputPath",
@@ -446,6 +537,13 @@ $resolvedCanaryMvpReadinessReportPath = Resolve-RepoPath -Path $CanaryMvpReadine
 $resolvedProductionMvpReadinessReportPath = Resolve-RepoPath -Path $ProductionMvpReadinessReportPath
 $resolvedProductionMvpCloseoutManifestPath = Resolve-RepoPath -Path $ProductionMvpCloseoutManifestPath
 $resolvedProductionMvpOutstandingWorkReportPath = Resolve-RepoPath -Path $ProductionMvpOutstandingWorkReportPath
+$resolvedProductionMvpNextActionPacketManifestPath = Resolve-RepoPath -Path $ProductionMvpNextActionPacketManifestPath
+$resolvedProductionMvpNextActionPlanPath = Resolve-RepoPath -Path $ProductionMvpNextActionPlanPath
+$resolvedProductionMvpNextActionPlanMarkdownPath = Resolve-RepoPath -Path $ProductionMvpNextActionPlanMarkdownPath
+$resolvedProductionMvpOperatorInputMatrixPath = Resolve-RepoPath -Path $ProductionMvpOperatorInputMatrixPath
+$resolvedProductionMvpOperatorInputMatrixMarkdownPath = Resolve-RepoPath -Path $ProductionMvpOperatorInputMatrixMarkdownPath
+$resolvedProductionMvpOperatorCommandsPath = Resolve-RepoPath -Path $ProductionMvpOperatorCommandsPath
+$resolvedProductionMvpNextActionPacketValidationReportPath = Resolve-RepoPath -Path $ProductionMvpNextActionPacketValidationReportPath
 $resolvedReportPath = Resolve-RepoPath -Path $ReportPath
 $resolvedMarkdownPath = Resolve-RepoPath -Path $MarkdownPath
 $resolvedOutputPath = Resolve-RepoPath -Path $OutputPath
@@ -458,9 +556,17 @@ if ($UseGeneratedFixture) {
     $resolvedProductionMvpReadinessReportPath = $fixture.production_mvp_readiness
     $resolvedProductionMvpCloseoutManifestPath = $fixture.production_mvp_closeout
     $resolvedProductionMvpOutstandingWorkReportPath = $fixture.production_mvp_outstanding_work
+    $resolvedProductionMvpNextActionPacketManifestPath = $fixture.production_mvp_next_action_packet_manifest
+    $resolvedProductionMvpNextActionPlanPath = $fixture.production_mvp_next_action_plan
+    $resolvedProductionMvpNextActionPlanMarkdownPath = $fixture.production_mvp_next_action_plan_markdown
+    $resolvedProductionMvpOperatorInputMatrixPath = $fixture.production_mvp_operator_input_matrix
+    $resolvedProductionMvpOperatorInputMatrixMarkdownPath = $fixture.production_mvp_operator_input_matrix_markdown
+    $resolvedProductionMvpOperatorCommandsPath = $fixture.production_mvp_operator_commands
+    $resolvedProductionMvpNextActionPacketValidationReportPath = $fixture.production_mvp_next_action_packet_validation
     $resolvedReportPath = $fixture.completion_audit_report
     $resolvedMarkdownPath = $fixture.completion_audit_markdown
     $resolvedOutputPath = $fixture.completion_audit_validation
+    $Generate = $true
 }
 
 $checks = @()
@@ -473,6 +579,13 @@ if ($Generate) {
         -ProductionMvpReadinessPath $resolvedProductionMvpReadinessReportPath `
         -ProductionMvpCloseoutPath $resolvedProductionMvpCloseoutManifestPath `
         -ProductionMvpOutstandingWorkPath $resolvedProductionMvpOutstandingWorkReportPath `
+        -ProductionMvpNextActionPacketManifestPath $resolvedProductionMvpNextActionPacketManifestPath `
+        -ProductionMvpNextActionPlanPath $resolvedProductionMvpNextActionPlanPath `
+        -ProductionMvpNextActionPlanMarkdownPath $resolvedProductionMvpNextActionPlanMarkdownPath `
+        -ProductionMvpOperatorInputMatrixPath $resolvedProductionMvpOperatorInputMatrixPath `
+        -ProductionMvpOperatorInputMatrixMarkdownPath $resolvedProductionMvpOperatorInputMatrixMarkdownPath `
+        -ProductionMvpOperatorCommandsPath $resolvedProductionMvpOperatorCommandsPath `
+        -ProductionMvpNextActionPacketValidationPath $resolvedProductionMvpNextActionPacketValidationReportPath `
         -JsonPath $resolvedReportPath `
         -MarkdownOutputPath $resolvedMarkdownPath
     $checks += Add-Check -Id "generator_exit_code" -Condition ($generatorResult.exit_code -eq 0) -Failure "completion audit generator failed" -Evidence $generatorResult
@@ -494,7 +607,14 @@ $requiredSourceFileIds = @(
     "canary_mvp_readiness",
     "production_mvp_readiness",
     "production_mvp_closeout",
-    "production_mvp_outstanding_work"
+    "production_mvp_outstanding_work",
+    "production_mvp_next_action_packet_manifest",
+    "production_mvp_next_action_plan",
+    "production_mvp_next_action_plan_markdown",
+    "production_mvp_operator_input_matrix",
+    "production_mvp_operator_input_matrix_markdown",
+    "production_mvp_operator_commands",
+    "production_mvp_next_action_packet_validation"
 )
 
 foreach ($sourceId in $requiredSourceFileIds) {
@@ -517,6 +637,55 @@ foreach ($sourceId in $requiredSourceFileIds) {
 
     $checks += New-Check -Id "source_file_$sourceId" -Passed ($sourceFailures.Count -eq 0) -Failures $sourceFailures -Evidence $source
 }
+
+$packetValidationSource = Get-SourceFile -Report $report -Id "production_mvp_next_action_packet_validation"
+$packetValidation = $(if ($null -ne $packetValidationSource) { Read-JsonFile -Path ([string]$packetValidationSource.path) } else { $null })
+$packetValidationFailures = @()
+if ($null -eq $packetValidation) {
+    $packetValidationFailures += "next-action packet validation report is missing or unreadable"
+}
+else {
+    if ([string]$packetValidation.schema -ne "archrealms.passport.production_mvp_next_action_packet_validation.v1") {
+        $packetValidationFailures += "next-action packet validation schema is unexpected"
+    }
+    if ($packetValidation.passed -ne $true) {
+        $packetValidationFailures += "next-action packet validation did not pass"
+    }
+
+    $packetSourceMappings = @(
+        [pscustomobject]@{ source_id = "production_mvp_next_action_packet_manifest"; path_property = "manifest_path"; sha_property = "manifest_sha256" },
+        [pscustomobject]@{ source_id = "production_mvp_next_action_plan"; path_property = "plan_path"; sha_property = "plan_sha256" },
+        [pscustomobject]@{ source_id = "production_mvp_next_action_plan_markdown"; path_property = "markdown_path"; sha_property = "markdown_sha256" },
+        [pscustomobject]@{ source_id = "production_mvp_operator_input_matrix"; path_property = "operator_input_matrix_path"; sha_property = "operator_input_matrix_sha256" },
+        [pscustomobject]@{ source_id = "production_mvp_operator_input_matrix_markdown"; path_property = "operator_input_matrix_markdown_path"; sha_property = "operator_input_matrix_markdown_sha256" },
+        [pscustomobject]@{ source_id = "production_mvp_operator_commands"; path_property = "operator_commands_path"; sha_property = "operator_commands_sha256" }
+    )
+
+    foreach ($mapping in $packetSourceMappings) {
+        $source = Get-SourceFile -Report $report -Id $mapping.source_id
+        if ($null -eq $source) {
+            $packetValidationFailures += "completion audit is missing packet source file: $($mapping.source_id)"
+            continue
+        }
+
+        $validationPath = if ($packetValidation.PSObject.Properties[$mapping.path_property]) { [string]$packetValidation.PSObject.Properties[$mapping.path_property].Value } else { "" }
+        $validationSha = if ($packetValidation.PSObject.Properties[$mapping.sha_property]) { [string]$packetValidation.PSObject.Properties[$mapping.sha_property].Value } else { "" }
+        if ([string]::IsNullOrWhiteSpace($validationPath)) {
+            $packetValidationFailures += "next-action packet validation lacks $($mapping.path_property)"
+        }
+        elseif ([System.IO.Path]::GetFullPath($validationPath) -ne [System.IO.Path]::GetFullPath([string]$source.path)) {
+            $packetValidationFailures += "$($mapping.source_id) path does not match next-action packet validation"
+        }
+
+        if ([string]::IsNullOrWhiteSpace($validationSha)) {
+            $packetValidationFailures += "next-action packet validation lacks $($mapping.sha_property)"
+        }
+        elseif ([string]$source.sha256 -ne $validationSha) {
+            $packetValidationFailures += "$($mapping.source_id) SHA-256 does not match next-action packet validation"
+        }
+    }
+}
+$checks += New-Check -Id "next_action_packet_handoff_validation" -Passed ($packetValidationFailures.Count -eq 0) -Failures $packetValidationFailures -Evidence $packetValidationSource
 
 $inputFailures = Get-ObjectArray -Object $report -Name "input_failures"
 $checks += Add-Check -Id "input_failures_absent" -Condition ($null -ne $report -and $inputFailures.Count -eq 0) -Failure "completion audit has input failures" -Evidence $inputFailures
@@ -870,6 +1039,18 @@ if ($markdownExists) {
     $markdownActionFailures = @()
     if ($markdown -notmatch '# Token-Ready MVP Completion Audit') {
         $markdownFailures += "Markdown title is missing"
+    }
+    if ($markdown -notmatch '## Source Files') {
+        $markdownFailures += "Markdown source-file section is missing"
+    }
+    foreach ($sourceId in $requiredSourceFileIds) {
+        $source = Get-SourceFile -Report $report -Id $sourceId
+        if ($markdown -notmatch [regex]::Escape($sourceId)) {
+            $markdownFailures += "Markdown does not include source file id: $sourceId"
+        }
+        if ($null -ne $source -and -not [string]::IsNullOrWhiteSpace([string]$source.sha256) -and $markdown -notmatch [regex]::Escape([string]$source.sha256)) {
+            $markdownFailures += "Markdown does not include source file SHA-256: $sourceId"
+        }
     }
     foreach ($id in $requiredChecklistIds) {
         if ($markdown -notmatch [regex]::Escape($id)) {
