@@ -401,13 +401,22 @@ function Get-ReportReferenceRefreshRecord {
     }
 }
 
+$simulationRunReportPath = "artifacts\release\pre-mvp-simulation-run-report.json"
+$resolvedSimulationRunReportPath = Resolve-RepoPath -Path $simulationRunReportPath
+$simulationRunReportSha256 = "<simulation-run-sha256>"
+if (Test-Path -LiteralPath $resolvedSimulationRunReportPath -PathType Leaf) {
+    $simulationRunReportSha256 = Get-Sha256Hex -Path $resolvedSimulationRunReportPath
+}
+
+$staffStewardPilotCloseoutCommand = "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Complete-PassportPreMvpStaffStewardPilotHandoff.ps1 -HandoffRoot <filled-staff-steward-handoff-root> -SimulationRunReportPath $simulationRunReportPath -SimulationRunReportSha256 $simulationRunReportSha256 -Force"
+
 $readinessActionMap = @{
     pre_mvp_internal_verification = New-Action `
         -Id "pre_mvp_internal_verification" `
         -Title "Complete staff/steward pilot evidence" `
         -Action "Fill the controlled staff/steward pilot packet, validate it with no placeholders, generate the final pilot report, and rerun pre-MVP internal verification with the report path and SHA-256." `
         -Commands @(
-            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Complete-PassportPreMvpStaffStewardPilotHandoff.ps1 -HandoffRoot <filled-staff-steward-handoff-root> -SimulationRunReportPath artifacts\release\pre-mvp-simulation-run-report.json -SimulationRunReportSha256 <simulation-run-sha256> -Force"
+            $staffStewardPilotCloseoutCommand
         )
     staging_readiness = New-Action `
         -Id "staging_readiness" `
@@ -591,7 +600,7 @@ $releaseEvidenceActionMap = @{
         -Title "Close pre-MVP evidence" `
         -Action "Complete the staff/steward pilot packet and rerun pre-MVP verification until the report passes." `
         -Commands @(
-            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Complete-PassportPreMvpStaffStewardPilotHandoff.ps1 -HandoffRoot <filled-staff-steward-handoff-root> -SimulationRunReportPath artifacts\release\pre-mvp-simulation-run-report.json -SimulationRunReportSha256 <simulation-run-sha256> -Force"
+            $staffStewardPilotCloseoutCommand
         )
     provisioning_packet_passed = New-Action `
         -Id "provisioning_packet_passed" `
