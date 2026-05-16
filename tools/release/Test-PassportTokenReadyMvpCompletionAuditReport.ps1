@@ -769,6 +769,7 @@ $checks += New-Check -Id "source_app_commit_freshness" -Passed ($sourceCommitFai
 
 $packetValidationSource = Get-SourceFile -Report $report -Id "production_mvp_next_action_packet_validation"
 $packetValidation = $(if ($null -ne $packetValidationSource) { Read-JsonFile -Path ([string]$packetValidationSource.path) } else { $null })
+$packetPlan = $null
 $packetValidationFailures = @()
 if ($null -eq $packetValidation) {
     $packetValidationFailures += "next-action packet validation report is missing or unreadable"
@@ -838,6 +839,66 @@ else {
     }
 }
 $checks += New-Check -Id "next_action_packet_handoff_validation" -Passed ($packetValidationFailures.Count -eq 0) -Failures $packetValidationFailures -Evidence $packetValidationSource
+
+$reportedCompletionReady = Get-ObjectBool -Object $report -Name "completion_ready"
+$reportedLocalImplementationReadyForActions = Get-ObjectBool -Object $report -Name "local_implementation_ready"
+$externalActionFailures = @()
+$externalActionEvidence = [pscustomobject][ordered]@{
+    completion_ready = $reportedCompletionReady
+    local_implementation_ready = $reportedLocalImplementationReadyForActions
+    action_count = 0
+}
+if ($reportedLocalImplementationReadyForActions -eq $true -and $reportedCompletionReady -ne $true) {
+    if ($null -eq $packetPlan) {
+        $externalActionFailures += "local implementation is ready but the next-action plan could not be read."
+    }
+    else {
+        $remainingActions = @(Get-ObjectArray -Object $packetPlan -Name "actions")
+        $externalActionEvidence.action_count = $remainingActions.Count
+        if ($remainingActions.Count -eq 0) {
+            $externalActionFailures += "local implementation is ready and completion is not ready, but no remaining actions are present."
+        }
+
+        foreach ($action in $remainingActions) {
+            $actionId = [string]$action.id
+            if ([string]::IsNullOrWhiteSpace($actionId)) {
+                $actionId = "<blank>"
+            }
+
+            if ($action.PSObject.Properties["operator_input_required"] -and [bool]$action.operator_input_required -ne $true) {
+                $externalActionFailures += "remaining action $actionId is not marked operator_input_required=true."
+            }
+            elseif (-not $action.PSObject.Properties["operator_input_required"]) {
+                $externalActionFailures += "remaining action $actionId is missing operator_input_required."
+            }
+
+            if (-not $action.PSObject.Properties["required_operator_input_count"]) {
+                $externalActionFailures += "remaining action $actionId is missing required_operator_input_count."
+            }
+            elseif ([int]$action.required_operator_input_count -lt 1) {
+                $externalActionFailures += "remaining action $actionId has no required operator inputs."
+            }
+
+            if ($action.PSObject.Properties["blocked_by_external_actor"] -and [bool]$action.blocked_by_external_actor -ne $true) {
+                $externalActionFailures += "remaining action $actionId is not marked blocked_by_external_actor=true."
+            }
+            elseif (-not $action.PSObject.Properties["blocked_by_external_actor"]) {
+                $externalActionFailures += "remaining action $actionId is missing blocked_by_external_actor."
+            }
+
+            $externalBlockerIds = @(Get-ObjectArray -Object $action -Name "external_blocker_ids" | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+            if ($externalBlockerIds.Count -eq 0) {
+                $externalActionFailures += "remaining action $actionId does not name any external_blocker_ids."
+            }
+
+            $commands = @(Get-ObjectArray -Object $action -Name "commands" | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+            if ($commands.Count -eq 0) {
+                $externalActionFailures += "remaining action $actionId has no operator command."
+            }
+        }
+    }
+}
+$checks += New-Check -Id "local_ready_remaining_actions_external" -Passed ($externalActionFailures.Count -eq 0) -Failures $externalActionFailures -Evidence $externalActionEvidence
 
 $inputFailures = Get-ObjectArray -Object $report -Name "input_failures"
 $checks += Add-Check -Id "input_failures_absent" -Condition ($null -ne $report -and $inputFailures.Count -eq 0) -Failure "completion audit has input failures" -Evidence $inputFailures
