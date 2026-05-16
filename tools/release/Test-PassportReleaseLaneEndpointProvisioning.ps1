@@ -1,6 +1,8 @@
 param(
     [string]$EndpointProvisioningPath = "deploy\release-lane-endpoints",
 
+    [string]$HostedProgramPath = "src\ArchrealmsPassport.HostedServices\Program.cs",
+
     [string]$OutputPath = "artifacts\release\release-lane-endpoint-provisioning-validation-report.json",
 
     [switch]$RequireNoPlaceholders
@@ -77,8 +79,31 @@ $readmePath = Join-Path $resolvedEndpointProvisioningPath "README.md"
 $endpointRequestPath = Join-Path $resolvedEndpointProvisioningPath "production-endpoint-request.template.md"
 $routingPolicyPath = Join-Path $resolvedEndpointProvisioningPath "tls-dns-routing-policy.template.md"
 $readinessEvidencePath = Join-Path $resolvedEndpointProvisioningPath "endpoint-readiness-evidence.template.md"
+$hostedProgramResolvedPath = Resolve-InputPath -Path $HostedProgramPath
 
 $checks = @()
+$checks += Test-Document -Id "hosted_program_route_contract" -Path $hostedProgramResolvedPath -RequiredText @(
+    'app.MapGet("/health"',
+    'app.MapGet("/ops/runtime/status"',
+    'app.MapGet("/ops/operator/status"',
+    'app.MapGet("/ops/storage/status"',
+    'app.MapPost("/ops/backup/manifests"',
+    'app.MapPost("/ops/incidents"',
+    'app.MapPost("/arch/genesis/manifests"',
+    'app.MapPost("/capacity/reports/cc"',
+    'app.MapPost("/storage/delivery/requests"',
+    'app.MapGet("/ai/status"',
+    'app.MapPost("/ai/challenge"',
+    'app.MapPost("/ai/session"',
+    'app.MapGet("/ai/quota"',
+    'app.MapPost("/ai/chat"',
+    'app.MapPost("/ai/feedback"',
+    'app.MapGet("/ai/runtime/status"',
+    'app.MapGet("/ai/runtime/probe"'
+) -ForbiddenText @(
+    'app.MapPost("/ai/runtime/probe"',
+    'app.MapPost("/storage/delivery",'
+)
 $checks += Test-Document -Id "readme_contract" -Path $readmePath -RequiredText @(
     "PASSPORT_WINDOWS_PRODUCTION_MVP_API_BASE_URL",
     "PASSPORT_WINDOWS_PRODUCTION_MVP_AI_GATEWAY_URL",
