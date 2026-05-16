@@ -1,5 +1,7 @@
 param(
     [string]$PreMvpInternalVerificationReportPath = "artifacts\release\pre-mvp-internal-verification-report.json",
+    [string]$InternalVerificationArtifactManifestPath = "artifacts\release\internal-verification-lane\passport-windows-win-x64\release-manifest.json",
+    [string]$InternalVerificationArtifactValidationReportPath = "artifacts\release\internal-verification-artifact-validation-report.json",
     [string]$StagingReadinessReportPath = "artifacts\release\staging-readiness-report.json",
     [string]$CanaryMvpReadinessReportPath = "artifacts\release\canary-mvp-readiness-report.json",
     [string]$ProductionMvpReadinessReportPath = "artifacts\release\production-mvp-readiness-report.json",
@@ -456,6 +458,8 @@ function Test-PreMvpImplementationReady {
 
 $files = [ordered]@{
     pre_mvp_internal_verification = New-FileEvidence -Id "pre_mvp_internal_verification" -Path $PreMvpInternalVerificationReportPath
+    internal_verification_artifact_manifest = New-FileEvidence -Id "internal_verification_artifact_manifest" -Path $InternalVerificationArtifactManifestPath
+    internal_verification_artifact_validation = New-FileEvidence -Id "internal_verification_artifact_validation" -Path $InternalVerificationArtifactValidationReportPath
     staging_readiness = New-FileEvidence -Id "staging_readiness" -Path $StagingReadinessReportPath
     canary_mvp_readiness = New-FileEvidence -Id "canary_mvp_readiness" -Path $CanaryMvpReadinessReportPath
     production_mvp_readiness = New-FileEvidence -Id "production_mvp_readiness" -Path $ProductionMvpReadinessReportPath
@@ -473,6 +477,8 @@ $files = [ordered]@{
 }
 
 $preMvp = Read-JsonFile -Path $files.pre_mvp_internal_verification.path
+$internalVerificationArtifactManifest = Read-JsonFile -Path $files.internal_verification_artifact_manifest.path
+$internalVerificationArtifactValidation = Read-JsonFile -Path $files.internal_verification_artifact_validation.path
 $staging = Read-JsonFile -Path $files.staging_readiness.path
 $canary = Read-JsonFile -Path $files.canary_mvp_readiness.path
 $productionReadiness = Read-JsonFile -Path $files.production_mvp_readiness.path
@@ -506,14 +512,42 @@ elseif ($preMvp.passed -ne $true) {
     }
 }
 
+$internalArtifactBlockers = @()
+if ($null -eq $internalVerificationArtifactManifest) {
+    $internalArtifactBlockers += "Internal Verification release artifact manifest is missing"
+}
+else {
+    if ([string]$internalVerificationArtifactManifest.lane -ne "internal-verification") {
+        $internalArtifactBlockers += "Internal Verification release artifact manifest is not lane=internal-verification"
+    }
+    if ($internalVerificationArtifactManifest.self_contained -ne $true) {
+        $internalArtifactBlockers += "Internal Verification release artifact manifest is not self-contained"
+    }
+    if ($internalVerificationArtifactManifest.bundled_ipfs_cli_included -ne $true) {
+        $internalArtifactBlockers += "Internal Verification release artifact manifest does not include bundled IPFS"
+    }
+}
+
+if ($null -eq $internalVerificationArtifactValidation) {
+    $internalArtifactBlockers += "Internal Verification release artifact validation report is missing"
+}
+elseif ($internalVerificationArtifactValidation.passed -ne $true) {
+    $internalArtifactBlockers += "Internal Verification release artifact validation did not pass"
+}
+
 $items += New-AuditItem `
     -Id "prd_success_pre_mvp_internal_verification" `
     -Source "PRD Success Criteria" `
     -Requirement "Pre-MVP Internal Verification has passed and cannot migrate fake balances into production balances." `
-    -Status $(if ($null -eq $preMvp) { "missing" } elseif ($preMvp.passed -eq $true -and $preMvp.fake_balance_migration_blocked -eq $true) { "passed" } else { "blocked" }) `
-    -EvidenceIds @("pre_mvp_internal_verification") `
-    -EvidenceNotes @("fake_balance_migration_blocked=$($preMvp.fake_balance_migration_blocked)") `
-    -Blockers $preMvpBlockers `
+    -Status $(if ($null -eq $preMvp) { "missing" } elseif ($preMvp.passed -eq $true -and $preMvp.fake_balance_migration_blocked -eq $true -and $internalArtifactBlockers.Count -eq 0) { "passed" } else { "blocked" }) `
+    -EvidenceIds @("pre_mvp_internal_verification", "internal_verification_artifact_manifest", "internal_verification_artifact_validation") `
+    -EvidenceNotes @(
+        "fake_balance_migration_blocked=$($preMvp.fake_balance_migration_blocked)",
+        "internal_artifact_lane=$($internalVerificationArtifactManifest.lane)",
+        "internal_artifact_self_contained=$($internalVerificationArtifactManifest.self_contained)",
+        "internal_artifact_validation_passed=$($internalVerificationArtifactValidation.passed)"
+    ) `
+    -Blockers @($preMvpBlockers + $internalArtifactBlockers) `
     -OperatorActions (Get-OutstandingGateAction -OutstandingReport $outstanding -Id "pre_mvp_internal_verification") `
     -RemainingWorkType "external_verification" `
     -ImplementationReady $preMvpImplementationReady
@@ -545,8 +579,11 @@ $items += New-AuditItem `
     -Source "PRD Success Criteria" `
     -Requirement "A citizen can install Passport without manual file-system work." `
     -Status $(if ((Get-Gate -Report $productionReadiness -Id "package_signing").passed -eq $true) { "passed" } else { "blocked" }) `
-    -EvidenceIds @("production_mvp_readiness", "production_mvp_outstanding_work") `
-    -EvidenceNotes @("Production package installation depends on the package_signing readiness gate and release artifact validation.") `
+    -EvidenceIds @("internal_verification_artifact_manifest", "internal_verification_artifact_validation", "production_mvp_readiness", "production_mvp_outstanding_work") `
+    -EvidenceNotes @(
+        "Internal Verification release artifact is self-contained and validated before production signing.",
+        "Production package installation depends on the package_signing readiness gate and release artifact validation."
+    ) `
     -Blockers (Get-OutstandingGateFailures -OutstandingReport $outstanding -Id "package_signing") `
     -OperatorActions (Get-OutstandingGateAction -OutstandingReport $outstanding -Id "package_signing") `
     -RemainingWorkType "package_signing" `

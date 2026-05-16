@@ -1,5 +1,7 @@
 param(
     [string]$PreMvpInternalVerificationReportPath = "artifacts\release\pre-mvp-internal-verification-report.json",
+    [string]$InternalVerificationArtifactManifestPath = "artifacts\release\internal-verification-lane\passport-windows-win-x64\release-manifest.json",
+    [string]$InternalVerificationArtifactValidationReportPath = "artifacts\release\internal-verification-artifact-validation-report.json",
     [string]$StagingReadinessReportPath = "artifacts\release\staging-readiness-report.json",
     [string]$CanaryMvpReadinessReportPath = "artifacts\release\canary-mvp-readiness-report.json",
     [string]$ProductionMvpReadinessReportPath = "artifacts\release\production-mvp-readiness-report.json",
@@ -141,6 +143,8 @@ function New-CompletionAuditFixture {
     $fixtureAppCommit = Get-CurrentCommit
 
     $preMvpPath = Join-Path $fixtureRoot "pre-mvp-internal-verification-report.json"
+    $internalArtifactManifestPath = Join-Path $fixtureRoot "internal-verification-release-manifest.json"
+    $internalArtifactValidationPath = Join-Path $fixtureRoot "internal-verification-artifact-validation-report.json"
     $stagingPath = Join-Path $fixtureRoot "staging-readiness-report.json"
     $canaryPath = Join-Path $fixtureRoot "canary-mvp-readiness-report.json"
     $productionReadinessPath = Join-Path $fixtureRoot "production-mvp-readiness-report.json"
@@ -203,6 +207,52 @@ function New-CompletionAuditFixture {
         checks = @($preMvpCheckIds | ForEach-Object { New-FixtureCheck -Id $_ })
         requirement_count = $preMvpRequirements.Count
         requirements = $preMvpRequirements
+    })
+
+    Write-JsonFile -Path $internalArtifactManifestPath -Value ([pscustomobject][ordered]@{
+        created_utc = $createdUtc
+        lane = "internal-verification"
+        ledger_namespace = "archrealms-passport-internal-verification"
+        runtime_identifier = "win-x64"
+        configuration = "Release"
+        self_contained = $true
+        git_commit = $fixtureAppCommit
+        publish_dir = Join-Path $fixtureRoot "internal-verification-publish"
+        zip_path = Join-Path $fixtureRoot "passport-windows-win-x64-internal-verification.zip"
+        bundled_ipfs_cli_included = $true
+        bundled_ipfs_cli_version = "ipfs version 0.40.1"
+        file_count = 12
+        files = @(
+            [pscustomobject][ordered]@{
+                path = "ArchrealmsPassport.Windows.exe"
+                size_bytes = 1
+                sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
+            }
+        )
+    })
+
+    Write-JsonFile -Path $internalArtifactValidationPath -Value ([pscustomobject][ordered]@{
+        verified_utc = $createdUtc
+        require_bundled_ipfs = $true
+        skip_executable_checks = $false
+        passed = $true
+        failures = @()
+        artifacts = @(
+            [pscustomobject][ordered]@{
+                manifest_path = $internalArtifactManifestPath
+                artifact_root = Join-Path $fixtureRoot "internal-verification-publish"
+                package_path = ""
+                zip_path = Join-Path $fixtureRoot "passport-windows-win-x64-internal-verification.zip"
+                bundled_ipfs_cli_included = $true
+                bundled_ipfs_cli_version = "ipfs version 0.40.1"
+                lane = "internal-verification"
+                ledger_namespace = "archrealms-passport-internal-verification"
+                verified_manifest_file_count = 12
+                required_file_count = 11
+                failures = @()
+                passed = $true
+            }
+        )
     })
 
     Write-JsonFile -Path $stagingPath -Value ([pscustomobject][ordered]@{
@@ -384,6 +434,8 @@ function New-CompletionAuditFixture {
 
     return [pscustomobject][ordered]@{
         pre_mvp_internal_verification = $preMvpPath
+        internal_verification_artifact_manifest = $internalArtifactManifestPath
+        internal_verification_artifact_validation = $internalArtifactValidationPath
         staging_readiness = $stagingPath
         canary_mvp_readiness = $canaryPath
         production_mvp_readiness = $productionReadinessPath
@@ -421,6 +473,8 @@ function Format-CommandArgument {
 function Invoke-CompletionAuditGenerator {
     param(
         [string]$PreMvpInternalVerificationPath,
+        [string]$InternalVerificationArtifactManifestPath,
+        [string]$InternalVerificationArtifactValidationPath,
         [string]$StagingReadinessPath,
         [string]$CanaryMvpReadinessPath,
         [string]$ProductionMvpReadinessPath,
@@ -449,6 +503,10 @@ function Invoke-CompletionAuditGenerator {
         $generator,
         "-PreMvpInternalVerificationReportPath",
         $PreMvpInternalVerificationPath,
+        "-InternalVerificationArtifactManifestPath",
+        $InternalVerificationArtifactManifestPath,
+        "-InternalVerificationArtifactValidationReportPath",
+        $InternalVerificationArtifactValidationPath,
         "-StagingReadinessReportPath",
         $StagingReadinessPath,
         "-CanaryMvpReadinessReportPath",
@@ -619,6 +677,8 @@ function Get-Check {
 }
 
 $resolvedPreMvpInternalVerificationReportPath = Resolve-RepoPath -Path $PreMvpInternalVerificationReportPath
+$resolvedInternalVerificationArtifactManifestPath = Resolve-RepoPath -Path $InternalVerificationArtifactManifestPath
+$resolvedInternalVerificationArtifactValidationReportPath = Resolve-RepoPath -Path $InternalVerificationArtifactValidationReportPath
 $resolvedStagingReadinessReportPath = Resolve-RepoPath -Path $StagingReadinessReportPath
 $resolvedCanaryMvpReadinessReportPath = Resolve-RepoPath -Path $CanaryMvpReadinessReportPath
 $resolvedProductionMvpReadinessReportPath = Resolve-RepoPath -Path $ProductionMvpReadinessReportPath
@@ -641,6 +701,8 @@ $currentCommit = Get-CurrentCommit
 if ($UseGeneratedFixture) {
     $fixture = New-CompletionAuditFixture
     $resolvedPreMvpInternalVerificationReportPath = $fixture.pre_mvp_internal_verification
+    $resolvedInternalVerificationArtifactManifestPath = $fixture.internal_verification_artifact_manifest
+    $resolvedInternalVerificationArtifactValidationReportPath = $fixture.internal_verification_artifact_validation
     $resolvedStagingReadinessReportPath = $fixture.staging_readiness
     $resolvedCanaryMvpReadinessReportPath = $fixture.canary_mvp_readiness
     $resolvedProductionMvpReadinessReportPath = $fixture.production_mvp_readiness
@@ -666,6 +728,8 @@ $generatorResult = $null
 if ($Generate) {
     $generatorResult = Invoke-CompletionAuditGenerator `
         -PreMvpInternalVerificationPath $resolvedPreMvpInternalVerificationReportPath `
+        -InternalVerificationArtifactManifestPath $resolvedInternalVerificationArtifactManifestPath `
+        -InternalVerificationArtifactValidationPath $resolvedInternalVerificationArtifactValidationReportPath `
         -StagingReadinessPath $resolvedStagingReadinessReportPath `
         -CanaryMvpReadinessPath $resolvedCanaryMvpReadinessReportPath `
         -ProductionMvpReadinessPath $resolvedProductionMvpReadinessReportPath `
@@ -692,6 +756,8 @@ $checks += Add-Check -Id "markdown_exists" -Condition $markdownExists -Failure "
 
 $report = Read-JsonFile -Path $resolvedReportPath
 $preMvpReport = Read-JsonFile -Path $resolvedPreMvpInternalVerificationReportPath
+$internalArtifactManifest = Read-JsonFile -Path $resolvedInternalVerificationArtifactManifestPath
+$internalArtifactValidation = Read-JsonFile -Path $resolvedInternalVerificationArtifactValidationReportPath
 $checks += Add-Check -Id "schema" -Condition ($null -ne $report -and [string]$report.schema -eq "archrealms.passport.token_ready_mvp_completion_audit.v1") -Failure "completion audit schema is invalid or missing"
 $checks += Add-Check -Id "app_commit" -Condition ($null -ne $report -and [string]$report.app_commit -match '^[0-9a-f]{7,40}$') -Failure "app_commit is missing or not a git commit hash" -Evidence ([pscustomobject][ordered]@{ app_commit = $(if ($null -eq $report) { "" } else { [string]$report.app_commit }) })
 
@@ -707,6 +773,8 @@ $checks += New-Check -Id "app_commit_freshness" -Passed ($commitFailures.Count -
 
 $requiredSourceFileIds = @(
     "pre_mvp_internal_verification",
+    "internal_verification_artifact_manifest",
+    "internal_verification_artifact_validation",
     "staging_readiness",
     "canary_mvp_readiness",
     "production_mvp_readiness",
@@ -829,6 +897,87 @@ foreach ($sourceId in $commitSourceIds) {
     }
 }
 $checks += New-Check -Id "source_app_commit_freshness" -Passed ($sourceCommitFailures.Count -eq 0) -Failures $sourceCommitFailures -Evidence ([pscustomobject][ordered]@{ source_ids = $commitSourceIds; current_app_commit = $currentCommit; report_app_commit = $reportCommit })
+
+$internalArtifactFailures = @()
+$internalArtifactManifestSource = Get-SourceFile -Report $report -Id "internal_verification_artifact_manifest"
+$internalArtifactValidationSource = Get-SourceFile -Report $report -Id "internal_verification_artifact_validation"
+if ($null -eq $internalArtifactManifest) {
+    $internalArtifactFailures += "Internal Verification artifact manifest is missing or unreadable."
+}
+else {
+    if ([string]$internalArtifactManifest.lane -ne "internal-verification") {
+        $internalArtifactFailures += "Internal Verification artifact manifest lane is not internal-verification."
+    }
+    if ($internalArtifactManifest.self_contained -ne $true) {
+        $internalArtifactFailures += "Internal Verification artifact manifest is not self-contained."
+    }
+    if ($internalArtifactManifest.bundled_ipfs_cli_included -ne $true) {
+        $internalArtifactFailures += "Internal Verification artifact manifest does not include bundled IPFS."
+    }
+
+    $manifestFileCount = if ($internalArtifactManifest.PSObject.Properties["file_count"]) { [int]$internalArtifactManifest.file_count } else { 0 }
+    if ($manifestFileCount -le 0) {
+        $internalArtifactFailures += "Internal Verification artifact manifest file_count is missing or zero."
+    }
+
+    $manifestCommit = if ($internalArtifactManifest.PSObject.Properties["git_commit"]) { [string]$internalArtifactManifest.git_commit } else { "" }
+    if ($manifestCommit -notmatch '^[0-9a-f]{7,40}$') {
+        $internalArtifactFailures += "Internal Verification artifact manifest git_commit is missing or invalid."
+    }
+    elseif (-not [string]::IsNullOrWhiteSpace($currentCommit) -and -not $manifestCommit.StartsWith($currentCommit)) {
+        $internalArtifactFailures += "Internal Verification artifact manifest git_commit $manifestCommit does not match current app commit $currentCommit."
+    }
+    elseif (-not [string]::IsNullOrWhiteSpace($reportCommit) -and -not $manifestCommit.StartsWith($reportCommit)) {
+        $internalArtifactFailures += "Internal Verification artifact manifest git_commit $manifestCommit does not match completion audit app_commit $reportCommit."
+    }
+}
+
+if ($null -eq $internalArtifactValidation) {
+    $internalArtifactFailures += "Internal Verification artifact validation report is missing or unreadable."
+}
+else {
+    if ($internalArtifactValidation.require_bundled_ipfs -ne $true) {
+        $internalArtifactFailures += "Internal Verification artifact validation did not require bundled IPFS."
+    }
+    if ($internalArtifactValidation.passed -ne $true) {
+        $internalArtifactFailures += "Internal Verification artifact validation did not pass."
+    }
+
+    $validationArtifacts = @(Get-ObjectArray -Object $internalArtifactValidation -Name "artifacts")
+    if ($validationArtifacts.Count -eq 0) {
+        $internalArtifactFailures += "Internal Verification artifact validation has no artifacts."
+    }
+    else {
+        $artifact = $validationArtifacts[0]
+        if ([string]$artifact.lane -ne "internal-verification") {
+            $internalArtifactFailures += "Internal Verification artifact validation artifact lane is not internal-verification."
+        }
+        if ($artifact.bundled_ipfs_cli_included -ne $true) {
+            $internalArtifactFailures += "Internal Verification artifact validation artifact does not include bundled IPFS."
+        }
+        if ($artifact.passed -ne $true) {
+            $internalArtifactFailures += "Internal Verification artifact validation artifact did not pass."
+        }
+        if ($null -ne $internalArtifactManifest) {
+            $manifestFileCount = if ($internalArtifactManifest.PSObject.Properties["file_count"]) { [int]$internalArtifactManifest.file_count } else { 0 }
+            $validatedFileCount = if ($artifact.PSObject.Properties["verified_manifest_file_count"]) { [int]$artifact.verified_manifest_file_count } else { 0 }
+            if ($manifestFileCount -gt 0 -and $validatedFileCount -ne $manifestFileCount) {
+                $internalArtifactFailures += "Internal Verification artifact validation file count $validatedFileCount does not match manifest file_count $manifestFileCount."
+            }
+            if ($null -ne $internalArtifactManifestSource -and $artifact.PSObject.Properties["manifest_path"]) {
+                $expectedManifestPath = [System.IO.Path]::GetFullPath([string]$internalArtifactManifestSource.path)
+                $validatedManifestPath = [System.IO.Path]::GetFullPath([string]$artifact.manifest_path)
+                if ($expectedManifestPath -ne $validatedManifestPath) {
+                    $internalArtifactFailures += "Internal Verification artifact validation manifest_path does not match completion audit source."
+                }
+            }
+        }
+    }
+}
+$checks += New-Check -Id "internal_verification_artifact_validation" -Passed ($internalArtifactFailures.Count -eq 0) -Failures $internalArtifactFailures -Evidence ([pscustomobject][ordered]@{
+    manifest_source = $internalArtifactManifestSource
+    validation_source = $internalArtifactValidationSource
+})
 
 $packetValidationSource = Get-SourceFile -Report $report -Id "production_mvp_next_action_packet_validation"
 $packetValidation = $(if ($null -ne $packetValidationSource) { Read-JsonFile -Path ([string]$packetValidationSource.path) } else { $null })
