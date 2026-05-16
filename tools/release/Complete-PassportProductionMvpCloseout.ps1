@@ -434,6 +434,8 @@ $resolvedPreMvpReportPath = Resolve-RepoPath -Path $PreMvpReportPath
 $resolvedStagingReadinessReportPath = Resolve-RepoPath -Path $StagingReadinessReportPath
 $resolvedCanaryMvpReadinessReportPath = Resolve-RepoPath -Path $CanaryMvpReadinessReportPath
 $resolvedProvisioningReportPath = Resolve-RepoPath -Path $ProvisioningPacketReportPath
+$closeoutProvisioningReportPath = [System.IO.Path]::GetFullPath((Join-Path $resolvedOutput "production-provisioning-packet-validation-report.json"))
+$effectiveProvisioningReportPath = $resolvedProvisioningReportPath
 $resolvedProvisioningManifestPath = Resolve-RepoPath -Path $ProvisioningPacketManifestPath
 
 $failures = @()
@@ -466,6 +468,15 @@ else {
     if ($provisioningValidation.exit_code -ne 0 -or -not [bool]$provisioningState.passed) {
         $failures += "Filled production provisioning packet did not pass -RequireNoPlaceholders validation."
     }
+}
+
+if (Test-Path -LiteralPath $resolvedProvisioningReportPath -PathType Leaf) {
+    if ([System.IO.Path]::GetFullPath($resolvedProvisioningReportPath) -ne $closeoutProvisioningReportPath) {
+        Copy-Item -LiteralPath $resolvedProvisioningReportPath -Destination $closeoutProvisioningReportPath -Force
+    }
+
+    $effectiveProvisioningReportPath = $closeoutProvisioningReportPath
+    $provisioningState = Get-ToolReportState -Id "production_provisioning_packet_validation" -Path $effectiveProvisioningReportPath
 }
 
 $readinessRun = $null
@@ -501,7 +512,7 @@ $releaseGeneration = Invoke-Tool `
         "-ReadinessReportPath", $resolvedReadinessReportPath,
         "-StagingReadinessReportPath", $resolvedStagingReadinessReportPath,
         "-CanaryMvpReadinessReportPath", $resolvedCanaryMvpReadinessReportPath,
-        "-ProvisioningPacketReportPath", $resolvedProvisioningReportPath,
+        "-ProvisioningPacketReportPath", $effectiveProvisioningReportPath,
         "-ProvisioningPacketManifestPath", $resolvedProvisioningManifestPath,
         "-Force"
     ) `
@@ -519,7 +530,7 @@ $releaseValidation = Invoke-Tool `
         "-ReadinessReportPath", $resolvedReadinessReportPath,
         "-StagingReadinessReportPath", $resolvedStagingReadinessReportPath,
         "-CanaryMvpReadinessReportPath", $resolvedCanaryMvpReadinessReportPath,
-        "-ProvisioningPacketReportPath", $resolvedProvisioningReportPath,
+        "-ProvisioningPacketReportPath", $effectiveProvisioningReportPath,
         "-ProvisioningPacketManifestPath", $resolvedProvisioningManifestPath,
         "-EnvironmentFile", $resolvedEnvironmentFile,
         "-RequireReady",
@@ -557,7 +568,7 @@ $manifest = [pscustomobject][ordered]@{
         pre_mvp_internal_verification = New-FileRecord -Id "pre_mvp_internal_verification_report" -Path $resolvedPreMvpReportPath
         staging_readiness = New-FileRecord -Id "staging_readiness_report" -Path $resolvedStagingReadinessReportPath
         canary_mvp_readiness = New-FileRecord -Id "canary_mvp_readiness_report" -Path $resolvedCanaryMvpReadinessReportPath
-        production_provisioning_packet_validation = New-FileRecord -Id "production_provisioning_packet_validation_report" -Path $resolvedProvisioningReportPath
+        production_provisioning_packet_validation = New-FileRecord -Id "production_provisioning_packet_validation_report" -Path $effectiveProvisioningReportPath
         production_provisioning_packet_manifest = New-FileRecord -Id "production_provisioning_packet_manifest" -Path $resolvedProvisioningManifestPath
     }
     steps = [pscustomobject][ordered]@{
@@ -596,7 +607,7 @@ if (-not $closeoutPassed -and -not $SkipFailureHandoff) {
         -Arguments @(
             "-CloseoutManifestPath", $manifestPath,
             "-ProductionMvpReadinessReportPath", $resolvedReadinessReportPath,
-            "-ProductionProvisioningPacketReportPath", $resolvedProvisioningReportPath,
+            "-ProductionProvisioningPacketReportPath", $effectiveProvisioningReportPath,
             "-ReleaseEvidenceValidationReportPath", $releaseValidationPath,
             "-OutputPath", $resolvedOutstandingWorkReportPath,
             "-MarkdownOutputPath", $resolvedOutstandingWorkMarkdownPath,
