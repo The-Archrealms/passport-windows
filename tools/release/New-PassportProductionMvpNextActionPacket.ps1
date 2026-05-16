@@ -191,6 +191,7 @@ function New-CommandGroupRecords {
     param([object[]]$Actions)
 
     $groupsByCommand = [ordered]@{}
+    $commandOrder = 0
     foreach ($action in @($Actions)) {
         foreach ($command in @(Get-ObjectArray -Object $action -Name "commands" | ForEach-Object { [string]$_ })) {
             if ([string]::IsNullOrWhiteSpace($command)) {
@@ -198,8 +199,10 @@ function New-CommandGroupRecords {
             }
 
             if (-not $groupsByCommand.Contains($command)) {
+                $commandOrder += 1
                 $groupsByCommand[$command] = [ordered]@{
                     command = $command
+                    command_order = $commandOrder
                     phase_order = [int]$action.phase_order
                     earliest_phase_order = [int]$action.phase_order
                     latest_phase_order = [int]$action.phase_order
@@ -233,12 +236,13 @@ function New-CommandGroupRecords {
 
     $index = 0
     return @($groupsByCommand.Values |
-        Sort-Object @{ Expression = { [int]$_["latest_phase_order"] }; Ascending = $true }, @{ Expression = { [int]$_["earliest_phase_order"] }; Ascending = $true }, @{ Expression = { [string]$_["command"] }; Ascending = $true } |
+        Sort-Object @{ Expression = { [int]$_["latest_phase_order"] }; Ascending = $true }, @{ Expression = { [int]$_["earliest_phase_order"] }; Ascending = $true }, @{ Expression = { [int]$_["command_order"] }; Ascending = $true } |
         ForEach-Object {
             $index += 1
             [pscustomobject][ordered]@{
                 sequence = $index
                 command = [string]$_["command"]
+                command_order = [int]$_["command_order"]
                 phase_order = [int]$_["phase_order"]
                 earliest_phase_order = [int]$_["earliest_phase_order"]
                 latest_phase_order = [int]$_["latest_phase_order"]

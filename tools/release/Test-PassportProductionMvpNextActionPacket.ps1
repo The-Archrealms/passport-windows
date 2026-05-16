@@ -502,6 +502,14 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
         }
     }
 
+    $pilotWorkspaceCommand = @($deduplicatedCommands | Where-Object { [string]$_.command -match "Start-PassportPreMvpStaffStewardPilot\.ps1" } | Select-Object -First 1)
+    $pilotCloseoutCommand = @($deduplicatedCommands | Where-Object { [string]$_.command -match "Complete-PassportPreMvpStaffStewardPilotHandoff\.ps1" } | Select-Object -First 1)
+    if ($pilotWorkspaceCommand.Count -gt 0 -and $pilotCloseoutCommand.Count -gt 0) {
+        if ([int]$pilotWorkspaceCommand[0].sequence -ge [int]$pilotCloseoutCommand[0].sequence) {
+            $commandSequenceFailures += "staff/steward pilot workspace launcher must appear before the pilot closeout command."
+        }
+    }
+
     $checks += New-Check -Id "deduplicated_operator_command_sequence" -Passed ($commandSequenceFailures.Count -eq 0) -Failures $commandSequenceFailures -Evidence ([pscustomobject][ordered]@{
         action_command_count = $packetCommands.Count
         unique_operator_command_count = $uniquePacketCommands.Count
