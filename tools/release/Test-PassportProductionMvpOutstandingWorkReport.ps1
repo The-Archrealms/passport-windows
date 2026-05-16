@@ -31,6 +31,16 @@ function Get-Sha256Hex {
     return (Get-FileHash -Algorithm SHA256 -LiteralPath $Path).Hash.ToLowerInvariant()
 }
 
+function Read-JsonFile {
+    param([string]$Path)
+
+    if ([string]::IsNullOrWhiteSpace($Path) -or -not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        return $null
+    }
+
+    return Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
+}
+
 function Get-CurrentCommit {
     Push-Location $repoRoot
     try {
@@ -359,10 +369,15 @@ if ($null -ne $report) {
 
     $childFailedCheckCount = 0
     foreach ($check in $failedProvisioningChecks) {
-        $childFailedCheckCount += (Get-ObjectArray -Object $check -Name "child_failed_checks").Count
+        if ($null -ne $check.PSObject.Properties["child_failed_check_count"] -and $null -ne $check.child_failed_check_count) {
+            $childFailedCheckCount += [int]$check.child_failed_check_count
+        }
+        else {
+            $childFailedCheckCount += (Get-ObjectArray -Object $check -Name "child_failed_checks").Count
+        }
     }
     if ((Read-ObjectInt -Object $summary -Name "failed_provisioning_child_check_count") -ne $childFailedCheckCount) {
-        $countFailures += "failed_provisioning_child_check_count does not match child_failed_checks."
+        $countFailures += "failed_provisioning_child_check_count does not match provisioning child failure counts."
     }
 
     $expectedBlockerCount = $inputFailures.Count + $closeoutFailures.Count + $failedReadinessGates.Count + $failedProvisioningChecks.Count + $failedReleaseEvidenceChecks.Count
@@ -474,6 +489,41 @@ if ($null -ne $report) {
         }
     }
     $checks += New-Check -Id "source_file_contract" -Passed ($sourceFileFailures.Count -eq 0) -Failures $sourceFileFailures
+
+    $provisioningSourceFailures = @()
+    if ($null -ne $report.source_files -and
+        $report.source_files.PSObject.Properties["closeout_manifest"] -and
+        $report.source_files.PSObject.Properties["production_provisioning_packet_report"]) {
+        $closeoutSourceFile = $report.source_files.closeout_manifest
+        $provisioningSourceFile = $report.source_files.production_provisioning_packet_report
+        $closeoutManifest = Read-JsonFile -Path ([string]$closeoutSourceFile.path)
+        if ($null -ne $closeoutManifest -and
+            $closeoutManifest.PSObject.Properties["steps"] -and
+            $closeoutManifest.steps.PSObject.Properties["production_provisioning_packet_validation"]) {
+            $provisioningStep = $closeoutManifest.steps.production_provisioning_packet_validation
+            if ($provisioningStep.PSObject.Properties["report"] -and
+                $provisioningStep.report.PSObject.Properties["file"]) {
+                $closeoutProvisioningFile = $provisioningStep.report.file
+                $closeoutProvisioningPath = Resolve-RepoPath -Path ([string]$closeoutProvisioningFile.path)
+                $closeoutProvisioningSha = [string]$closeoutProvisioningFile.sha256
+                $reportProvisioningPath = Resolve-RepoPath -Path ([string]$provisioningSourceFile.path)
+                $reportProvisioningSha = [string]$provisioningSourceFile.sha256
+
+                if (-not [string]::IsNullOrWhiteSpace($closeoutProvisioningPath) -and
+                    [string]$report.provisioning_report_source -eq "report_file" -and
+                    $reportProvisioningPath -ne $closeoutProvisioningPath) {
+                    $provisioningSourceFailures += "production provisioning source file must point at the closeout-pinned validation report: $closeoutProvisioningPath"
+                }
+
+                if (-not [string]::IsNullOrWhiteSpace($closeoutProvisioningSha) -and
+                    -not [string]::IsNullOrWhiteSpace($reportProvisioningSha) -and
+                    $reportProvisioningSha -ne $closeoutProvisioningSha) {
+                    $provisioningSourceFailures += "production provisioning source file SHA-256 does not match the closeout-pinned validation report."
+                }
+            }
+        }
+    }
+    $checks += New-Check -Id "provisioning_source_pinned_to_closeout" -Passed ($provisioningSourceFailures.Count -eq 0) -Failures $provisioningSourceFailures
 
     $blockerContractFailures = @()
     $seenBlockerIds = @{}

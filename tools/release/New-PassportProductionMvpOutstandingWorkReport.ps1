@@ -54,6 +54,17 @@ function Read-JsonPayloadFromLog {
     }
 
     $text = Get-Content -LiteralPath $Path -Raw
+    return Read-JsonPayloadFromText -Text $text
+}
+
+function Read-JsonPayloadFromText {
+    param([string]$Text)
+
+    if ([string]::IsNullOrWhiteSpace($Text)) {
+        return $null
+    }
+
+    $text = [string]$Text
     $start = $text.IndexOf("{")
     if ($start -lt 0) {
         return $null
@@ -135,6 +146,13 @@ function Get-FailedChildChecks {
 
     $resolved = Resolve-RepoPath -Path $Path
     $childReport = Read-JsonFile -Path $resolved
+    return Get-FailedChildChecksFromReport -Report $childReport
+}
+
+function Get-FailedChildChecksFromReport {
+    param([object]$Report)
+
+    $childReport = $Report
     if ($null -eq $childReport -or -not $childReport.PSObject.Properties["checks"]) {
         return @()
     }
@@ -816,22 +834,44 @@ $files = [ordered]@{
 
 $closeout = Read-JsonFile -Path $files.closeout_manifest.path
 $readiness = Read-JsonFile -Path $files.production_mvp_readiness_report.path
-$provisioning = Read-JsonFile -Path $files.production_provisioning_packet_report.path
 $releaseEvidence = Read-JsonFile -Path $files.release_evidence_validation_report.path
 $provisioningReportSource = "report_file"
 $inputWarnings = @()
+$provisioningStep = $null
+$expectedProvisioningHash = ""
 
 if ($null -ne $closeout -and
     $closeout.PSObject.Properties["steps"] -and
     $closeout.steps.PSObject.Properties["production_provisioning_packet_validation"]) {
     $provisioningStep = $closeout.steps.production_provisioning_packet_validation
-    $expectedProvisioningHash = ""
     if ($provisioningStep.PSObject.Properties["report"] -and
         $provisioningStep.report.PSObject.Properties["file"] -and
         $provisioningStep.report.file.PSObject.Properties["sha256"]) {
         $expectedProvisioningHash = [string]$provisioningStep.report.file.sha256
     }
 
+    $closeoutProvisioningPath = ""
+    if ($provisioningStep.PSObject.Properties["report"] -and
+        $provisioningStep.report.PSObject.Properties["file"] -and
+        $provisioningStep.report.file.PSObject.Properties["path"]) {
+        $closeoutProvisioningPath = [string]$provisioningStep.report.file.path
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($closeoutProvisioningPath)) {
+        $closeoutProvisioningFile = New-FileRecord -Id "production_provisioning_packet_report" -Path $closeoutProvisioningPath
+        if ($closeoutProvisioningFile.exists -and
+            ([string]::IsNullOrWhiteSpace($expectedProvisioningHash) -or $closeoutProvisioningFile.sha256 -eq $expectedProvisioningHash)) {
+            $files["production_provisioning_packet_report"] = $closeoutProvisioningFile
+        }
+        elseif ($closeoutProvisioningFile.exists) {
+            $inputWarnings += "The closeout provisioning report exists but does not match the closeout manifest hash; keeping the requested provisioning report path."
+        }
+        else {
+            $inputWarnings += "The closeout provisioning report path does not exist; keeping the requested provisioning report path."
+        }
+    }
+
+    $provisioning = Read-JsonFile -Path $files.production_provisioning_packet_report.path
     $currentProvisioningHash = [string]$files.production_provisioning_packet_report.sha256
     if (-not [string]::IsNullOrWhiteSpace($expectedProvisioningHash) -and
         -not [string]::IsNullOrWhiteSpace($currentProvisioningHash) -and
@@ -858,6 +898,9 @@ if ($null -ne $closeout -and
             $inputWarnings += "The provisioning report path no longer matches the closeout hash and no closeout log path was recorded."
         }
     }
+}
+else {
+    $provisioning = Read-JsonFile -Path $files.production_provisioning_packet_report.path
 }
 
 $inputFailures = @()
@@ -891,7 +934,24 @@ if ($null -ne $provisioning -and $provisioning.PSObject.Properties["checks"]) {
         $childReportPath = $(if ($check.evidence -and $check.evidence.PSObject.Properties["report_path"]) { [string]$check.evidence.report_path } else { "" })
         $resolvedChildReportPath = Resolve-RepoPath -Path $childReportPath
         $childReportExists = (-not [string]::IsNullOrWhiteSpace($resolvedChildReportPath)) -and (Test-Path -LiteralPath $resolvedChildReportPath -PathType Leaf)
-        $childFailedChecks = if ($childReportExists) { @(Get-FailedChildChecks -Path $resolvedChildReportPath) } else { @() }
+        $childFailedChecks = @()
+        $childFailedCheckSource = ""
+        if ($check.evidence -and $check.evidence.PSObject.Properties["output_excerpt"]) {
+            $embeddedChildReport = Read-JsonPayloadFromText -Text ([string]$check.evidence.output_excerpt)
+            $embeddedChildFailedChecks = @(Get-FailedChildChecksFromReport -Report $embeddedChildReport)
+            if ($embeddedChildFailedChecks.Count -gt 0) {
+                $childFailedChecks = $embeddedChildFailedChecks
+                $childFailedCheckSource = "provisioning_output_excerpt"
+            }
+        }
+
+        if ($childFailedChecks.Count -eq 0 -and $childReportExists) {
+            $childFailedChecks = @(Get-FailedChildChecks -Path $resolvedChildReportPath)
+            if ($childFailedChecks.Count -gt 0) {
+                $childFailedCheckSource = "child_report_file"
+            }
+        }
+
         $action = $(if ($provisioningActionMap.ContainsKey([string]$check.id)) { $provisioningActionMap[[string]$check.id] } else { $null })
 
         $failedProvisioningChecks += [pscustomobject][ordered]@{
@@ -904,6 +964,7 @@ if ($null -ne $provisioning -and $provisioning.PSObject.Properties["checks"]) {
             child_report_exists = $childReportExists
             child_report_sha256 = $(if ($childReportExists) { Get-Sha256Hex -Path $resolvedChildReportPath } else { "" })
             child_failed_check_count = $(if ($check.evidence -and $check.evidence.PSObject.Properties["child_failed_check_count"]) { [int]$check.evidence.child_failed_check_count } else { $null })
+            child_failed_check_source = $childFailedCheckSource
             child_failed_checks = $childFailedChecks
         }
     }
@@ -995,7 +1056,14 @@ foreach ($check in $failedReleaseEvidenceChecks) {
     }
 }
 
-$failedProvisioningChildCheckCount = (@($failedProvisioningChecks | ForEach-Object { @($_.child_failed_checks).Count }) | Measure-Object -Sum).Sum
+$failedProvisioningChildCheckCount = (@($failedProvisioningChecks | ForEach-Object {
+    if ($null -ne $_.child_failed_check_count) {
+        [int]$_.child_failed_check_count
+    }
+    else {
+        @($_.child_failed_checks).Count
+    }
+}) | Measure-Object -Sum).Sum
 if ($null -eq $failedProvisioningChildCheckCount) {
     $failedProvisioningChildCheckCount = 0
 }
