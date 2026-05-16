@@ -63,7 +63,7 @@ If a local or private runtime is already running, run the non-mutating probe:
   -ModelId Qwen/Qwen3-8B
 ```
 
-The production readiness gate still requires the hosted AI gateway `/ai/runtime/status` and `/ai/runtime/probe` endpoints to pass with the approved runtime, model artifact hash, license approval, vector store, and knowledge approval root configured.
+The production readiness gate still requires the hosted AI gateway `/ai/runtime/status` and `/ai/runtime/probe` endpoints to pass with the approved runtime, model artifact hash, license approval, vector store, and knowledge approval root configured. The gate compares the hosted gateway's reported model ID, model artifact hash, license approval, vector-store values, and knowledge approval root against the production environment values so a stale or wrong AI deployment cannot satisfy the release gate.
 
 ## vLLM
 

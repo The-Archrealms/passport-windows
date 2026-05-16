@@ -310,7 +310,9 @@ if ($missingFiles.Count -eq 0) {
             "ARCHREALMS_PASSPORT_AI_KNOWLEDGE_APPROVAL_ROOT",
             "open_weight_ai_runtime",
             "hosted_ai_runtime_probe",
-            "runtime_answer_received=true"
+            "runtime_answer_received=true",
+            "matched the approved production model ID",
+            "returned the approved production model ID"
         ) `
         -Path $resolvedRuntimeReadinessEvidence
     $checks.Add((New-Check -Id "ai_runtime_readiness_evidence_contract" -Passed ($runtimeEvidenceFailures.Count -eq 0) -Failures $runtimeEvidenceFailures -Evidence @{ path = $resolvedRuntimeReadinessEvidence }))

@@ -26,8 +26,10 @@ The report must show:
 - `open_weight_ai_runtime` passed.
 - `hosted_ai_runtime_probe` passed.
 - `/ai/runtime/status` returned `ready=true`.
+- `/ai/runtime/status` matched the approved production model ID, model artifact SHA-256, license approval ID, vector store provider, vector store ID, and knowledge approval root.
 - `/ai/runtime/probe` returned `ready=true`.
 - `/ai/runtime/probe` returned `runtime_answer_received=true`.
+- `/ai/runtime/probe` returned the approved production model ID.
 - The hosted gateway, not Passport clients, called the private OpenAI-compatible runtime.
 
 Attach the model approval request, vector store provisioning record, and any runtime probe evidence from `Test-PassportOpenWeightAiRuntimeDeployment.ps1 -ProbeRuntime`.

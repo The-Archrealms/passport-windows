@@ -78,6 +78,11 @@ public sealed class PassportHostedApiIntegrationTests
             using var aiRuntime = JsonDocument.Parse(await aiRuntimeResponse.Content.ReadAsStringAsync());
             Assert.True(aiRuntime.RootElement.GetProperty("ready").GetBoolean());
             Assert.Equal("llama-3.1-8b-instruct-test", aiRuntime.RootElement.GetProperty("model_id").GetString());
+            Assert.Equal(new string('a', 64), aiRuntime.RootElement.GetProperty("model_artifact_sha256").GetString());
+            Assert.Equal("license-approval-integration-test", aiRuntime.RootElement.GetProperty("model_license_approval_id").GetString());
+            Assert.Equal("integration-vector-store", aiRuntime.RootElement.GetProperty("vector_store_provider").GetString());
+            Assert.Equal("passport-knowledge-integration-test", aiRuntime.RootElement.GetProperty("vector_store_id").GetString());
+            Assert.Equal(new string('b', 64), aiRuntime.RootElement.GetProperty("knowledge_approval_root").GetString());
         }
 
         using var storageRequest = new HttpRequestMessage(HttpMethod.Get, "/ops/storage/status");

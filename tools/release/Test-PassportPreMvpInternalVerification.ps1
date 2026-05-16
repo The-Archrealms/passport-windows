@@ -1117,7 +1117,7 @@ else {
         -Result (Invoke-Tool -FilePath "powershell" -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "tools\release\Complete-PassportCanaryMvpReadinessEvidencePacket.ps1", "-UseGeneratedFixture"))
     $checks += New-ToolCheck `
         -Id "production_readiness_fail_closed_validation" `
-        -Description "ProductionMvp readiness fails closed when production probe inputs are absent." `
+        -Description "ProductionMvp readiness fails closed when production probe inputs are absent and statically verifies AI runtime environment/status parity checks." `
         -Result (Invoke-Tool -FilePath "powershell" -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "tools\release\Test-PassportProductionMvpReadinessFailClosed.ps1", "-OutputPath", "artifacts\release\production-mvp-readiness-fail-closed-validation-report.json"))
     $checks += New-ToolCheck `
         -Id "production_mvp_artifact_policy_validation" `

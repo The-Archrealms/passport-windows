@@ -307,7 +307,8 @@ function Test-JsonRuntimeStatusEndpoint {
     param(
         [string]$Name,
         [string]$Url,
-        [string]$ExpectedSchema
+        [string]$ExpectedSchema,
+        [hashtable]$ExpectedFields = @{}
     )
 
     if ([string]::IsNullOrWhiteSpace($Url)) {
@@ -342,6 +343,23 @@ function Test-JsonRuntimeStatusEndpoint {
         return "$Name endpoint is not ready for $Url"
     }
 
+    foreach ($fieldName in $ExpectedFields.Keys) {
+        $expectedValue = [string]$ExpectedFields[$fieldName]
+        if ([string]::IsNullOrWhiteSpace($expectedValue)) {
+            continue
+        }
+
+        $property = $response.PSObject.Properties[$fieldName]
+        if ($null -eq $property) {
+            return "$Name endpoint is missing expected field '$fieldName' for $Url"
+        }
+
+        $actualValue = [string]$property.Value
+        if (-not [string]::Equals($actualValue.Trim(), $expectedValue.Trim(), [System.StringComparison]::OrdinalIgnoreCase)) {
+            return "$Name endpoint field '$fieldName' does not match production configuration for $Url"
+        }
+    }
+
     return ""
 }
 
@@ -370,7 +388,15 @@ function Test-HostedRuntimeStatusEndpoints {
         $aiStatus = Test-JsonRuntimeStatusEndpoint `
             -Name "hosted AI runtime status" `
             -Url (Join-EndpointPath -BaseUrl $aiGatewayUrl -Path "/ai/runtime/status") `
-            -ExpectedSchema "archrealms.passport.hosted_ai_runtime_readiness.v1"
+            -ExpectedSchema "archrealms.passport.hosted_ai_runtime_readiness.v1" `
+            -ExpectedFields @{
+                model_id = [System.Environment]::GetEnvironmentVariable("ARCHREALMS_PASSPORT_AI_MODEL_ID")
+                model_artifact_sha256 = [System.Environment]::GetEnvironmentVariable("ARCHREALMS_PASSPORT_AI_MODEL_ARTIFACT_SHA256")
+                model_license_approval_id = [System.Environment]::GetEnvironmentVariable("ARCHREALMS_PASSPORT_AI_MODEL_LICENSE_APPROVAL_ID")
+                vector_store_provider = [System.Environment]::GetEnvironmentVariable("ARCHREALMS_PASSPORT_AI_VECTOR_STORE_PROVIDER")
+                vector_store_id = [System.Environment]::GetEnvironmentVariable("ARCHREALMS_PASSPORT_AI_VECTOR_STORE_ID")
+                knowledge_approval_root = [System.Environment]::GetEnvironmentVariable("ARCHREALMS_PASSPORT_AI_KNOWLEDGE_APPROVAL_ROOT")
+            }
         if ($aiStatus) {
             $failures += $aiStatus
         }
@@ -449,6 +475,14 @@ function Test-HostedAiRuntimeProbeEndpoint {
         }
 
         return "hosted AI runtime probe endpoint is not ready for $url"
+    }
+
+    $expectedModelId = [System.Environment]::GetEnvironmentVariable("ARCHREALMS_PASSPORT_AI_MODEL_ID")
+    if (-not [string]::IsNullOrWhiteSpace($expectedModelId)) {
+        $actualModelId = [string]$response.model_id
+        if (-not [string]::Equals($actualModelId.Trim(), $expectedModelId.Trim(), [System.StringComparison]::OrdinalIgnoreCase)) {
+            return "hosted AI runtime probe endpoint model_id does not match production configuration for $url"
+        }
     }
 
     return ""

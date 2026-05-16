@@ -137,6 +137,17 @@ if ($outputDirectory) {
 
 $subjectReportPath = Join-Path $outputDirectory "production-mvp-readiness-fail-closed-subject-report.json"
 $readinessScript = Join-Path $repoRoot "tools\release\Test-PassportProductionMvpReadiness.ps1"
+$readinessScriptText = Get-Content -LiteralPath $readinessScript -Raw
+$requiredReadinessParityText = @(
+    "ExpectedFields",
+    "model_artifact_sha256",
+    "model_license_approval_id",
+    "vector_store_provider",
+    "vector_store_id",
+    "knowledge_approval_root",
+    "does not match production configuration",
+    "hosted AI runtime probe endpoint model_id does not match production configuration"
+)
 $arguments = @(
     "-NoProfile",
     "-ExecutionPolicy",
@@ -157,6 +168,17 @@ foreach ($name in $readinessEnvironmentVariables) {
 }
 
 $failures = @()
+$sourceContractFailures = @()
+foreach ($requiredText in $requiredReadinessParityText) {
+    if ($readinessScriptText.IndexOf($requiredText, [StringComparison]::OrdinalIgnoreCase) -lt 0) {
+        $sourceContractFailures += "Readiness script is missing AI runtime parity contract text: $requiredText"
+    }
+}
+
+if ($sourceContractFailures.Count -gt 0) {
+    $failures += $sourceContractFailures
+}
+
 $toolResult = $null
 $subjectReport = $null
 
@@ -251,6 +273,8 @@ $report = [pscustomobject][ordered]@{
     expected_failed_gate_ids = $expectedFailedGateIds
     probe_gate_ids = $probeGateIds
     subject_report_path = $subjectReportPath
+    source_contract_required_text = $requiredReadinessParityText
+    source_contract_failures = $sourceContractFailures
     subject_failed_gate_count = $(if ($null -ne $subjectReport) { [int]$subjectReport.failed_gate_count } else { $null })
     subject_ready = $(if ($null -ne $subjectReport) { [bool]$subjectReport.ready } else { $null })
     tool = $toolResult
