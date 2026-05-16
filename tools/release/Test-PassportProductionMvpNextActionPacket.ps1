@@ -316,6 +316,8 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
     $sourceActions = @(Get-ObjectArray -Object $sourceReport -Name "next_action_plan")
     $packetActions = @(Get-ObjectArray -Object $plan -Name "actions")
     $sourceBlockers = @(Get-ObjectArray -Object $sourceReport -Name "blockers")
+    $packetCommands = @($packetActions | ForEach-Object { Get-ObjectArray -Object $_ -Name "commands" } | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
+    $uniquePacketCommands = @($packetCommands | Select-Object -Unique)
     $sourceOperatorPlaceholderCount = (@($sourceActions | ForEach-Object { @(Get-ObjectArray -Object $_ -Name "operator_placeholders").Count }) | Measure-Object -Sum).Sum
     if ($null -eq $sourceOperatorPlaceholderCount) { $sourceOperatorPlaceholderCount = 0 }
 
@@ -335,6 +337,12 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
     if ([int]$plan.source_report.next_action_count -ne $sourceActions.Count) {
         $sourceFailures += "plan next_action_count does not match source report next_action_plan count."
     }
+    if (-not $plan.source_report.PSObject.Properties["unique_operator_command_count"]) {
+        $sourceFailures += "plan source_report is missing unique_operator_command_count."
+    }
+    elseif ([int]$plan.source_report.unique_operator_command_count -ne $uniquePacketCommands.Count) {
+        $sourceFailures += "plan unique_operator_command_count does not match packet unique command count."
+    }
     if ([int]$plan.source_report.operator_placeholder_count -ne [int]$sourceOperatorPlaceholderCount) {
         $sourceFailures += "plan operator_placeholder_count does not match source report next_action_plan operator placeholders."
     }
@@ -343,6 +351,12 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
     }
     if ([int]$manifest.source_report.next_action_count -ne $sourceActions.Count) {
         $sourceFailures += "manifest next_action_count does not match source report next_action_plan count."
+    }
+    if (-not $manifest.source_report.PSObject.Properties["unique_operator_command_count"]) {
+        $sourceFailures += "manifest source_report is missing unique_operator_command_count."
+    }
+    elseif ([int]$manifest.source_report.unique_operator_command_count -ne $uniquePacketCommands.Count) {
+        $sourceFailures += "manifest unique_operator_command_count does not match packet unique command count."
     }
     if ([int]$manifest.source_report.operator_placeholder_count -ne [int]$sourceOperatorPlaceholderCount) {
         $sourceFailures += "manifest operator_placeholder_count does not match source report next_action_plan operator placeholders."
@@ -400,6 +414,67 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
         }
     }
     $checks += New-Check -Id "action_plan_matches_source" -Passed ($actionFailures.Count -eq 0) -Failures $actionFailures -Evidence ([pscustomobject][ordered]@{ action_count = $packetActions.Count })
+
+    $commandSequenceFailures = @()
+    if (-not $plan.PSObject.Properties["summary"]) {
+        $commandSequenceFailures += "next-action plan is missing summary."
+    }
+    else {
+        if ([int]$plan.summary.action_count -ne $packetActions.Count) {
+            $commandSequenceFailures += "plan summary action_count does not match packet actions."
+        }
+        if ([int]$plan.summary.unique_operator_command_count -ne $uniquePacketCommands.Count) {
+            $commandSequenceFailures += "plan summary unique_operator_command_count does not match packet unique commands."
+        }
+        $expectedDuplicateCount = [Math]::Max(0, $packetCommands.Count - $uniquePacketCommands.Count)
+        if ([int]$plan.summary.duplicate_operator_command_count -ne $expectedDuplicateCount) {
+            $commandSequenceFailures += "plan summary duplicate_operator_command_count does not match duplicate command count."
+        }
+    }
+
+    $deduplicatedCommands = @(Get-ObjectArray -Object $plan -Name "deduplicated_operator_commands")
+    if ($deduplicatedCommands.Count -ne $uniquePacketCommands.Count) {
+        $commandSequenceFailures += "deduplicated_operator_commands count does not match unique packet commands."
+    }
+
+    $dedupeCommandsSeen = @{}
+    $expectedSequence = 1
+    foreach ($group in $deduplicatedCommands) {
+        $groupCommand = [string]$group.command
+        if ([string]::IsNullOrWhiteSpace($groupCommand)) {
+            $commandSequenceFailures += "deduplicated command group is missing command."
+        }
+        elseif ($dedupeCommandsSeen.ContainsKey($groupCommand)) {
+            $commandSequenceFailures += "duplicate command appears in deduplicated sequence: $groupCommand"
+        }
+        else {
+            $dedupeCommandsSeen[$groupCommand] = $true
+        }
+
+        if ([int]$group.sequence -ne $expectedSequence) {
+            $commandSequenceFailures += "deduplicated command group has unexpected sequence $($group.sequence), expected $expectedSequence."
+        }
+        $expectedSequence += 1
+
+        if (@(Get-ObjectArray -Object $group -Name "action_ids").Count -eq 0) {
+            $commandSequenceFailures += "deduplicated command group is missing action_ids."
+        }
+        if (@(Get-ObjectArray -Object $group -Name "blocker_ids").Count -eq 0 -and $packetActions.Count -gt 0) {
+            $commandSequenceFailures += "deduplicated command group is missing blocker_ids."
+        }
+    }
+
+    foreach ($command in $uniquePacketCommands) {
+        if (-not $dedupeCommandsSeen.ContainsKey($command)) {
+            $commandSequenceFailures += "packet unique command is missing from deduplicated sequence: $command"
+        }
+    }
+
+    $checks += New-Check -Id "deduplicated_operator_command_sequence" -Passed ($commandSequenceFailures.Count -eq 0) -Failures $commandSequenceFailures -Evidence ([pscustomobject][ordered]@{
+        action_command_count = $packetCommands.Count
+        unique_operator_command_count = $uniquePacketCommands.Count
+        duplicate_operator_command_count = [Math]::Max(0, $packetCommands.Count - $uniquePacketCommands.Count)
+    })
 
     $simulationHashFailures = @()
     $simulationRunReportPath = Resolve-RepoPath -Path "artifacts\release\pre-mvp-simulation-run-report.json"
@@ -510,6 +585,24 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
         if ($markdown -notmatch "# Production MVP Next Action Plan") {
             $markdownFailures += "Markdown title is missing."
         }
+        if ($uniquePacketCommands.Count -gt 0 -and $markdown -notmatch "## Deduplicated Operator Command Sequence") {
+            $markdownFailures += "Markdown is missing deduplicated operator command sequence."
+        }
+        if ($packetCommands.Count -gt 0 -and $markdown -notmatch [regex]::Escape('```powershell')) {
+            $markdownFailures += "Markdown is missing fenced PowerShell command blocks."
+        }
+        foreach ($group in @(Get-ObjectArray -Object $plan -Name "deduplicated_operator_commands")) {
+            foreach ($value in @([string]$group.command, [string]"Step $($group.sequence)")) {
+                if (-not [string]::IsNullOrWhiteSpace($value) -and $markdown -notmatch [regex]::Escape($value)) {
+                    $markdownFailures += "Markdown is missing deduplicated command metadata: $value"
+                }
+            }
+            foreach ($actionId in @(Get-ObjectArray -Object $group -Name "action_ids")) {
+                if (-not [string]::IsNullOrWhiteSpace([string]$actionId) -and $markdown -notmatch [regex]::Escape([string]$actionId)) {
+                    $markdownFailures += "Markdown is missing deduplicated command action id: $actionId"
+                }
+            }
+        }
         foreach ($packetAction in $packetActions) {
             foreach ($value in @([string]$packetAction.id, [string]$packetAction.title, [string]$packetAction.summary, [string]$packetAction.action)) {
                 if (-not [string]::IsNullOrWhiteSpace($value) -and $markdown -notmatch [regex]::Escape($value)) {
@@ -606,6 +699,9 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
             if (-not $trimmed.StartsWith("#")) {
                 $commandFailures += "operator command checklist has an executable non-comment line: $trimmed"
             }
+        }
+        if ($uniquePacketCommands.Count -gt 0 -and $commandText -notmatch "Deduplicated operator command sequence") {
+            $commandFailures += "operator command checklist is missing deduplicated command sequence."
         }
         foreach ($packetAction in $packetActions) {
             foreach ($value in @([string]$packetAction.id, [string]$packetAction.title, [string]$packetAction.phase, [string]$packetAction.summary)) {

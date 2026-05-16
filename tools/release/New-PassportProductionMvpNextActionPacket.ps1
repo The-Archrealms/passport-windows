@@ -156,6 +156,77 @@ function Add-MarkdownRow {
     $Lines.Add("| " + ($escaped -join " | ") + " |")
 }
 
+function Add-UniqueString {
+    param(
+        [System.Collections.Generic.List[string]]$List,
+        [string]$Value
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Value)) {
+        return
+    }
+
+    if (-not $List.Contains($Value)) {
+        $List.Add($Value)
+    }
+}
+
+function New-CommandGroupRecords {
+    param([object[]]$Actions)
+
+    $groupsByCommand = [ordered]@{}
+    foreach ($action in @($Actions)) {
+        foreach ($command in @(Get-ObjectArray -Object $action -Name "commands" | ForEach-Object { [string]$_ })) {
+            if ([string]::IsNullOrWhiteSpace($command)) {
+                continue
+            }
+
+            if (-not $groupsByCommand.Contains($command)) {
+                $groupsByCommand[$command] = [ordered]@{
+                    command = $command
+                    phase_order = [int]$action.phase_order
+                    phases = New-Object System.Collections.Generic.List[string]
+                    action_ids = New-Object System.Collections.Generic.List[string]
+                    action_titles = New-Object System.Collections.Generic.List[string]
+                    blocker_ids = New-Object System.Collections.Generic.List[string]
+                    placeholder_tokens = New-Object System.Collections.Generic.List[string]
+                }
+            }
+
+            $entry = $groupsByCommand[$command]
+            if ([int]$action.phase_order -lt [int]$entry.phase_order) {
+                $entry.phase_order = [int]$action.phase_order
+            }
+            Add-UniqueString -List $entry.phases -Value ([string]$action.phase)
+            Add-UniqueString -List $entry.action_ids -Value ([string]$action.id)
+            Add-UniqueString -List $entry.action_titles -Value ([string]$action.title)
+            foreach ($blockerId in @(Get-ObjectArray -Object $action -Name "blocker_ids")) {
+                Add-UniqueString -List $entry.blocker_ids -Value ([string]$blockerId)
+            }
+            foreach ($placeholder in @(Get-ObjectArray -Object $action -Name "operator_placeholders")) {
+                Add-UniqueString -List $entry.placeholder_tokens -Value ([string]$placeholder.token)
+            }
+        }
+    }
+
+    $index = 0
+    return @($groupsByCommand.Values |
+        Sort-Object @{ Expression = "phase_order"; Ascending = $true }, @{ Expression = { [string]$_.command }; Ascending = $true } |
+        ForEach-Object {
+            $index += 1
+            [pscustomobject][ordered]@{
+                sequence = $index
+                command = [string]$_.command
+                phase_order = [int]$_.phase_order
+                phases = @($_.phases)
+                action_ids = @($_.action_ids)
+                action_titles = @($_.action_titles)
+                blocker_ids = @($_.blocker_ids)
+                placeholder_tokens = @($_.placeholder_tokens)
+            }
+        })
+}
+
 $resolvedReportPath = Resolve-RepoPath -Path $OutstandingWorkReportPath
 $resolvedOutputDirectory = Resolve-RepoPath -Path $OutputDirectory
 $manifestPath = Join-Path $resolvedOutputDirectory "production-mvp-next-action-packet.manifest.json"
@@ -177,6 +248,7 @@ if ([string]$report.schema -ne "archrealms.passport.production_mvp_outstanding_w
 }
 
 $actions = @(Get-ObjectArray -Object $report -Name "next_action_plan" | ForEach-Object { New-ActionRecord -Item $_ })
+$commandGroups = @(New-CommandGroupRecords -Actions $actions)
 $blockers = @(Get-ObjectArray -Object $report -Name "blockers")
 $matrix = $report.operator_input_matrix
 $environmentVariables = @(Get-ObjectArray -Object $matrix -Name "environment_variables")
@@ -199,6 +271,7 @@ $sourceReportRecord = [pscustomobject][ordered]@{
     ready_for_production_testing = [bool]$report.ready_for_production_testing
     blocker_count = $blockers.Count
     next_action_count = $actions.Count
+    unique_operator_command_count = $commandGroups.Count
     operator_placeholder_count = [int]$operatorPlaceholderCount
 }
 
@@ -207,6 +280,12 @@ $plan = [pscustomobject][ordered]@{
     created_utc = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
     app_commit = $sourceCommit
     source_report = $sourceReportRecord
+    summary = [pscustomobject][ordered]@{
+        action_count = $actions.Count
+        unique_operator_command_count = $commandGroups.Count
+        duplicate_operator_command_count = [Math]::Max(0, (($actions | ForEach-Object { @(Get-ObjectArray -Object $_ -Name "commands").Count } | Measure-Object -Sum).Sum) - $commandGroups.Count)
+    }
+    deduplicated_operator_commands = @($commandGroups)
     actions = @($actions)
 }
 
@@ -242,6 +321,7 @@ $markdown.Add("- Source report SHA-256: ``$sourceReportHash``")
 $markdown.Add("- Ready for production testing: $(([bool]$report.ready_for_production_testing).ToString().ToLowerInvariant())")
 $markdown.Add("- Blockers: $($blockers.Count)")
 $markdown.Add("- Action items: $($actions.Count)")
+$markdown.Add("- Unique operator commands: $($commandGroups.Count)")
 $markdown.Add("- Operator placeholders: $([int]$operatorPlaceholderCount)")
 $markdown.Add("")
 
@@ -249,6 +329,29 @@ if ($actions.Count -eq 0) {
     $markdown.Add("No next actions are required by the source outstanding-work report.")
 }
 else {
+    $markdown.Add("## Deduplicated Operator Command Sequence")
+    $markdown.Add("")
+    $markdown.Add("Run each command at most once after replacing placeholders and validating the referenced evidence packet. The detailed action sections below preserve every covered blocker.")
+    $markdown.Add("")
+    foreach ($group in $commandGroups) {
+        $markdown.Add("### Step $($group.sequence)")
+        $markdown.Add("")
+        $markdown.Add("- Phases: $((@($group.phases) -join ', '))")
+        $markdown.Add("- Actions covered: $((@($group.action_ids) -join ', '))")
+        $markdown.Add("- Blockers covered: $((@($group.blocker_ids) -join ', '))")
+        if (@($group.placeholder_tokens).Count -gt 0) {
+            $markdown.Add("- Placeholder tokens: $((@($group.placeholder_tokens) -join ', '))")
+        }
+        $markdown.Add("")
+        $markdown.Add('```powershell')
+        $markdown.Add([string]$group.command)
+        $markdown.Add('```')
+        $markdown.Add("")
+    }
+
+    $markdown.Add("## Detailed Action Plan")
+    $markdown.Add("")
+
     $currentPhase = ""
     foreach ($action in $actions) {
         if ($action.phase -ne $currentPhase) {
@@ -283,11 +386,11 @@ else {
             $markdown.Add("- Categories: $((@($action.categories) -join ', '))")
         }
         $markdown.Add("")
-        $markdown.Add("````powershell")
+        $markdown.Add('```powershell')
         foreach ($command in @($action.commands)) {
             $markdown.Add($command)
         }
-        $markdown.Add("````")
+        $markdown.Add('```')
         $markdown.Add("")
     }
 }
@@ -369,8 +472,25 @@ Set-Content -LiteralPath $matrixMarkdownPath -Value $matrixMarkdown -Encoding UT
 $commandLines = New-Object System.Collections.Generic.List[string]
 $commandLines.Add("# Production MVP next-action command checklist.")
 $commandLines.Add("# Commands are commented intentionally because they require filled external evidence and secrets.")
-$commandLines.Add("# Replace placeholders, review the target evidence packet, then run one command at a time in a secure operator shell.")
+$commandLines.Add("# Replace placeholders, review the target evidence packet, then run the deduplicated sequence in a secure operator shell.")
 $commandLines.Add("")
+if ($commandGroups.Count -gt 0) {
+    $commandLines.Add("# Deduplicated operator command sequence.")
+    foreach ($group in $commandGroups) {
+        $commandLines.Add("# Step $($group.sequence)")
+        $commandLines.Add("# Phases: $((@($group.phases) -join ', '))")
+        $commandLines.Add("# Actions: $((@($group.action_ids) -join ', '))")
+        $commandLines.Add("# Blockers: $((@($group.blocker_ids) -join ', '))")
+        if (@($group.placeholder_tokens).Count -gt 0) {
+            $commandLines.Add("# Placeholders: $((@($group.placeholder_tokens) -join ', '))")
+        }
+        $commandLines.Add("# $($group.command)")
+        $commandLines.Add("")
+    }
+
+    $commandLines.Add("# Detailed action traceability.")
+    $commandLines.Add("")
+}
 foreach ($action in $actions) {
     $commandLines.Add("# Action: $($action.id) - $($action.title)")
     $commandLines.Add("# Phase: $($action.phase)")
@@ -409,6 +529,7 @@ $manifest = [pscustomobject][ordered]@{
         ready_for_production_testing = [bool]$report.ready_for_production_testing
         blocker_count = $blockers.Count
         next_action_count = $actions.Count
+        unique_operator_command_count = $commandGroups.Count
         operator_placeholder_count = [int]$operatorPlaceholderCount
         environment_variable_count = $environmentVariables.Count
         readiness_evidence_item_count = $readinessEvidenceItems.Count
@@ -441,6 +562,7 @@ $result = [pscustomobject][ordered]@{
     operator_commands_path = $commandsPath
     operator_commands_sha256 = Get-Sha256Hex -Path $commandsPath
     action_count = $actions.Count
+    unique_operator_command_count = $commandGroups.Count
     blocker_count = $blockers.Count
     operator_placeholder_count = [int]$operatorPlaceholderCount
 }
