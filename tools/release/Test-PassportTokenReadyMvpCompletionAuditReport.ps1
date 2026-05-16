@@ -684,6 +684,29 @@ else {
             $packetValidationFailures += "$($mapping.source_id) SHA-256 does not match next-action packet validation"
         }
     }
+
+    $packetPlanSource = Get-SourceFile -Report $report -Id "production_mvp_next_action_plan"
+    $packetPlan = $(if ($null -ne $packetPlanSource) { Read-JsonFile -Path ([string]$packetPlanSource.path) } else { $null })
+    $hasStaffStewardPilotCommand = $false
+    if ($null -ne $packetPlan) {
+        foreach ($action in @(Get-ObjectArray -Object $packetPlan -Name "actions")) {
+            foreach ($command in @(Get-ObjectArray -Object $action -Name "commands")) {
+                if ([string]$command -match 'Complete-PassportPreMvpStaffStewardPilotHandoff\.ps1') {
+                    $hasStaffStewardPilotCommand = $true
+                }
+            }
+        }
+    }
+
+    if ($hasStaffStewardPilotCommand) {
+        $hashPrefillChecks = @(Get-ObjectArray -Object $packetValidation -Name "checks" | Where-Object { [string]$_.id -eq "staff_steward_simulation_hash_prefill" })
+        if ($hashPrefillChecks.Count -eq 0) {
+            $packetValidationFailures += "next-action packet validation is missing staff_steward_simulation_hash_prefill while staff/steward pilot closeout commands are present"
+        }
+        elseif (@($hashPrefillChecks | Where-Object { $_.passed -eq $true }).Count -eq 0) {
+            $packetValidationFailures += "next-action packet validation staff_steward_simulation_hash_prefill did not pass"
+        }
+    }
 }
 $checks += New-Check -Id "next_action_packet_handoff_validation" -Passed ($packetValidationFailures.Count -eq 0) -Failures $packetValidationFailures -Evidence $packetValidationSource
 
