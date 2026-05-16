@@ -382,6 +382,29 @@ if ($null -ne $report) {
     }
     $checks += New-Check -Id "operator_command_paths" -Passed ($commandFailures.Count -eq 0) -Failures $commandFailures -Evidence ([pscustomobject][ordered]@{ command_count = $commandRecords.Count })
 
+    $simulationHashFailures = @()
+    $simulationRunReportPath = Resolve-RepoPath -Path "artifacts\release\pre-mvp-simulation-run-report.json"
+    $expectedSimulationRunSha256 = Get-Sha256Hex -Path $simulationRunReportPath
+    $staffStewardPilotCommands = @($commandRecords |
+        Where-Object { [string]$_.command -match 'Complete-PassportPreMvpStaffStewardPilotHandoff\.ps1' } |
+        ForEach-Object { [string]$_.command })
+    if ($staffStewardPilotCommands.Count -gt 0) {
+        foreach ($command in $staffStewardPilotCommands) {
+            if ($command -match '<simulation-run-sha256>') {
+                $simulationHashFailures += "staff/steward pilot closeout command still contains <simulation-run-sha256>: $command"
+            }
+
+            if ($expectedSimulationRunSha256 -match '^[0-9a-f]{64}$' -and $command -notmatch [regex]::Escape("-SimulationRunReportSha256 $expectedSimulationRunSha256")) {
+                $simulationHashFailures += "staff/steward pilot closeout command does not include current simulation-run SHA-256 $expectedSimulationRunSha256`: $command"
+            }
+        }
+    }
+    $checks += New-Check -Id "staff_steward_simulation_hash_prefill" -Passed ($simulationHashFailures.Count -eq 0) -Failures $simulationHashFailures -Evidence ([pscustomobject][ordered]@{
+        simulation_run_report_path = $simulationRunReportPath
+        simulation_run_report_sha256 = $expectedSimulationRunSha256
+        staff_steward_command_count = $staffStewardPilotCommands.Count
+    })
+
     $actionFailures = @()
     foreach ($gate in $failedReadinessGates) {
         if ((Get-ObjectArray -Object $gate.operator_action -Name "commands").Count -eq 0) {

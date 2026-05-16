@@ -321,6 +321,35 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
     }
     $checks += New-Check -Id "action_plan_matches_source" -Passed ($actionFailures.Count -eq 0) -Failures $actionFailures -Evidence ([pscustomobject][ordered]@{ action_count = $packetActions.Count })
 
+    $simulationHashFailures = @()
+    $simulationRunReportPath = Resolve-RepoPath -Path "artifacts\release\pre-mvp-simulation-run-report.json"
+    $expectedSimulationRunSha256 = Get-Sha256Hex -Path $simulationRunReportPath
+    $staffStewardPilotCommands = @()
+    foreach ($packetAction in $packetActions) {
+        foreach ($command in @(Get-ObjectArray -Object $packetAction -Name "commands")) {
+            $commandText = [string]$command
+            if ($commandText -match 'Complete-PassportPreMvpStaffStewardPilotHandoff\.ps1') {
+                $staffStewardPilotCommands += $commandText
+            }
+        }
+    }
+    if ($staffStewardPilotCommands.Count -gt 0) {
+        foreach ($command in $staffStewardPilotCommands) {
+            if ($command -match '<simulation-run-sha256>') {
+                $simulationHashFailures += "staff/steward pilot closeout command still contains <simulation-run-sha256>: $command"
+            }
+
+            if ($expectedSimulationRunSha256 -match '^[0-9a-f]{64}$' -and $command -notmatch [regex]::Escape("-SimulationRunReportSha256 $expectedSimulationRunSha256")) {
+                $simulationHashFailures += "staff/steward pilot closeout command does not include current simulation-run SHA-256 $expectedSimulationRunSha256`: $command"
+            }
+        }
+    }
+    $checks += New-Check -Id "staff_steward_simulation_hash_prefill" -Passed ($simulationHashFailures.Count -eq 0) -Failures $simulationHashFailures -Evidence ([pscustomobject][ordered]@{
+        simulation_run_report_path = $simulationRunReportPath
+        simulation_run_report_sha256 = $expectedSimulationRunSha256
+        staff_steward_command_count = $staffStewardPilotCommands.Count
+    })
+
     if ($null -ne $matrix) {
         $sourceMatrix = $sourceReport.operator_input_matrix
         $sourceEnvironmentVariables = @(Get-ObjectArray -Object $sourceMatrix -Name "environment_variables")
