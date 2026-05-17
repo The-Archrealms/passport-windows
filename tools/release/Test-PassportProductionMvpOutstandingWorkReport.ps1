@@ -846,6 +846,48 @@ if ($null -ne $report) {
     }
     $checks += New-Check -Id "operator_command_paths" -Passed ($commandFailures.Count -eq 0) -Failures $commandFailures -Evidence ([pscustomobject][ordered]@{ command_count = $commandRecords.Count })
 
+    $openWeightCommandFailures = @()
+    $openWeightDirectCommands = @($commandRecords |
+        Where-Object { [string]$_.command -match 'Test-PassportOpenWeightAiRuntimeDeployment\.ps1' } |
+        ForEach-Object { [string]$_.command })
+    foreach ($command in $openWeightDirectCommands) {
+        foreach ($requiredText in @(
+                '-VllmComposePath <filled-open-weight-ai-runtime-root>\docker-compose.vllm.yml',
+                '-TgiComposePath <filled-open-weight-ai-runtime-root>\docker-compose.tgi.yml',
+                '-EnvTemplatePath <filled-open-weight-ai-runtime-root>\open-weight-ai-runtime.env.template',
+                '-ReadmePath <filled-open-weight-ai-runtime-root>\README.md',
+                '-ModelApprovalPath <filled-open-weight-ai-runtime-root>\model-approval-request.template.md',
+                '-VectorStoreProvisioningPath <filled-open-weight-ai-runtime-root>\vector-store-provisioning.template.md',
+                '-RuntimeReadinessEvidencePath <filled-open-weight-ai-runtime-root>\ai-runtime-readiness-evidence.template.md',
+                '-RequireNoPlaceholders',
+                '-ProbeRuntime',
+                '-RuntimeBaseUrl "<approved-ai-runtime-base-url>"',
+                '-ModelId "<approved-ai-model-id>"'
+            )) {
+            if ($command -notmatch [regex]::Escape($requiredText)) {
+                $openWeightCommandFailures += "open-weight runtime command is missing '$requiredText': $command"
+            }
+        }
+    }
+
+    $openWeightPacketProbeCommands = @($commandRecords |
+        Where-Object {
+            [string]$_.command -match 'Test-PassportProductionProvisioningPacket\.ps1' `
+                -and [string]$_.command -match [regex]::Escape('-PacketRoot <controlled-production-packet-root>') `
+                -and [string]$_.command -match [regex]::Escape('-RequireNoPlaceholders') `
+                -and [string]$_.command -match [regex]::Escape('-ProbeAiRuntime')
+        })
+    if ($openWeightDirectCommands.Count -lt 1) {
+        $openWeightCommandFailures += "no explicit open-weight AI runtime deployment/probe command was found."
+    }
+    if ($openWeightPacketProbeCommands.Count -lt 1) {
+        $openWeightCommandFailures += "no controlled production provisioning packet command with -ProbeAiRuntime was found."
+    }
+    $checks += New-Check -Id "open_weight_ai_runtime_probe_commands" -Passed ($openWeightCommandFailures.Count -eq 0) -Failures $openWeightCommandFailures -Evidence ([pscustomobject][ordered]@{
+        direct_runtime_command_count = $openWeightDirectCommands.Count
+        packet_probe_command_count = $openWeightPacketProbeCommands.Count
+    })
+
     $simulationHashFailures = @()
     $simulationRunReportPath = Resolve-RepoPath -Path "artifacts\release\pre-mvp-simulation-run-report.json"
     $expectedSimulationRunSha256 = Get-Sha256Hex -Path $simulationRunReportPath

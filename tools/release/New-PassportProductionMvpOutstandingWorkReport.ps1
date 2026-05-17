@@ -828,6 +828,22 @@ $canaryEvidenceRoot = "<filled-canary-evidence-root>"
 $canaryEvidenceFillCommand = "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Set-PassportCanaryMvpReadinessEvidencePacket.ps1 -PacketRoot $canaryEvidenceRoot -PolicyId ""<canary-policy-id>"" -IncidentReviewId ""<canary-incident-review-id>"" -BalanceReconciliationId ""<canary-balance-reconciliation-id>"" -ServiceDeliveryReconciliationId ""<canary-service-delivery-reconciliation-id>"" -SupportReadinessId ""<canary-support-readiness-id>"" -ProductionApprovalId ""<canary-production-approval-id>"" -ProductionLedgerNamespace ""<production-mvp-ledger-namespace>"" -PolicyEvidenceReference ""<canary-policy-evidence-refs>"" -IncidentEvidenceReference ""<canary-incident-evidence-refs>"" -BalanceEvidenceReference ""<canary-balance-evidence-refs>"" -ServiceDeliveryEvidenceReference ""<canary-service-delivery-evidence-refs>"" -SupportEvidenceReference ""<canary-support-evidence-refs>"" -AllowedServiceClass ""<canary-allowed-service-classes>"" -SupportOwner ""<support-owner-id>"" -IncidentResponseOwner ""<incident-response-owner-id>"" -RollbackPolicyId ""<rollback-policy-id>"" -EngineeringSignoffId ""<engineering-signoff-id>"" -SecurityPrivacySignoffId ""<security-privacy-signoff-id>"" -CrownMonetaryAuthoritySignoffId ""<crown-monetary-authority-signoff-id>"" -ApprovalNotes ""<canary-approval-notes-or-record-id>"" -ConfirmProductionIntended -ConfirmProductionLedger -ConfirmAllowlistedCitizensOnly -ConfirmIncidentReviewCompleted -ConfirmNoUnresolvedCriticalIncidents -ConfirmNoUnresolvedHighIncidents -ConfirmBalancesReconciled -ConfirmEscrowReconciled -ConfirmBurnRefundRecreditReconciled -ConfirmCrownReserveReconciled -ConfirmNoNegativeBalances -ConfirmNoUnapprovedIssuance -ConfirmNoStagingRecordsDetected -ConfirmServiceDeliveryReconciled -ConfirmStorageRedemptionsReconciled -ConfirmStorageProofsReconciled -ConfirmBurnsMatchVerifiedEpochs -ConfirmRefundsRecreditsExtensionsReconciled -ConfirmSupportReady -ConfirmSupportQueueReviewed -ConfirmRecoverySupportReady -ConfirmEscalationPathReady -ConfirmSupportAccessControlsValidated -ConfirmProductionMvpReleaseApproved -Force"
 $canaryEvidenceCloseoutCommand = "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Complete-PassportCanaryMvpReadinessEvidencePacket.ps1 -PacketRoot $canaryEvidenceRoot -EnvironmentFile artifacts\release\canary-mvp.env -Force"
 $canaryEvidenceValidationCommand = "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportCanaryMvpReadinessEvidencePacket.ps1 -PacketRoot $canaryEvidenceRoot -RequireNoPlaceholders"
+$openWeightAiRuntimeRoot = "<filled-open-weight-ai-runtime-root>"
+$openWeightAiRuntimeValidationCommand = @(
+    "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportOpenWeightAiRuntimeDeployment.ps1",
+    "-VllmComposePath $openWeightAiRuntimeRoot\docker-compose.vllm.yml",
+    "-TgiComposePath $openWeightAiRuntimeRoot\docker-compose.tgi.yml",
+    "-EnvTemplatePath $openWeightAiRuntimeRoot\open-weight-ai-runtime.env.template",
+    "-ReadmePath $openWeightAiRuntimeRoot\README.md",
+    "-ModelApprovalPath $openWeightAiRuntimeRoot\model-approval-request.template.md",
+    "-VectorStoreProvisioningPath $openWeightAiRuntimeRoot\vector-store-provisioning.template.md",
+    "-RuntimeReadinessEvidencePath $openWeightAiRuntimeRoot\ai-runtime-readiness-evidence.template.md",
+    "-RequireNoPlaceholders",
+    "-ProbeRuntime",
+    '-RuntimeBaseUrl "<approved-ai-runtime-base-url>"',
+    '-ModelId "<approved-ai-model-id>"'
+) -join " "
+$openWeightAiRuntimePacketProbeCommand = "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportProductionProvisioningPacket.ps1 -PacketRoot <controlled-production-packet-root> -RequireNoPlaceholders -ProbeAiRuntime"
 
 $readinessActionMap = @{
     pre_mvp_internal_verification = New-Action `
@@ -889,7 +905,7 @@ $readinessActionMap = @{
         -Title "Make hosted AI runtime probe pass" `
         -Action "Deploy the approved open-weight inference endpoint and configure the hosted AI gateway so the operator-authenticated non-mutating probe receives an answer." `
         -Commands @(
-            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportOpenWeightAiRuntimeDeployment.ps1 -RequireNoPlaceholders -ProbeRuntime",
+            $openWeightAiRuntimeValidationCommand,
             "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportProductionMvpReadiness.ps1 -EnvironmentFile artifacts\release\production-mvp.env -NoFail -OutputPath artifacts\release\production-mvp-readiness-report.json"
         )
     hosted_operator_status = New-Action `
@@ -940,7 +956,8 @@ $readinessActionMap = @{
         -Title "Provision approved open-weight AI runtime" `
         -Action "Approve the model artifact/license, deploy vLLM or TGI-compatible inference, configure vector store and knowledge approval root, and validate the runtime deployment/probe." `
         -Commands @(
-            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportOpenWeightAiRuntimeDeployment.ps1 -RequireNoPlaceholders -ProbeRuntime"
+            $openWeightAiRuntimeValidationCommand,
+            $openWeightAiRuntimePacketProbeCommand
         )
     telemetry_incident_response = New-Action `
         -Id "telemetry_incident_response" `
@@ -1008,7 +1025,8 @@ $provisioningActionMap = @{
         -Title "Fill open-weight AI runtime provisioning" `
         -Action "Fill model approval, vector store, runtime readiness evidence, and runtime env values for the approved open-weight deployment." `
         -Commands @(
-            "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Test-PassportOpenWeightAiRuntimeDeployment.ps1 -RequireNoPlaceholders -ProbeRuntime"
+            $openWeightAiRuntimeValidationCommand,
+            $openWeightAiRuntimePacketProbeCommand
         )
     production_ops_documents = New-Action `
         -Id "production_ops_documents" `

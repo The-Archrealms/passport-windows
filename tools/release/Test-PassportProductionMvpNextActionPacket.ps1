@@ -974,6 +974,57 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
         canary_helper_command_count = $canaryHelperCommandCount
     })
 
+    $openWeightCommandFailures = @()
+    $openWeightActionIds = @("hosted_ai_runtime_probe", "open_weight_ai_runtime", "open_weight_ai_runtime_deployment")
+    $openWeightActions = @($packetActions | Where-Object { $openWeightActionIds -contains [string]$_.id })
+    $directOpenWeightCommandCount = 0
+    $packetProbeCommandCount = 0
+    foreach ($action in $openWeightActions) {
+        $commands = @(Get-ObjectArray -Object $action -Name "commands" | ForEach-Object { [string]$_ })
+        $directCommands = @($commands | Where-Object { $_ -match 'Test-PassportOpenWeightAiRuntimeDeployment\.ps1' })
+        if ($directCommands.Count -lt 1) {
+            $openWeightCommandFailures += "open-weight action $($action.id) must include Test-PassportOpenWeightAiRuntimeDeployment.ps1."
+        }
+        foreach ($command in $directCommands) {
+            $directOpenWeightCommandCount += 1
+            foreach ($requiredText in @(
+                    '-VllmComposePath <filled-open-weight-ai-runtime-root>\docker-compose.vllm.yml',
+                    '-TgiComposePath <filled-open-weight-ai-runtime-root>\docker-compose.tgi.yml',
+                    '-EnvTemplatePath <filled-open-weight-ai-runtime-root>\open-weight-ai-runtime.env.template',
+                    '-ReadmePath <filled-open-weight-ai-runtime-root>\README.md',
+                    '-ModelApprovalPath <filled-open-weight-ai-runtime-root>\model-approval-request.template.md',
+                    '-VectorStoreProvisioningPath <filled-open-weight-ai-runtime-root>\vector-store-provisioning.template.md',
+                    '-RuntimeReadinessEvidencePath <filled-open-weight-ai-runtime-root>\ai-runtime-readiness-evidence.template.md',
+                    '-RequireNoPlaceholders',
+                    '-ProbeRuntime',
+                    '-RuntimeBaseUrl "<approved-ai-runtime-base-url>"',
+                    '-ModelId "<approved-ai-model-id>"'
+                )) {
+                if ($command -notmatch [regex]::Escape($requiredText)) {
+                    $openWeightCommandFailures += "open-weight command for action $($action.id) is missing '$requiredText': $command"
+                }
+            }
+        }
+
+        if ([string]$action.id -in @("open_weight_ai_runtime", "open_weight_ai_runtime_deployment")) {
+            $packetCommands = @($commands | Where-Object {
+                    $_ -match 'Test-PassportProductionProvisioningPacket\.ps1' `
+                        -and $_ -match [regex]::Escape('-PacketRoot <controlled-production-packet-root>') `
+                        -and $_ -match [regex]::Escape('-RequireNoPlaceholders') `
+                        -and $_ -match [regex]::Escape('-ProbeAiRuntime')
+                })
+            if ($packetCommands.Count -lt 1) {
+                $openWeightCommandFailures += "open-weight action $($action.id) must include controlled production packet validation with -ProbeAiRuntime."
+            }
+            $packetProbeCommandCount += $packetCommands.Count
+        }
+    }
+    $checks += New-Check -Id "open_weight_ai_runtime_probe_commands" -Passed ($openWeightCommandFailures.Count -eq 0) -Failures $openWeightCommandFailures -Evidence ([pscustomobject][ordered]@{
+        action_count = $openWeightActions.Count
+        direct_runtime_command_count = $directOpenWeightCommandCount
+        packet_probe_command_count = $packetProbeCommandCount
+    })
+
     if ($null -ne $matrix) {
         $sourceMatrix = $sourceReport.operator_input_matrix
         $sourceEnvironmentVariables = @(Get-ObjectArray -Object $sourceMatrix -Name "environment_variables")
