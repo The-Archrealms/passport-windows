@@ -86,6 +86,25 @@ function Get-FileRecord {
     }
 }
 
+function Is-PlaceholderValue {
+    param([string]$Value)
+
+    return [string]::IsNullOrWhiteSpace($Value) -or $Value -match '^<[^>]+>$'
+}
+
+function Read-ObjectString {
+    param(
+        [object]$Object,
+        [string]$Name
+    )
+
+    if ($null -eq $Object -or -not $Object.PSObject.Properties[$Name]) {
+        return ""
+    }
+
+    return [string]$Object.$Name
+}
+
 function Copy-EvidenceFile {
     param(
         [string]$Id,
@@ -250,6 +269,27 @@ if (-not [string]::IsNullOrWhiteSpace($HandoffRoot)) {
 
 $artifactManifest = Get-FileRecord -Id "internal_verification_artifact_manifest" -Path $InternalVerificationManifestPath -Required:$false
 $handoffManifest = Get-FileRecord -Id "staff_steward_pilot_handoff_manifest" -Path $handoffManifestPath -Required:$false
+$handoffManifestJson = $null
+if ($handoffManifest.exists) {
+    $handoffManifestJson = Read-JsonFile -Path $handoffManifest.path
+}
+
+if ($null -ne $handoffManifestJson) {
+    $handoffPilotId = Read-ObjectString -Object $handoffManifestJson -Name "pilot_id"
+    $handoffPilotOwner = Read-ObjectString -Object $handoffManifestJson -Name "pilot_owner"
+    $handoffPolicyVersion = Read-ObjectString -Object $handoffManifestJson -Name "policy_version"
+
+    if (Is-PlaceholderValue -Value $PilotId -and -not (Is-PlaceholderValue -Value $handoffPilotId)) {
+        $PilotId = $handoffPilotId
+    }
+    if (Is-PlaceholderValue -Value $PilotOwner -and -not (Is-PlaceholderValue -Value $handoffPilotOwner)) {
+        $PilotOwner = $handoffPilotOwner
+    }
+    if (Is-PlaceholderValue -Value $PolicyVersion -and -not (Is-PlaceholderValue -Value $handoffPolicyVersion)) {
+        $PolicyVersion = $handoffPolicyVersion
+    }
+}
+
 $simulationReport = Get-ReportState -Id "simulation_run_report" -Path $SimulationRunReportPath
 $preMvpReport = Get-ReportState -Id "pre_mvp_internal_verification_report" -Path $PreMvpReportPath
 $productionReadinessReport = Get-ReportState -Id "production_mvp_readiness_report" -Path $ProductionReadinessReportPath
