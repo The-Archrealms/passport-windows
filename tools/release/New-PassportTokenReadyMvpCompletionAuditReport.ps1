@@ -74,6 +74,17 @@ function ConvertTo-AuditText {
     return $text
 }
 
+function ConvertTo-AuditCommandText {
+    param([object]$Value)
+
+    if ($null -eq $Value) {
+        return ""
+    }
+
+    $text = ([string]$Value).Trim()
+    return ($text -replace "(`r`n|`n|`r)+", " ")
+}
+
 function Get-CurrentCommit {
     Push-Location $repoRoot
     try {
@@ -189,7 +200,7 @@ function Get-OutstandingGateAction {
         id = ConvertTo-AuditText -Value $action.id
         title = ConvertTo-AuditText -Value $action.title
         action = ConvertTo-AuditText -Value $action.action
-        commands = @($action.commands | ForEach-Object { ConvertTo-AuditText -Value $_ })
+        commands = @($action.commands | ForEach-Object { ConvertTo-AuditCommandText -Value $_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
     })
 }
 
@@ -243,7 +254,7 @@ function Get-OutstandingProvisioningAction {
         id = ConvertTo-AuditText -Value $action.id
         title = ConvertTo-AuditText -Value $action.title
         action = ConvertTo-AuditText -Value $action.action
-        commands = @($action.commands | ForEach-Object { ConvertTo-AuditText -Value $_ })
+        commands = @($action.commands | ForEach-Object { ConvertTo-AuditCommandText -Value $_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
     })
 }
 
@@ -260,7 +271,7 @@ function New-ManualAction {
         id = $Id
         title = $Title
         action = $Action
-        commands = @($Commands)
+        commands = @($Commands | ForEach-Object { ConvertTo-AuditCommandText -Value $_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
     }
 }
 
@@ -326,7 +337,7 @@ function New-AuditItem {
     $primaryAction = Get-PrimaryOperatorAction -OperatorActions $OperatorActions
     $nextActionCommands = @()
     if ($null -ne $primaryAction -and $primaryAction.PSObject.Properties["commands"]) {
-        $nextActionCommands = @($primaryAction.commands | ForEach-Object { ConvertTo-AuditText -Value $_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+        $nextActionCommands = @($primaryAction.commands | ForEach-Object { ConvertTo-AuditCommandText -Value $_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
     }
 
     if ($Status -eq "passed") {

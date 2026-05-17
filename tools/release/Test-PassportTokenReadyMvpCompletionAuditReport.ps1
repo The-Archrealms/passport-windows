@@ -1483,6 +1483,10 @@ foreach ($item in $checklist) {
                 $itemFailures += "$id operator action includes a blank command"
                 continue
             }
+            if ([string]$operatorCommand -match '\.\.\.') {
+                $itemFailures += "$id operator action command appears truncated: $operatorCommand"
+                continue
+            }
 
             $scriptPath = Get-OperatorCommandScriptPath -Command ([string]$operatorCommand)
             if ([string]::IsNullOrWhiteSpace($scriptPath)) {
@@ -1507,6 +1511,10 @@ foreach ($item in $checklist) {
     foreach ($nextActionCommand in $nextActionCommands) {
         if ([string]::IsNullOrWhiteSpace([string]$nextActionCommand)) {
             $itemFailures += "$id next_action_commands includes a blank command"
+            continue
+        }
+        if ([string]$nextActionCommand -match '\.\.\.') {
+            $itemFailures += "$id next_action_commands entry appears truncated: $nextActionCommand"
             continue
         }
 
