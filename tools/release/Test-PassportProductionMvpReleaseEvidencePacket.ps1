@@ -70,6 +70,89 @@ function Write-JsonFile {
     Set-Content -LiteralPath $Path -Value ($Value | ConvertTo-Json -Depth 10) -Encoding UTF8
 }
 
+function Read-JsonFile {
+    param([string]$Path)
+
+    if ([string]::IsNullOrWhiteSpace($Path) -or -not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        return $null
+    }
+
+    return Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
+}
+
+function Get-CurrentSourceCommit {
+    $git = Get-Command git -ErrorAction SilentlyContinue
+    if ($null -eq $git) {
+        return ""
+    }
+
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = $git.Source
+    $psi.Arguments = "rev-parse --short HEAD"
+    $psi.WorkingDirectory = $repoRoot
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    $psi.UseShellExecute = $false
+    $process = [System.Diagnostics.Process]::Start($psi)
+    $stdout = $process.StandardOutput.ReadToEnd()
+    $process.WaitForExit()
+    if ($process.ExitCode -ne 0) {
+        return ""
+    }
+
+    return $stdout.Trim()
+}
+
+function Test-HasProperty {
+    param(
+        [object]$Object,
+        [string]$Name
+    )
+
+    return ($null -ne $Object -and $null -ne $Object.PSObject.Properties[$Name])
+}
+
+function Get-EvidenceFileById {
+    param(
+        [object[]]$EvidenceFiles,
+        [string]$Id
+    )
+
+    return @($EvidenceFiles | Where-Object { [string]$_.id -eq $Id } | Select-Object -First 1)
+}
+
+function Test-PathWithinRoot {
+    param(
+        [string]$Path,
+        [string]$Root
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Path) -or [string]::IsNullOrWhiteSpace($Root)) {
+        return $false
+    }
+
+    $fullPath = [System.IO.Path]::GetFullPath($Path)
+    $fullRoot = [System.IO.Path]::GetFullPath($Root).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
+    return $fullPath.StartsWith($fullRoot, [System.StringComparison]::OrdinalIgnoreCase)
+}
+
+function Read-EvidenceFileJson {
+    param(
+        [object]$EvidenceFile,
+        [string]$PacketRoot
+    )
+
+    if ($null -eq $EvidenceFile -or -not (Test-HasProperty -Object $EvidenceFile -Name "copied_path")) {
+        return $null
+    }
+
+    if (-not (Test-PathWithinRoot -Path ([string]$EvidenceFile.copied_path) -Root $PacketRoot)) {
+        return $null
+    }
+
+    return Read-JsonFile -Path ([string]$EvidenceFile.copied_path)
+}
+
 function Format-CommandArgument {
     param([string]$Argument)
 
@@ -385,6 +468,11 @@ if (Test-Path -LiteralPath $summaryPath -PathType Leaf) {
 if ($null -ne $manifest) {
     $checks += Add-Check -Id "schema" -Condition ($manifest.schema -eq "archrealms.passport.production_mvp_release_evidence_packet.v1") -Failure "unexpected release evidence schema"
     $checks += Add-Check -Id "source_commit" -Condition (-not [string]::IsNullOrWhiteSpace($manifest.source_commit)) -Failure "source_commit is missing"
+    $currentSourceCommit = Get-CurrentSourceCommit
+    $checks += Add-Check -Id "source_commit_freshness" -Condition (-not [string]::IsNullOrWhiteSpace($currentSourceCommit) -and [string]$manifest.source_commit -eq $currentSourceCommit) -Failure "release evidence source_commit does not match current app commit" -Evidence ([pscustomobject][ordered]@{
+        manifest_source_commit = [string]$manifest.source_commit
+        current_source_commit = $currentSourceCommit
+    })
     $checks += Add-Check -Id "secrets_excluded" -Condition ($manifest.secrets_included -eq $false) -Failure "release evidence packet must set secrets_included=false"
     $checks += Add-Check -Id "environment_redacted" -Condition ($manifest.environment_file.values_redacted -eq $true) -Failure "environment values must be redacted"
     $checks += Add-Check -Id "pre_mvp_passed" -Condition ($manifest.pre_mvp_internal_verification.passed -eq $true -and $manifest.pre_mvp_internal_verification.failed_check_count -eq 0 -and $manifest.pre_mvp_internal_verification.failed_requirement_count -eq 0) -Failure "pre-MVP evidence did not pass"
@@ -447,6 +535,69 @@ if ($null -ne $manifest) {
         $checks += Add-Check -Id ("evidence_file_required_" + $requiredId) -Condition (($evidenceFiles | Where-Object { $_.id -eq $requiredId } | Select-Object -First 1) -ne $null) -Failure "required evidence file is missing: $requiredId"
     }
 
+    $preMvpEvidence = Get-EvidenceFileById -EvidenceFiles $evidenceFiles -Id "pre_mvp_internal_verification_report"
+    $preMvpJson = Read-EvidenceFileJson -EvidenceFile $preMvpEvidence -PacketRoot $resolvedPacketRoot
+    $preMvpCrossFailures = @()
+    if ($null -eq $preMvpJson) {
+        $preMvpCrossFailures += "pre-MVP evidence report could not be read from copied evidence"
+    }
+    else {
+        if ([string]$preMvpJson.schema -ne "archrealms.passport.pre_mvp_internal_verification.v1") { $preMvpCrossFailures += "pre-MVP evidence schema is unexpected" }
+        if ([bool]$preMvpJson.passed -ne [bool]$manifest.pre_mvp_internal_verification.passed) { $preMvpCrossFailures += "pre-MVP passed value does not match manifest summary" }
+        if ([bool]$preMvpJson.fake_balance_migration_blocked -ne [bool]$manifest.pre_mvp_internal_verification.fake_balance_migration_blocked) { $preMvpCrossFailures += "pre-MVP fake_balance_migration_blocked value does not match manifest summary" }
+        if ([int]$preMvpJson.failed_check_count -ne [int]$manifest.pre_mvp_internal_verification.failed_check_count) { $preMvpCrossFailures += "pre-MVP failed_check_count does not match manifest summary" }
+        if ([int]$preMvpJson.failed_requirement_count -ne [int]$manifest.pre_mvp_internal_verification.failed_requirement_count) { $preMvpCrossFailures += "pre-MVP failed_requirement_count does not match manifest summary" }
+    }
+    $checks += New-Check -Id "pre_mvp_evidence_matches_manifest" -Passed ($preMvpCrossFailures.Count -eq 0) -Failures $preMvpCrossFailures -Evidence $preMvpEvidence
+
+    $readinessEvidence = Get-EvidenceFileById -EvidenceFiles $evidenceFiles -Id "production_mvp_readiness_report"
+    $readinessJson = Read-EvidenceFileJson -EvidenceFile $readinessEvidence -PacketRoot $resolvedPacketRoot
+    $readinessCrossFailures = @()
+    if ($null -eq $readinessJson) {
+        $readinessCrossFailures += "ProductionMvp readiness report could not be read from copied evidence"
+    }
+    else {
+        if ([string]$readinessJson.schema -ne "archrealms.passport.production_mvp_readiness.v1") { $readinessCrossFailures += "ProductionMvp readiness schema is unexpected" }
+        if ([bool]$readinessJson.ready -ne [bool]$manifest.production_mvp_readiness.ready) { $readinessCrossFailures += "ProductionMvp readiness ready value does not match manifest summary" }
+        if ([int]$readinessJson.failed_gate_count -ne [int]$manifest.production_mvp_readiness.failed_gate_count) { $readinessCrossFailures += "ProductionMvp readiness failed_gate_count does not match manifest summary" }
+
+        $manifestGates = @($manifest.production_mvp_readiness.gates)
+        $reportGates = @($readinessJson.gates)
+        if ($manifestGates.Count -ne $reportGates.Count) {
+            $readinessCrossFailures += "ProductionMvp readiness gate count does not match manifest summary"
+        }
+        foreach ($manifestGate in $manifestGates) {
+            $reportGate = @($reportGates | Where-Object { [string]$_.id -eq [string]$manifestGate.id } | Select-Object -First 1)
+            if ($null -eq $reportGate) {
+                $readinessCrossFailures += "ProductionMvp readiness gate missing from copied report: $($manifestGate.id)"
+                continue
+            }
+
+            if ([bool]$reportGate.passed -ne [bool]$manifestGate.passed) {
+                $readinessCrossFailures += "ProductionMvp readiness gate passed value mismatch: $($manifestGate.id)"
+            }
+
+            if ((@($reportGate.missing) -join "`n") -ne (@($manifestGate.missing) -join "`n")) {
+                $readinessCrossFailures += "ProductionMvp readiness gate missing values mismatch: $($manifestGate.id)"
+            }
+        }
+    }
+    $checks += New-Check -Id "production_mvp_readiness_evidence_matches_manifest" -Passed ($readinessCrossFailures.Count -eq 0) -Failures $readinessCrossFailures -Evidence $readinessEvidence
+
+    $provisioningEvidence = Get-EvidenceFileById -EvidenceFiles $evidenceFiles -Id "production_provisioning_packet_validation_report"
+    $provisioningJson = Read-EvidenceFileJson -EvidenceFile $provisioningEvidence -PacketRoot $resolvedPacketRoot
+    $provisioningCrossFailures = @()
+    if ($null -eq $provisioningJson) {
+        $provisioningCrossFailures += "production provisioning validation report could not be read from copied evidence"
+    }
+    else {
+        if ([string]$provisioningJson.schema -ne "archrealms.passport.production_provisioning_packet_validation.v1") { $provisioningCrossFailures += "production provisioning validation schema is unexpected" }
+        if ([bool]$provisioningJson.passed -ne [bool]$manifest.production_provisioning_packet.passed) { $provisioningCrossFailures += "production provisioning passed value does not match manifest summary" }
+        if ([int]$provisioningJson.failed_check_count -ne [int]$manifest.production_provisioning_packet.failed_check_count) { $provisioningCrossFailures += "production provisioning failed_check_count does not match manifest summary" }
+        if ([string]$provisioningJson.packet_root -ne [string]$manifest.production_provisioning_packet.packet_root) { $provisioningCrossFailures += "production provisioning packet_root does not match manifest summary" }
+    }
+    $checks += New-Check -Id "production_provisioning_evidence_matches_manifest" -Passed ($provisioningCrossFailures.Count -eq 0) -Failures $provisioningCrossFailures -Evidence $provisioningEvidence
+
     $stagingGate = @($manifest.production_mvp_readiness.gates) | Where-Object { $_.id -eq "staging_readiness" } | Select-Object -First 1
     $stagingGatePassed = ($null -ne $stagingGate -and $stagingGate.passed -eq $true)
     $stagingEvidenceFile = $evidenceFiles | Where-Object { $_.id -eq "staging_readiness_report" } | Select-Object -First 1
@@ -455,6 +606,21 @@ if ($null -ne $manifest) {
         $checks += Add-Check -Id "staging_readiness_report_ready" -Condition ($manifest.staging_readiness.ready -eq $true -and $manifest.staging_readiness.failed_gate_count -eq 0) -Failure "included staging readiness report is not ready"
         $checks += Add-Check -Id "staging_readiness_report_non_synthetic" -Condition ($manifest.staging_readiness.synthetic_fixtures_used -eq $false) -Failure "release evidence cannot rely on a synthetic staging readiness report"
         $checks += Add-Check -Id "staging_readiness_report_promotion_approved" -Condition ($manifest.staging_readiness.canary_or_production_release_approved -eq $true) -Failure "included staging readiness report does not approve canary or production release promotion"
+    }
+    if ($manifest.staging_readiness.included -eq $true -or $null -ne $stagingEvidenceFile) {
+        $stagingReadinessJson = Read-EvidenceFileJson -EvidenceFile $stagingEvidenceFile -PacketRoot $resolvedPacketRoot
+        $stagingCrossFailures = @()
+        if ($null -eq $stagingReadinessJson) {
+            $stagingCrossFailures += "staging readiness report could not be read from copied evidence"
+        }
+        else {
+            if ([string]$stagingReadinessJson.schema -ne "archrealms.passport.staging_readiness.v1") { $stagingCrossFailures += "staging readiness schema is unexpected" }
+            if ([bool]$stagingReadinessJson.ready -ne [bool]$manifest.staging_readiness.ready) { $stagingCrossFailures += "staging readiness ready value does not match manifest summary" }
+            if ([bool]$stagingReadinessJson.synthetic_fixtures_used -ne [bool]$manifest.staging_readiness.synthetic_fixtures_used) { $stagingCrossFailures += "staging readiness synthetic_fixtures_used value does not match manifest summary" }
+            if ([bool]$stagingReadinessJson.canary_or_production_release_approved -ne [bool]$manifest.staging_readiness.canary_or_production_release_approved) { $stagingCrossFailures += "staging readiness promotion approval value does not match manifest summary" }
+            if ([int]$stagingReadinessJson.failed_gate_count -ne [int]$manifest.staging_readiness.failed_gate_count) { $stagingCrossFailures += "staging readiness failed_gate_count does not match manifest summary" }
+        }
+        $checks += New-Check -Id "staging_readiness_evidence_matches_manifest" -Passed ($stagingCrossFailures.Count -eq 0) -Failures $stagingCrossFailures -Evidence $stagingEvidenceFile
     }
 
     $canaryGate = @($manifest.production_mvp_readiness.gates) | Where-Object { $_.id -eq "canary_mvp_readiness" } | Select-Object -First 1
@@ -465,6 +631,21 @@ if ($null -ne $manifest) {
         $checks += Add-Check -Id "canary_mvp_readiness_report_ready" -Condition ($manifest.canary_mvp_readiness.ready -eq $true -and $manifest.canary_mvp_readiness.failed_gate_count -eq 0) -Failure "included canary MVP readiness report is not ready"
         $checks += Add-Check -Id "canary_mvp_readiness_report_non_synthetic" -Condition ($manifest.canary_mvp_readiness.synthetic_fixtures_used -eq $false) -Failure "release evidence cannot rely on a synthetic canary MVP readiness report"
         $checks += Add-Check -Id "canary_mvp_readiness_report_production_approved" -Condition ($manifest.canary_mvp_readiness.production_release_approved -eq $true) -Failure "included canary MVP readiness report does not approve ProductionMvp promotion"
+    }
+    if ($manifest.canary_mvp_readiness.included -eq $true -or $null -ne $canaryEvidenceFile) {
+        $canaryMvpReadinessJson = Read-EvidenceFileJson -EvidenceFile $canaryEvidenceFile -PacketRoot $resolvedPacketRoot
+        $canaryCrossFailures = @()
+        if ($null -eq $canaryMvpReadinessJson) {
+            $canaryCrossFailures += "canary MVP readiness report could not be read from copied evidence"
+        }
+        else {
+            if ([string]$canaryMvpReadinessJson.schema -ne "archrealms.passport.canary_mvp_readiness.v1") { $canaryCrossFailures += "canary MVP readiness schema is unexpected" }
+            if ([bool]$canaryMvpReadinessJson.ready -ne [bool]$manifest.canary_mvp_readiness.ready) { $canaryCrossFailures += "canary MVP readiness ready value does not match manifest summary" }
+            if ([bool]$canaryMvpReadinessJson.synthetic_fixtures_used -ne [bool]$manifest.canary_mvp_readiness.synthetic_fixtures_used) { $canaryCrossFailures += "canary MVP readiness synthetic_fixtures_used value does not match manifest summary" }
+            if ([bool]$canaryMvpReadinessJson.production_release_approved -ne [bool]$manifest.canary_mvp_readiness.production_release_approved) { $canaryCrossFailures += "canary MVP readiness production approval value does not match manifest summary" }
+            if ([int]$canaryMvpReadinessJson.failed_gate_count -ne [int]$manifest.canary_mvp_readiness.failed_gate_count) { $canaryCrossFailures += "canary MVP readiness failed_gate_count does not match manifest summary" }
+        }
+        $checks += New-Check -Id "canary_mvp_readiness_evidence_matches_manifest" -Passed ($canaryCrossFailures.Count -eq 0) -Failures $canaryCrossFailures -Evidence $canaryEvidenceFile
     }
 
     foreach ($file in $evidenceFiles) {
@@ -477,6 +658,9 @@ if ($null -ne $manifest) {
         }
         if ([string]::IsNullOrWhiteSpace($file.copied_path) -or -not (Test-Path -LiteralPath $file.copied_path -PathType Leaf)) {
             $fileFailures += "copied file is missing"
+        }
+        elseif (-not (Test-PathWithinRoot -Path ([string]$file.copied_path) -Root $resolvedPacketRoot)) {
+            $fileFailures += "copied file is outside the evidence packet root"
         }
         elseif ($file.sha256 -and ((Get-Sha256Hex -Path $file.copied_path) -ne $file.sha256)) {
             $fileFailures += "copied file hash does not match source hash"
