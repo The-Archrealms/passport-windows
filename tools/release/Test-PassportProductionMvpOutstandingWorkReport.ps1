@@ -869,6 +869,35 @@ if ($null -ne $report) {
         staff_steward_command_count = $staffStewardPilotCommands.Count
     })
 
+    $pilotOwnerFailures = @()
+    $pilotHandoffManifestPath = Resolve-RepoPath -Path "artifacts\release\pre-mvp-staff-steward-pilot-handoff\pilot-handoff.manifest.json"
+    $pilotHandoffManifest = Read-JsonFile -Path $pilotHandoffManifestPath
+    $expectedPilotOwner = ""
+    if ($null -ne $pilotHandoffManifest -and $pilotHandoffManifest.PSObject.Properties["pilot_owner"]) {
+        $expectedPilotOwner = ([string]$pilotHandoffManifest.pilot_owner).Trim()
+    }
+
+    $staffStewardPilotOwnerCommands = @($commandRecords |
+        Where-Object { [string]$_.command -match '(Start-PassportPreMvpStaffStewardPilot|Set-PassportPreMvpStaffStewardPilotEvidencePacket)\.ps1' } |
+        ForEach-Object { [string]$_.command })
+    if ($staffStewardPilotOwnerCommands.Count -gt 0 -and -not [string]::IsNullOrWhiteSpace($expectedPilotOwner)) {
+        foreach ($command in $staffStewardPilotOwnerCommands) {
+            if ($command -match '<pilot-owner>') {
+                $pilotOwnerFailures += "staff/steward pilot command still contains <pilot-owner>: $command"
+            }
+
+            $expectedArgument = '-PilotOwner "' + $expectedPilotOwner + '"'
+            if ($command -notmatch [regex]::Escape($expectedArgument)) {
+                $pilotOwnerFailures += "staff/steward pilot command does not include handoff pilot owner $expectedPilotOwner`: $command"
+            }
+        }
+    }
+    $checks += New-Check -Id "staff_steward_pilot_owner_prefill" -Passed ($pilotOwnerFailures.Count -eq 0) -Failures $pilotOwnerFailures -Evidence ([pscustomobject][ordered]@{
+        handoff_manifest_path = $pilotHandoffManifestPath
+        handoff_pilot_owner = $expectedPilotOwner
+        staff_steward_command_count = $staffStewardPilotOwnerCommands.Count
+    })
+
     $actionFailures = @()
     foreach ($gate in $failedReadinessGates) {
         if ((Get-ObjectArray -Object $gate.operator_action -Name "commands").Count -eq 0) {

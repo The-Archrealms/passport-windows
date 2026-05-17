@@ -364,6 +364,27 @@ function Get-CurrentCommit {
     return "passport-windows-commit-unavailable"
 }
 
+function Format-PowerShellQuotedValue {
+    param([string]$Value)
+
+    return '"' + (($Value -replace '`', '``') -replace '"', '`"') + '"'
+}
+
+function Get-StaffStewardPilotOwner {
+    param([string]$HandoffRoot)
+
+    $manifestPath = Resolve-RepoPath -Path (Join-Path $HandoffRoot "pilot-handoff.manifest.json")
+    $manifest = Read-JsonFile -Path $manifestPath
+    if ($null -ne $manifest -and $manifest.PSObject.Properties["pilot_owner"]) {
+        $pilotOwner = ([string]$manifest.pilot_owner).Trim()
+        if (-not [string]::IsNullOrWhiteSpace($pilotOwner) -and $pilotOwner -notmatch '<[^>]+>') {
+            return $pilotOwner
+        }
+    }
+
+    return "<pilot-owner>"
+}
+
 function New-Action {
     param(
         [string]$Id,
@@ -765,12 +786,14 @@ if (Test-Path -LiteralPath $resolvedSimulationRunReportPath -PathType Leaf) {
 
 $staffStewardPilotHandoffRoot = "artifacts\release\pre-mvp-staff-steward-pilot-handoff"
 $staffStewardPilotEvidenceRoot = "$staffStewardPilotHandoffRoot\pilot-evidence"
-$staffStewardPilotWorkspaceCommand = "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Start-PassportPreMvpStaffStewardPilot.ps1 -HandoffRoot $staffStewardPilotHandoffRoot -PilotOwner <pilot-owner> -Force"
+$staffStewardPilotOwner = Get-StaffStewardPilotOwner -HandoffRoot $staffStewardPilotHandoffRoot
+$staffStewardPilotOwnerArgument = Format-PowerShellQuotedValue -Value $staffStewardPilotOwner
+$staffStewardPilotWorkspaceCommand = "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Start-PassportPreMvpStaffStewardPilot.ps1 -HandoffRoot $staffStewardPilotHandoffRoot -PilotOwner $staffStewardPilotOwnerArgument -Force"
 $staffStewardPilotEvidenceFillCommand = @(
     "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Set-PassportPreMvpStaffStewardPilotEvidencePacket.ps1",
     "-PacketRoot $staffStewardPilotEvidenceRoot",
     '-PilotId "pre-mvp-staff-steward-pilot-001"',
-    '-PilotOwner "<pilot-owner>"',
+    "-PilotOwner $staffStewardPilotOwnerArgument",
     '-ParticipantId "<staff-or-steward-id>"',
     '-ParticipantRole "<staff-or-steward-role>"',
     '-CrownOwnedDeviceId "<controlled-device-id>"',

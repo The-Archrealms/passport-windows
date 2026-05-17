@@ -1072,6 +1072,14 @@ else {
         elseif (@($handoffRootFreshnessChecks | Where-Object { $_.passed -eq $true }).Count -eq 0) {
             $packetValidationFailures += "next-action packet validation staff_steward_handoff_root_freshness did not pass"
         }
+
+        $pilotOwnerPrefillChecks = @(Get-ObjectArray -Object $packetValidation -Name "checks" | Where-Object { [string]$_.id -eq "staff_steward_pilot_owner_prefill" })
+        if ($pilotOwnerPrefillChecks.Count -eq 0) {
+            $packetValidationFailures += "next-action packet validation is missing staff_steward_pilot_owner_prefill while staff/steward pilot commands are present"
+        }
+        elseif (@($pilotOwnerPrefillChecks | Where-Object { $_.passed -eq $true }).Count -eq 0) {
+            $packetValidationFailures += "next-action packet validation staff_steward_pilot_owner_prefill did not pass"
+        }
     }
 
     $phaseManifestSource = Get-SourceFile -Report $report -Id "production_mvp_operator_command_phase_manifest"

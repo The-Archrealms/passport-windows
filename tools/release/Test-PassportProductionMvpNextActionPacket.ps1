@@ -851,6 +851,7 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
     $staffStewardManifest = Read-JsonFile -Path $expectedStaffStewardManifestPath
     $staffStewardManifestSha256 = Get-Sha256Hex -Path $expectedStaffStewardManifestPath
     $staffStewardManifestCommit = ""
+    $staffStewardManifestPilotOwner = ""
     if ($staffStewardHandoffReferences.Count -gt 0) {
         if ($null -eq $staffStewardManifest) {
             $staffStewardHandoffFailures += "staff/steward handoff manifest is missing or unreadable: $expectedStaffStewardManifestPath"
@@ -866,6 +867,10 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
             elseif (-not [string]::IsNullOrWhiteSpace($currentCommit) -and $staffStewardManifestCommit -ne $currentCommit) {
                 $staffStewardHandoffFailures += "staff/steward handoff manifest app_commit $staffStewardManifestCommit does not match current app commit $currentCommit."
             }
+
+            if ($staffStewardManifest.PSObject.Properties["pilot_owner"]) {
+                $staffStewardManifestPilotOwner = ([string]$staffStewardManifest.pilot_owner).Trim()
+            }
         }
     }
 
@@ -875,7 +880,34 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
         manifest_path = $expectedStaffStewardManifestPath
         manifest_sha256 = $staffStewardManifestSha256
         manifest_app_commit = $staffStewardManifestCommit
+        manifest_pilot_owner = $staffStewardManifestPilotOwner
         current_app_commit = $currentCommit
+    })
+
+    $staffStewardPilotOwnerFailures = @()
+    if (-not [string]::IsNullOrWhiteSpace($staffStewardManifestPilotOwner)) {
+        $expectedPilotOwnerArgument = '-PilotOwner "' + $staffStewardManifestPilotOwner + '"'
+        foreach ($packetAction in $packetActions) {
+            foreach ($command in @(Get-ObjectArray -Object $packetAction -Name "commands")) {
+                $commandText = [string]$command
+                if ($commandText -notmatch '(Start-PassportPreMvpStaffStewardPilot|Set-PassportPreMvpStaffStewardPilotEvidencePacket)\.ps1') {
+                    continue
+                }
+
+                if ($commandText -match '<pilot-owner>') {
+                    $staffStewardPilotOwnerFailures += "staff/steward command still contains <pilot-owner>: $commandText"
+                }
+
+                if ($commandText -notmatch [regex]::Escape($expectedPilotOwnerArgument)) {
+                    $staffStewardPilotOwnerFailures += "staff/steward command does not include handoff pilot owner $staffStewardManifestPilotOwner`: $commandText"
+                }
+            }
+        }
+    }
+
+    $checks += New-Check -Id "staff_steward_pilot_owner_prefill" -Passed ($staffStewardPilotOwnerFailures.Count -eq 0) -Failures $staffStewardPilotOwnerFailures -Evidence ([pscustomobject][ordered]@{
+        handoff_manifest_path = $expectedStaffStewardManifestPath
+        handoff_pilot_owner = $staffStewardManifestPilotOwner
     })
 
     $staffStewardEvidenceFillFailures = @()
