@@ -2,7 +2,7 @@ name: archrealms-passport-open-weight-ai-runtime-tgi
 
 services:
   ai-runtime:
-    image: ${ARCHREALMS_PASSPORT_AI_RUNTIME_IMAGE:-ghcr.io/huggingface/text-generation-inference:latest}
+    image: ${ARCHREALMS_PASSPORT_AI_RUNTIME_IMAGE:?ARCHREALMS_PASSPORT_AI_RUNTIME_IMAGE must be pinned to an approved digest or non-latest tag}
     restart: unless-stopped
     command:
       - --model-id

@@ -94,6 +94,56 @@ function Test-TextContains {
     return $failures.ToArray()
 }
 
+function Get-EnvTemplateValue {
+    param(
+        [string]$Text,
+        [string]$Name
+    )
+
+    foreach ($line in ($Text -split "`r?`n")) {
+        $trimmed = $line.Trim()
+        if ([string]::IsNullOrWhiteSpace($trimmed) -or $trimmed.StartsWith("#")) {
+            continue
+        }
+
+        $pattern = "^\s*" + [regex]::Escape($Name) + "\s*=(.*)$"
+        $match = [regex]::Match($line, $pattern)
+        if ($match.Success) {
+            return $match.Groups[1].Value.Trim()
+        }
+    }
+
+    return ""
+}
+
+function Test-RuntimeImagePin {
+    param([string]$RuntimeImage)
+
+    $failures = New-Object System.Collections.Generic.List[string]
+    if ([string]::IsNullOrWhiteSpace($RuntimeImage)) {
+        $failures.Add("ARCHREALMS_PASSPORT_AI_RUNTIME_IMAGE is required.")
+        return $failures.ToArray()
+    }
+
+    if ($RuntimeImage -match '<[^>\r\n]+>') {
+        if ($RequireNoPlaceholders) {
+            $failures.Add("ARCHREALMS_PASSPORT_AI_RUNTIME_IMAGE still contains a placeholder value.")
+        }
+
+        return $failures.ToArray()
+    }
+
+    if ($RuntimeImage -match '(^|[:/])latest($|[@\s])') {
+        $failures.Add("ARCHREALMS_PASSPORT_AI_RUNTIME_IMAGE must not use a floating latest tag.")
+    }
+
+    if ($RuntimeImage -notmatch '@sha256:[0-9a-fA-F]{64}$' -and $RuntimeImage -notmatch ':[^/:@]+$') {
+        $failures.Add("ARCHREALMS_PASSPORT_AI_RUNTIME_IMAGE must include an approved digest or explicit non-latest tag.")
+    }
+
+    return $failures.ToArray()
+}
+
 function Invoke-RuntimeProbe {
     param(
         [string]$BaseUrl,
@@ -194,7 +244,7 @@ if ($missingFiles.Count -eq 0) {
     $vllmFailures = Test-TextContains `
         -Text $vllmText `
         -Required @(
-            "vllm/vllm-openai",
+            "ARCHREALMS_PASSPORT_AI_RUNTIME_IMAGE",
             "ARCHREALMS_PASSPORT_AI_MODEL_ID",
             "--served-model-name",
             '127.0.0.1:${ARCHREALMS_PASSPORT_AI_RUNTIME_HOST_PORT:-8000}:8000',
@@ -202,6 +252,7 @@ if ($missingFiles.Count -eq 0) {
             "ai-model-cache"
         ) `
         -Forbidden @(
+            ":latest",
             '0.0.0.0:${ARCHREALMS_PASSPORT_AI_RUNTIME_HOST_PORT'
         ) `
         -Path $resolvedVllmCompose
@@ -211,7 +262,7 @@ if ($missingFiles.Count -eq 0) {
     $tgiFailures = Test-TextContains `
         -Text $tgiText `
         -Required @(
-            "ghcr.io/huggingface/text-generation-inference",
+            "ARCHREALMS_PASSPORT_AI_RUNTIME_IMAGE",
             "ARCHREALMS_PASSPORT_AI_MODEL_ID",
             "--model-id",
             '127.0.0.1:${ARCHREALMS_PASSPORT_AI_RUNTIME_HOST_PORT:-8000}:8000',
@@ -219,6 +270,7 @@ if ($missingFiles.Count -eq 0) {
             "ai-model-cache"
         ) `
         -Forbidden @(
+            ":latest",
             '0.0.0.0:${ARCHREALMS_PASSPORT_AI_RUNTIME_HOST_PORT'
         ) `
         -Path $resolvedTgiCompose
@@ -250,11 +302,20 @@ if ($missingFiles.Count -eq 0) {
         -Path $resolvedEnvTemplate
     $checks.Add((New-Check -Id "env_template_runtime_readiness_variables" -Passed ($envFailures.Count -eq 0) -Failures $envFailures -Evidence @{ path = $resolvedEnvTemplate }))
 
+    $runtimeImage = Get-EnvTemplateValue -Text $envText -Name "ARCHREALMS_PASSPORT_AI_RUNTIME_IMAGE"
+    $runtimeImageFailures = Test-RuntimeImagePin -RuntimeImage $runtimeImage
+    $checks.Add((New-Check -Id "runtime_image_pin_policy" -Passed ($runtimeImageFailures.Count -eq 0) -Failures $runtimeImageFailures -Evidence @{
+        path = $resolvedEnvTemplate
+        runtime_image = $runtimeImage
+    }))
+
     $readmeText = Get-Content -LiteralPath $resolvedReadme -Raw
     $readmeFailures = Test-TextContains `
         -Text $readmeText `
         -Required @(
             "Passport clients never call this runtime directly",
+            "ARCHREALMS_PASSPORT_AI_RUNTIME_IMAGE",
+            "Floating `latest` image tags are forbidden",
             "/v1/chat/completions",
             "docker-compose.vllm.yml",
             "docker-compose.tgi.yml",

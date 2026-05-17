@@ -26,6 +26,7 @@ Populate the values in a secure deployment environment. Do not commit populated 
 
 Required production readiness values:
 
+- `ARCHREALMS_PASSPORT_AI_RUNTIME_IMAGE`
 - `ARCHREALMS_PASSPORT_AI_INFERENCE_BASE_URL`
 - `ARCHREALMS_PASSPORT_AI_MODEL_ID`
 - `ARCHREALMS_PASSPORT_AI_MODEL_ARTIFACT_SHA256`
@@ -35,6 +36,8 @@ Required production readiness values:
 - `ARCHREALMS_PASSPORT_AI_KNOWLEDGE_APPROVAL_ROOT`
 
 The hosted gateway reads the same values for `/ai/runtime/status` and `/ai/runtime/probe`.
+
+`ARCHREALMS_PASSPORT_AI_RUNTIME_IMAGE` must be pinned to an approved immutable image digest, or to an approved non-latest image tag when a digest is unavailable. Floating latest image tags are forbidden for production readiness evidence because the runtime could drift after approval.
 
 ## Production Approval Packet
 
@@ -52,6 +55,14 @@ Validate the deployment files without starting the model runtime:
 
 ```powershell
 .\tools\release\Test-PassportOpenWeightAiRuntimeDeployment.ps1
+```
+
+Validate a filled production packet without allowing placeholders or floating runtime images:
+
+```powershell
+.\tools\release\Test-PassportOpenWeightAiRuntimeDeployment.ps1 `
+  -EnvTemplatePath .\artifacts\release\open-weight-ai-runtime.env `
+  -RequireNoPlaceholders
 ```
 
 If a local or private runtime is already running, run the non-mutating probe:
