@@ -278,6 +278,21 @@ function Get-CommandPlaceholders {
     return @($items | Sort-Object @{ Expression = "name"; Ascending = $true })
 }
 
+function Get-OperatorPlaceholderOccurrenceCount {
+    param([object[]]$Placeholders = @())
+
+    $count = (@($Placeholders | ForEach-Object {
+        if ($null -ne $_ -and $_.PSObject.Properties["occurrence_count"]) {
+            [int]$_.occurrence_count
+        }
+    }) | Measure-Object -Sum).Sum
+    if ($null -eq $count) {
+        return 0
+    }
+
+    return [int]$count
+}
+
 function Join-IntArrayForCompare {
     param([object[]]$Values)
 
@@ -636,9 +651,15 @@ if ($null -ne $report) {
     $releaseEvidenceItemsWithCommands = @($releaseEvidenceItems | Where-Object { (Get-ObjectArray -Object $_ -Name "operator_action_commands").Count -gt 0 }).Count
     $operatorPlaceholderCount = (@($nextActionPlan | ForEach-Object { @(Get-ObjectArray -Object $_ -Name "operator_placeholders").Count }) | Measure-Object -Sum).Sum
     if ($null -eq $operatorPlaceholderCount) { $operatorPlaceholderCount = 0 }
+    $operatorPlaceholderOccurrenceCount = (@($nextActionPlan | ForEach-Object { Get-OperatorPlaceholderOccurrenceCount -Placeholders @(Get-ObjectArray -Object $_ -Name "operator_placeholders") }) | Measure-Object -Sum).Sum
+    if ($null -eq $operatorPlaceholderOccurrenceCount) { $operatorPlaceholderOccurrenceCount = 0 }
+    $externalBlockerCount = (@($nextActionPlan | ForEach-Object { @(Get-ObjectArray -Object $_ -Name "external_blocker_ids").Count }) | Measure-Object -Sum).Sum
+    if ($null -eq $externalBlockerCount) { $externalBlockerCount = 0 }
     if ((Read-ObjectInt -Object $summary -Name "required_readiness_evidence_item_command_count") -ne $readinessEvidenceItemsWithCommands) { $countFailures += "required_readiness_evidence_item_command_count does not match readiness evidence items with commands." }
     if ((Read-ObjectInt -Object $summary -Name "required_release_evidence_item_command_count") -ne $releaseEvidenceItemsWithCommands) { $countFailures += "required_release_evidence_item_command_count does not match release evidence items with commands." }
     if ((Read-ObjectInt -Object $summary -Name "operator_placeholder_count") -ne [int]$operatorPlaceholderCount) { $countFailures += "operator_placeholder_count does not match next_action_plan operator placeholders." }
+    if ((Read-ObjectInt -Object $summary -Name "operator_placeholder_occurrence_count") -ne [int]$operatorPlaceholderOccurrenceCount) { $countFailures += "operator_placeholder_occurrence_count does not match next_action_plan operator placeholder occurrences." }
+    if ((Read-ObjectInt -Object $summary -Name "external_blocker_count") -ne [int]$externalBlockerCount) { $countFailures += "external_blocker_count does not match next_action_plan external blocker ids." }
 
     $checks += New-Check -Id "summary_counts" -Passed ($countFailures.Count -eq 0) -Failures $countFailures
 
@@ -1030,7 +1051,21 @@ if ($null -ne $report) {
         if (-not $item.PSObject.Properties["operator_placeholders"]) {
             $nextActionPlanFailures += "next_action_plan $itemId is missing operator_placeholders."
         }
-        $nextActionPlanFailures += Test-OperatorPlaceholderRecords -Scope "next_action_plan $itemId operator_placeholders" -Commands $commands -Records @(Get-ObjectArray -Object $item -Name "operator_placeholders")
+        $operatorPlaceholders = @(Get-ObjectArray -Object $item -Name "operator_placeholders")
+        $nextActionPlanFailures += Test-OperatorPlaceholderRecords -Scope "next_action_plan $itemId operator_placeholders" -Commands $commands -Records $operatorPlaceholders
+        if (-not $item.PSObject.Properties["operator_placeholder_count"]) {
+            $nextActionPlanFailures += "next_action_plan $itemId is missing operator_placeholder_count."
+        }
+        elseif ((Read-ObjectInt -Object $item -Name "operator_placeholder_count") -ne $operatorPlaceholders.Count) {
+            $nextActionPlanFailures += "next_action_plan $itemId operator_placeholder_count does not match operator_placeholders count."
+        }
+        $operatorPlaceholderOccurrenceCount = Get-OperatorPlaceholderOccurrenceCount -Placeholders $operatorPlaceholders
+        if (-not $item.PSObject.Properties["operator_placeholder_occurrence_count"]) {
+            $nextActionPlanFailures += "next_action_plan $itemId is missing operator_placeholder_occurrence_count."
+        }
+        elseif ((Read-ObjectInt -Object $item -Name "operator_placeholder_occurrence_count") -ne $operatorPlaceholderOccurrenceCount) {
+            $nextActionPlanFailures += "next_action_plan $itemId operator_placeholder_occurrence_count does not match operator_placeholders occurrence_count sum."
+        }
 
         $itemBlockerIds = @(Get-ObjectArray -Object $item -Name "blocker_ids" | ForEach-Object { [string]$_ })
         if ($itemBlockerIds.Count -eq 0) {
@@ -1061,6 +1096,12 @@ if ($null -ne $report) {
         }
 
         $externalBlockerIds = @(Get-ObjectArray -Object $item -Name "external_blocker_ids" | ForEach-Object { [string]$_ })
+        if (-not $item.PSObject.Properties["external_blocker_count"]) {
+            $nextActionPlanFailures += "next_action_plan $itemId is missing external_blocker_count."
+        }
+        elseif ((Read-ObjectInt -Object $item -Name "external_blocker_count") -ne $externalBlockerIds.Count) {
+            $nextActionPlanFailures += "next_action_plan $itemId external_blocker_count does not match external_blocker_ids count."
+        }
         if ($requiredOperatorInputCount -ne $externalBlockerIds.Count) {
             $nextActionPlanFailures += "next_action_plan $itemId required_operator_input_count does not match external_blocker_ids count."
         }
@@ -1140,7 +1181,13 @@ if ($null -ne $report) {
             if ($markdown -notmatch [regex]::Escape([string]$item.id)) {
                 $markdownFailures += "Markdown does not include next_action_plan id: $($item.id)"
             }
-            foreach ($value in @([string]$item.required_operator_input_count, ([bool]$item.blocked_by_external_actor).ToString().ToLowerInvariant())) {
+            foreach ($value in @(
+                [string]$item.required_operator_input_count,
+                [string]$item.external_blocker_count,
+                [string]$item.operator_placeholder_count,
+                [string]$item.operator_placeholder_occurrence_count,
+                ([bool]$item.blocked_by_external_actor).ToString().ToLowerInvariant()
+            )) {
                 if (-not [string]::IsNullOrWhiteSpace($value) -and $markdown -notmatch [regex]::Escape($value)) {
                     $markdownFailures += "Markdown does not include next_action_plan operator metadata: $($item.id)"
                 }

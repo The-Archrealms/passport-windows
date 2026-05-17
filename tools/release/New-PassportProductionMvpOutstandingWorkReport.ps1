@@ -490,6 +490,21 @@ function Get-CommandPlaceholders {
     return @($items | Sort-Object @{ Expression = "name"; Ascending = $true })
 }
 
+function Get-OperatorPlaceholderOccurrenceCount {
+    param([object[]]$Placeholders = @())
+
+    $count = (@($Placeholders | ForEach-Object {
+        if ($null -ne $_ -and $_.PSObject.Properties["occurrence_count"]) {
+            [int]$_.occurrence_count
+        }
+    }) | Measure-Object -Sum).Sum
+    if ($null -eq $count) {
+        return 0
+    }
+
+    return [int]$count
+}
+
 function New-BlockerSummary {
     param(
         [string]$Title,
@@ -658,6 +673,9 @@ function New-NextActionPlan {
             $summaryParts += "First blocker: $($firstSummary[0])"
         }
 
+        $operatorPlaceholders = @(Get-CommandPlaceholders -Commands @($entry.commands))
+        $externalBlockerCount = @($entry.external_blocker_ids).Count
+
         [pscustomobject][ordered]@{
             id = [string]$entry.id
             phase = [string]$entry.phase
@@ -666,12 +684,15 @@ function New-NextActionPlan {
             summary = ConvertTo-ReportText -Value (($summaryParts | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }) -join " ")
             action = [string]$entry.action
             commands = @($entry.commands)
-            operator_placeholders = @(Get-CommandPlaceholders -Commands @($entry.commands))
+            operator_placeholders = @($operatorPlaceholders)
+            operator_placeholder_count = @($operatorPlaceholders).Count
+            operator_placeholder_occurrence_count = Get-OperatorPlaceholderOccurrenceCount -Placeholders $operatorPlaceholders
             blocker_ids = @($entry.blocker_ids)
             blocker_summaries = @($blockerSummaries)
             operator_input_required = (@($entry.blocker_ids).Count -gt 0)
-            required_operator_input_count = @($entry.external_blocker_ids).Count
-            blocked_by_external_actor = (@($entry.external_blocker_ids).Count -gt 0)
+            required_operator_input_count = $externalBlockerCount
+            external_blocker_count = $externalBlockerCount
+            blocked_by_external_actor = ($externalBlockerCount -gt 0)
             external_blocker_ids = @($entry.external_blocker_ids)
             categories = @($entry.categories)
             source_ids = @($entry.source_ids)
@@ -1544,6 +1565,14 @@ $operatorPlaceholderCount = (@($nextActionPlan | ForEach-Object { @($_.operator_
 if ($null -eq $operatorPlaceholderCount) {
     $operatorPlaceholderCount = 0
 }
+$operatorPlaceholderOccurrenceCount = (@($nextActionPlan | ForEach-Object { [int]$_.operator_placeholder_occurrence_count }) | Measure-Object -Sum).Sum
+if ($null -eq $operatorPlaceholderOccurrenceCount) {
+    $operatorPlaceholderOccurrenceCount = 0
+}
+$externalBlockerCount = (@($nextActionPlan | ForEach-Object { [int]$_.external_blocker_count }) | Measure-Object -Sum).Sum
+if ($null -eq $externalBlockerCount) {
+    $externalBlockerCount = 0
+}
 
 $contractFailures = @()
 foreach ($item in @($readinessEvidenceItems)) {
@@ -1622,6 +1651,8 @@ $report = [pscustomobject][ordered]@{
         blocker_count = $blockers.Count
         next_action_count = $nextActionPlan.Count
         operator_placeholder_count = [int]$operatorPlaceholderCount
+        operator_placeholder_occurrence_count = [int]$operatorPlaceholderOccurrenceCount
+        external_blocker_count = [int]$externalBlockerCount
         failed_readiness_gate_count = $failedReadinessGates.Count
         failed_provisioning_check_count = $failedProvisioningChecks.Count
         failed_provisioning_child_check_count = [int]$failedProvisioningChildCheckCount
@@ -1728,7 +1759,9 @@ if (-not [string]::IsNullOrWhiteSpace($MarkdownOutputPath)) {
             $lines.Add("  - Action: $($item.action)")
             $lines.Add("  - Blockers covered: $((@($item.blocker_ids) -join ', '))")
             $lines.Add("  - Operator input required: $(([bool]$item.operator_input_required).ToString().ToLowerInvariant())")
-            $lines.Add("  - External blocker count: $($item.required_operator_input_count)")
+            $lines.Add("  - External blocker count: $($item.external_blocker_count)")
+            $lines.Add("  - Placeholder token count: $($item.operator_placeholder_count)")
+            $lines.Add("  - Placeholder occurrence count: $($item.operator_placeholder_occurrence_count)")
             $lines.Add("  - Blocked by external actor: $(([bool]$item.blocked_by_external_actor).ToString().ToLowerInvariant())")
             foreach ($command in @($item.commands | Select-Object -First 3)) {
                 if (-not [string]::IsNullOrWhiteSpace($command)) {
@@ -1938,6 +1971,8 @@ $result = [pscustomobject][ordered]@{
     failed_provisioning_child_check_count = [int]$failedProvisioningChildCheckCount
     failed_release_evidence_check_count = $failedReleaseEvidenceChecks.Count
     operator_placeholder_count = [int]$operatorPlaceholderCount
+    operator_placeholder_occurrence_count = [int]$operatorPlaceholderOccurrenceCount
+    external_blocker_count = [int]$externalBlockerCount
     required_environment_variable_count = $requiredEnvironmentVariables.Count
     report_reference_refresh_count = $reportReferenceRefreshes.Count
     required_readiness_evidence_item_count = $readinessEvidenceItems.Count

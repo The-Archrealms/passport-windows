@@ -184,6 +184,21 @@ function Get-PlaceholderTokensFromCommand {
     return @($tokens)
 }
 
+function Get-OperatorPlaceholderOccurrenceCount {
+    param([object[]]$Placeholders = @())
+
+    $count = (@($Placeholders | ForEach-Object {
+        if ($null -ne $_ -and $_.PSObject.Properties["occurrence_count"]) {
+            [int]$_.occurrence_count
+        }
+    }) | Measure-Object -Sum).Sum
+    if ($null -eq $count) {
+        return 0
+    }
+
+    return [int]$count
+}
+
 function Join-ArrayForCompare {
     param([object[]]$Values)
 
@@ -350,6 +365,17 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
     $uniquePacketCommands = @($packetCommands | Select-Object -Unique)
     $sourceOperatorPlaceholderCount = (@($sourceActions | ForEach-Object { @(Get-ObjectArray -Object $_ -Name "operator_placeholders").Count }) | Measure-Object -Sum).Sum
     if ($null -eq $sourceOperatorPlaceholderCount) { $sourceOperatorPlaceholderCount = 0 }
+    $sourceOperatorPlaceholderOccurrenceCount = (@($sourceActions | ForEach-Object { Get-OperatorPlaceholderOccurrenceCount -Placeholders @(Get-ObjectArray -Object $_ -Name "operator_placeholders") }) | Measure-Object -Sum).Sum
+    if ($null -eq $sourceOperatorPlaceholderOccurrenceCount) { $sourceOperatorPlaceholderOccurrenceCount = 0 }
+    $sourceExternalBlockerCount = (@($sourceActions | ForEach-Object {
+        if ($_.PSObject.Properties["external_blocker_count"]) {
+            [int]$_.external_blocker_count
+        }
+        else {
+            @(Get-ObjectArray -Object $_ -Name "external_blocker_ids").Count
+        }
+    }) | Measure-Object -Sum).Sum
+    if ($null -eq $sourceExternalBlockerCount) { $sourceExternalBlockerCount = 0 }
 
     $sourceFailures = @()
     if ([string]$manifest.source_report.sha256 -ne $sourceHash) {
@@ -376,6 +402,12 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
     if ([int]$plan.source_report.operator_placeholder_count -ne [int]$sourceOperatorPlaceholderCount) {
         $sourceFailures += "plan operator_placeholder_count does not match source report next_action_plan operator placeholders."
     }
+    if ([int]$plan.source_report.operator_placeholder_occurrence_count -ne [int]$sourceOperatorPlaceholderOccurrenceCount) {
+        $sourceFailures += "plan operator_placeholder_occurrence_count does not match source report next_action_plan placeholder occurrences."
+    }
+    if ([int]$plan.source_report.external_blocker_count -ne [int]$sourceExternalBlockerCount) {
+        $sourceFailures += "plan external_blocker_count does not match source report next_action_plan external blocker counts."
+    }
     if ([int]$plan.source_report.blocker_count -ne $sourceBlockers.Count) {
         $sourceFailures += "plan blocker_count does not match source report blocker count."
     }
@@ -390,6 +422,12 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
     }
     if ([int]$manifest.source_report.operator_placeholder_count -ne [int]$sourceOperatorPlaceholderCount) {
         $sourceFailures += "manifest operator_placeholder_count does not match source report next_action_plan operator placeholders."
+    }
+    if ([int]$manifest.source_report.operator_placeholder_occurrence_count -ne [int]$sourceOperatorPlaceholderOccurrenceCount) {
+        $sourceFailures += "manifest operator_placeholder_occurrence_count does not match source report next_action_plan placeholder occurrences."
+    }
+    if ([int]$manifest.source_report.external_blocker_count -ne [int]$sourceExternalBlockerCount) {
+        $sourceFailures += "manifest external_blocker_count does not match source report next_action_plan external blocker counts."
     }
     $checks += New-Check -Id "source_report_linkage" -Passed ($sourceFailures.Count -eq 0) -Failures $sourceFailures -Evidence ([pscustomobject][ordered]@{ source_report_sha256 = $sourceHash; action_count = $sourceActions.Count; blocker_count = $sourceBlockers.Count })
 
@@ -428,6 +466,15 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
         if ([int]$packetAction.required_operator_input_count -ne [int]$sourceAction.required_operator_input_count) {
             $actionFailures += "packet action $id required_operator_input_count mismatch."
         }
+        if ([int]$packetAction.operator_placeholder_count -ne [int]$sourceAction.operator_placeholder_count) {
+            $actionFailures += "packet action $id operator_placeholder_count mismatch."
+        }
+        if ([int]$packetAction.operator_placeholder_occurrence_count -ne [int]$sourceAction.operator_placeholder_occurrence_count) {
+            $actionFailures += "packet action $id operator_placeholder_occurrence_count mismatch."
+        }
+        if ([int]$packetAction.external_blocker_count -ne [int]$sourceAction.external_blocker_count) {
+            $actionFailures += "packet action $id external_blocker_count mismatch."
+        }
         if ([int]$packetAction.phase_order -ne [int]$sourceAction.phase_order) {
             $actionFailures += "packet action $id phase_order mismatch."
         }
@@ -462,6 +509,15 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
         }
         if (-not $plan.summary.PSObject.Properties["operator_command_phase_count"]) {
             $commandSequenceFailures += "plan summary is missing operator_command_phase_count."
+        }
+        if ([int]$plan.summary.operator_placeholder_count -ne [int]$sourceOperatorPlaceholderCount) {
+            $commandSequenceFailures += "plan summary operator_placeholder_count does not match source action placeholder count."
+        }
+        if ([int]$plan.summary.operator_placeholder_occurrence_count -ne [int]$sourceOperatorPlaceholderOccurrenceCount) {
+            $commandSequenceFailures += "plan summary operator_placeholder_occurrence_count does not match source action placeholder occurrences."
+        }
+        if ([int]$plan.summary.external_blocker_count -ne [int]$sourceExternalBlockerCount) {
+            $commandSequenceFailures += "plan summary external_blocker_count does not match source action external blockers."
         }
     }
 
@@ -911,6 +967,17 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
                     $markdownFailures += "Markdown is missing action value for $($packetAction.id): $value"
                 }
             }
+            foreach ($value in @(
+                [string]$packetAction.required_operator_input_count,
+                [string]$packetAction.external_blocker_count,
+                [string]$packetAction.operator_placeholder_count,
+                [string]$packetAction.operator_placeholder_occurrence_count,
+                ([bool]$packetAction.blocked_by_external_actor).ToString().ToLowerInvariant()
+            )) {
+                if (-not [string]::IsNullOrWhiteSpace($value) -and $markdown -notmatch [regex]::Escape($value)) {
+                    $markdownFailures += "Markdown is missing action operator metadata for $($packetAction.id): $value"
+                }
+            }
             foreach ($blockerId in @(Get-ObjectArray -Object $packetAction -Name "blocker_ids")) {
                 if ($markdown -notmatch [regex]::Escape([string]$blockerId)) {
                     $markdownFailures += "Markdown is missing blocker id for $($packetAction.id): $blockerId"
@@ -1009,6 +1076,17 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
             foreach ($value in @([string]$packetAction.id, [string]$packetAction.title, [string]$packetAction.phase, [string]$packetAction.summary)) {
                 if (-not [string]::IsNullOrWhiteSpace($value) -and $commandText -notmatch [regex]::Escape($value)) {
                     $commandFailures += "operator command checklist is missing action metadata for $($packetAction.id): $value"
+                }
+            }
+            foreach ($value in @(
+                [string]$packetAction.required_operator_input_count,
+                [string]$packetAction.external_blocker_count,
+                [string]$packetAction.operator_placeholder_count,
+                [string]$packetAction.operator_placeholder_occurrence_count,
+                ([bool]$packetAction.blocked_by_external_actor).ToString().ToLowerInvariant()
+            )) {
+                if (-not [string]::IsNullOrWhiteSpace($value) -and $commandText -notmatch [regex]::Escape($value)) {
+                    $commandFailures += "operator command checklist is missing action operator metadata for $($packetAction.id): $value"
                 }
             }
             foreach ($summary in @(Get-ObjectArray -Object $packetAction -Name "blocker_summaries")) {

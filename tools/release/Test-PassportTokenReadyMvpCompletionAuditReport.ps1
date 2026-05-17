@@ -612,6 +612,21 @@ function Get-ObjectArray {
     return @($Object.$Name)
 }
 
+function Get-OperatorPlaceholderOccurrenceCount {
+    param([object[]]$Placeholders = @())
+
+    $count = (@($Placeholders | ForEach-Object {
+        if ($null -ne $_ -and $_.PSObject.Properties["occurrence_count"]) {
+            [int]$_.occurrence_count
+        }
+    }) | Measure-Object -Sum).Sum
+    if ($null -eq $count) {
+        return 0
+    }
+
+    return [int]$count
+}
+
 function Get-ObjectBool {
     param(
         [object]$Object,
@@ -1150,6 +1165,30 @@ if ($reportedLocalImplementationReadyForActions -eq $true -and $reportedCompleti
             $externalBlockerIds = @(Get-ObjectArray -Object $action -Name "external_blocker_ids" | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
             if ($externalBlockerIds.Count -eq 0) {
                 $externalActionFailures += "remaining action $actionId does not name any external_blocker_ids."
+            }
+            if (-not $action.PSObject.Properties["external_blocker_count"]) {
+                $externalActionFailures += "remaining action $actionId is missing external_blocker_count."
+            }
+            elseif ([int]$action.external_blocker_count -ne $externalBlockerIds.Count) {
+                $externalActionFailures += "remaining action $actionId external_blocker_count does not match external_blocker_ids count."
+            }
+            if ($action.PSObject.Properties["required_operator_input_count"] -and ([int]$action.required_operator_input_count -ne $externalBlockerIds.Count)) {
+                $externalActionFailures += "remaining action $actionId required_operator_input_count does not match external_blocker_ids count."
+            }
+
+            $operatorPlaceholders = @(Get-ObjectArray -Object $action -Name "operator_placeholders")
+            if (-not $action.PSObject.Properties["operator_placeholder_count"]) {
+                $externalActionFailures += "remaining action $actionId is missing operator_placeholder_count."
+            }
+            elseif ([int]$action.operator_placeholder_count -ne $operatorPlaceholders.Count) {
+                $externalActionFailures += "remaining action $actionId operator_placeholder_count does not match operator_placeholders count."
+            }
+            $operatorPlaceholderOccurrenceCount = Get-OperatorPlaceholderOccurrenceCount -Placeholders $operatorPlaceholders
+            if (-not $action.PSObject.Properties["operator_placeholder_occurrence_count"]) {
+                $externalActionFailures += "remaining action $actionId is missing operator_placeholder_occurrence_count."
+            }
+            elseif ([int]$action.operator_placeholder_occurrence_count -ne $operatorPlaceholderOccurrenceCount) {
+                $externalActionFailures += "remaining action $actionId operator_placeholder_occurrence_count does not match operator_placeholders occurrence_count sum."
             }
 
             $commands = @(Get-ObjectArray -Object $action -Name "commands" | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })

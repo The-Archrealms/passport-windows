@@ -94,8 +94,30 @@ function Get-ObjectArray {
     return @($Object.$Name)
 }
 
+function Get-OperatorPlaceholderOccurrenceCount {
+    param([object[]]$Placeholders = @())
+
+    $count = (@($Placeholders | ForEach-Object {
+        if ($null -ne $_ -and $_.PSObject.Properties["occurrence_count"]) {
+            [int]$_.occurrence_count
+        }
+    }) | Measure-Object -Sum).Sum
+    if ($null -eq $count) {
+        return 0
+    }
+
+    return [int]$count
+}
+
 function New-ActionRecord {
     param([object]$Item)
+
+    $operatorPlaceholders = @(Get-ObjectArray -Object $Item -Name "operator_placeholders")
+    $externalBlockerIds = @(Get-ObjectArray -Object $Item -Name "external_blocker_ids" | ForEach-Object { [string]$_ })
+    $externalBlockerCount = if ($Item.PSObject.Properties["external_blocker_count"]) { [int]$Item.external_blocker_count } else { $externalBlockerIds.Count }
+    $requiredOperatorInputCount = if ($Item.PSObject.Properties["required_operator_input_count"]) { [int]$Item.required_operator_input_count } else { $externalBlockerCount }
+    $operatorPlaceholderCount = if ($Item.PSObject.Properties["operator_placeholder_count"]) { [int]$Item.operator_placeholder_count } else { $operatorPlaceholders.Count }
+    $operatorPlaceholderOccurrenceCount = if ($Item.PSObject.Properties["operator_placeholder_occurrence_count"]) { [int]$Item.operator_placeholder_occurrence_count } else { Get-OperatorPlaceholderOccurrenceCount -Placeholders $operatorPlaceholders }
 
     return [pscustomobject][ordered]@{
         id = [string]$Item.id
@@ -105,13 +127,16 @@ function New-ActionRecord {
         summary = $(if ($Item.PSObject.Properties["summary"]) { [string]$Item.summary } else { "" })
         action = [string]$Item.action
         commands = @(Get-ObjectArray -Object $Item -Name "commands" | ForEach-Object { [string]$_ })
-        operator_placeholders = @(Get-ObjectArray -Object $Item -Name "operator_placeholders")
+        operator_placeholders = @($operatorPlaceholders)
+        operator_placeholder_count = $operatorPlaceholderCount
+        operator_placeholder_occurrence_count = $operatorPlaceholderOccurrenceCount
         blocker_ids = @(Get-ObjectArray -Object $Item -Name "blocker_ids" | ForEach-Object { [string]$_ })
         blocker_summaries = @(Get-ObjectArray -Object $Item -Name "blocker_summaries" | ForEach-Object { [string]$_ })
         operator_input_required = $(if ($Item.PSObject.Properties["operator_input_required"]) { [bool]$Item.operator_input_required } else { $false })
-        required_operator_input_count = $(if ($Item.PSObject.Properties["required_operator_input_count"]) { [int]$Item.required_operator_input_count } else { 0 })
+        required_operator_input_count = $requiredOperatorInputCount
+        external_blocker_count = $externalBlockerCount
         blocked_by_external_actor = $(if ($Item.PSObject.Properties["blocked_by_external_actor"]) { [bool]$Item.blocked_by_external_actor } else { $false })
-        external_blocker_ids = @(Get-ObjectArray -Object $Item -Name "external_blocker_ids" | ForEach-Object { [string]$_ })
+        external_blocker_ids = @($externalBlockerIds)
         categories = @(Get-ObjectArray -Object $Item -Name "categories" | ForEach-Object { [string]$_ })
         source_ids = @(Get-ObjectArray -Object $Item -Name "source_ids" | ForEach-Object { [string]$_ })
     }
@@ -308,6 +333,14 @@ $operatorPlaceholderCount = (@($actions | ForEach-Object { @($_.operator_placeho
 if ($null -eq $operatorPlaceholderCount) {
     $operatorPlaceholderCount = 0
 }
+$operatorPlaceholderOccurrenceCount = (@($actions | ForEach-Object { [int]$_.operator_placeholder_occurrence_count }) | Measure-Object -Sum).Sum
+if ($null -eq $operatorPlaceholderOccurrenceCount) {
+    $operatorPlaceholderOccurrenceCount = 0
+}
+$sourceExternalBlockerCount = (@($actions | ForEach-Object { [int]$_.external_blocker_count }) | Measure-Object -Sum).Sum
+if ($null -eq $sourceExternalBlockerCount) {
+    $sourceExternalBlockerCount = 0
+}
 
 $sourceReportRecord = [pscustomobject][ordered]@{
     path = $resolvedReportPath
@@ -318,6 +351,8 @@ $sourceReportRecord = [pscustomobject][ordered]@{
     next_action_count = $actions.Count
     unique_operator_command_count = $commandGroups.Count
     operator_placeholder_count = [int]$operatorPlaceholderCount
+    operator_placeholder_occurrence_count = [int]$operatorPlaceholderOccurrenceCount
+    external_blocker_count = [int]$sourceExternalBlockerCount
 }
 
 New-Item -ItemType Directory -Force -Path $phaseCommandDirectory | Out-Null
@@ -389,6 +424,9 @@ $plan = [pscustomobject][ordered]@{
         unique_operator_command_count = $commandGroups.Count
         duplicate_operator_command_count = [Math]::Max(0, (($actions | ForEach-Object { @(Get-ObjectArray -Object $_ -Name "commands").Count } | Measure-Object -Sum).Sum) - $commandGroups.Count)
         operator_command_phase_count = $phaseScriptRecords.Count
+        operator_placeholder_count = [int]$operatorPlaceholderCount
+        operator_placeholder_occurrence_count = [int]$operatorPlaceholderOccurrenceCount
+        external_blocker_count = [int]$sourceExternalBlockerCount
     }
     deduplicated_operator_commands = @($commandGroups)
     operator_command_phase_scripts = @($phaseScriptRecords)
@@ -429,6 +467,8 @@ $markdown.Add("- Blockers: $($blockers.Count)")
 $markdown.Add("- Action items: $($actions.Count)")
 $markdown.Add("- Unique operator commands: $($commandGroups.Count)")
 $markdown.Add("- Operator placeholders: $([int]$operatorPlaceholderCount)")
+$markdown.Add("- Operator placeholder occurrences: $([int]$operatorPlaceholderOccurrenceCount)")
+$markdown.Add("- External blockers: $([int]$sourceExternalBlockerCount)")
 $markdown.Add("")
 
 if ($actions.Count -eq 0) {
@@ -499,7 +539,10 @@ else {
         $markdown.Add("- Action: $($action.action)")
         $markdown.Add("- Blockers covered: $((@($action.blocker_ids) -join ', '))")
         $markdown.Add("- Operator input required: $(([bool]$action.operator_input_required).ToString().ToLowerInvariant())")
-        $markdown.Add("- External blocker count: $($action.required_operator_input_count)")
+        $markdown.Add("- Required operator input count: $($action.required_operator_input_count)")
+        $markdown.Add("- External blocker count: $($action.external_blocker_count)")
+        $markdown.Add("- Placeholder token count: $($action.operator_placeholder_count)")
+        $markdown.Add("- Placeholder occurrence count: $($action.operator_placeholder_occurrence_count)")
         $markdown.Add("- Blocked by external actor: $(([bool]$action.blocked_by_external_actor).ToString().ToLowerInvariant())")
         if (@($action.operator_placeholders).Count -gt 0) {
             $markdown.Add("- Placeholders:")
@@ -631,7 +674,10 @@ foreach ($action in $actions) {
     }
     $commandLines.Add("# Blockers: $((@($action.blocker_ids) -join ', '))")
     $commandLines.Add("# Operator input required: $(([bool]$action.operator_input_required).ToString().ToLowerInvariant())")
-    $commandLines.Add("# External blocker count: $($action.required_operator_input_count)")
+    $commandLines.Add("# Required operator input count: $($action.required_operator_input_count)")
+    $commandLines.Add("# External blocker count: $($action.external_blocker_count)")
+    $commandLines.Add("# Placeholder token count: $($action.operator_placeholder_count)")
+    $commandLines.Add("# Placeholder occurrence count: $($action.operator_placeholder_occurrence_count)")
     $commandLines.Add("# Blocked by external actor: $(([bool]$action.blocked_by_external_actor).ToString().ToLowerInvariant())")
     foreach ($placeholder in @($action.operator_placeholders)) {
         $commandLines.Add("# Placeholder: $($placeholder.token) [$($placeholder.input_kind)] $($placeholder.validation_hint)")
@@ -657,6 +703,8 @@ $manifest = [pscustomobject][ordered]@{
         next_action_count = $actions.Count
         unique_operator_command_count = $commandGroups.Count
         operator_placeholder_count = [int]$operatorPlaceholderCount
+        operator_placeholder_occurrence_count = [int]$operatorPlaceholderOccurrenceCount
+        external_blocker_count = [int]$sourceExternalBlockerCount
         environment_variable_count = $environmentVariables.Count
         readiness_evidence_item_count = $readinessEvidenceItems.Count
         provisioning_evidence_file_count = $provisioningEvidenceFiles.Count
@@ -701,6 +749,8 @@ $result = [pscustomobject][ordered]@{
     unique_operator_command_count = $commandGroups.Count
     blocker_count = $blockers.Count
     operator_placeholder_count = [int]$operatorPlaceholderCount
+    operator_placeholder_occurrence_count = [int]$operatorPlaceholderOccurrenceCount
+    external_blocker_count = [int]$sourceExternalBlockerCount
 }
 
 $result | ConvertTo-Json -Depth 12
