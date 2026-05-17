@@ -179,6 +179,30 @@ function Read-ObjectInt {
     return [int]$Object.$Name
 }
 
+function Get-AllowedRemainingWorkTypes {
+    return @(
+        "external_verification",
+        "staging_provisioning",
+        "canary_provisioning",
+        "package_signing",
+        "monetary_provisioning",
+        "managed_storage_provisioning",
+        "managed_signing_provisioning",
+        "ai_runtime_provisioning",
+        "operations_provisioning",
+        "release_approval",
+        "production_closeout",
+        "implementation_gap",
+        "unclassified"
+    )
+}
+
+function Join-StringSet {
+    param([string[]]$Values = @())
+
+    return (@($Values | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | Sort-Object -Unique) -join "`n")
+}
+
 function Get-ExpectedOperatorPlaceholderInputKind {
     param([string]$Name)
 
@@ -660,6 +684,36 @@ if ($null -ne $report) {
     if ((Read-ObjectInt -Object $summary -Name "operator_placeholder_count") -ne [int]$operatorPlaceholderCount) { $countFailures += "operator_placeholder_count does not match next_action_plan operator placeholders." }
     if ((Read-ObjectInt -Object $summary -Name "operator_placeholder_occurrence_count") -ne [int]$operatorPlaceholderOccurrenceCount) { $countFailures += "operator_placeholder_occurrence_count does not match next_action_plan operator placeholder occurrences." }
     if ((Read-ObjectInt -Object $summary -Name "external_blocker_count") -ne [int]$externalBlockerCount) { $countFailures += "external_blocker_count does not match next_action_plan external blocker ids." }
+    $expectedRemainingWorkTypeCounts = [ordered]@{}
+    foreach ($blocker in $blockers) {
+        $type = if ($blocker.PSObject.Properties["remaining_work_type"]) { [string]$blocker.remaining_work_type } else { "" }
+        if ([string]::IsNullOrWhiteSpace($type)) {
+            $type = "unclassified"
+        }
+        if (-not $expectedRemainingWorkTypeCounts.Contains($type)) {
+            $expectedRemainingWorkTypeCounts[$type] = 0
+        }
+        $expectedRemainingWorkTypeCounts[$type] = [int]$expectedRemainingWorkTypeCounts[$type] + 1
+    }
+    if (-not $summary.PSObject.Properties["remaining_work_type_counts"]) {
+        $countFailures += "summary is missing remaining_work_type_counts."
+    }
+    else {
+        $reportedRemainingWorkTypeCounts = $summary.remaining_work_type_counts
+        foreach ($entry in $expectedRemainingWorkTypeCounts.GetEnumerator()) {
+            if (-not $reportedRemainingWorkTypeCounts.PSObject.Properties[[string]$entry.Key]) {
+                $countFailures += "remaining_work_type_counts is missing $($entry.Key)."
+            }
+            elseif ([int]$reportedRemainingWorkTypeCounts.PSObject.Properties[[string]$entry.Key].Value -ne [int]$entry.Value) {
+                $countFailures += "remaining_work_type_counts $($entry.Key) does not match blockers."
+            }
+        }
+        foreach ($property in @($reportedRemainingWorkTypeCounts.PSObject.Properties)) {
+            if (-not $expectedRemainingWorkTypeCounts.Contains([string]$property.Name)) {
+                $countFailures += "remaining_work_type_counts has unexpected type $($property.Name)."
+            }
+        }
+    }
 
     $checks += New-Check -Id "summary_counts" -Passed ($countFailures.Count -eq 0) -Failures $countFailures
 
@@ -1022,6 +1076,7 @@ if ($null -ne $report) {
 
     $blockerContractFailures = @()
     $seenBlockerIds = @{}
+    $allowedRemainingWorkTypes = Get-AllowedRemainingWorkTypes
     foreach ($blocker in $blockers) {
         $blockerId = [string]$blocker.id
         if ([string]::IsNullOrWhiteSpace($blockerId)) {
@@ -1041,6 +1096,13 @@ if ($null -ne $report) {
         }
         if ([string]$blocker.status -ne "blocked") {
             $blockerContractFailures += "blocker $blockerId status must be blocked."
+        }
+        $remainingWorkType = if ($blocker.PSObject.Properties["remaining_work_type"]) { [string]$blocker.remaining_work_type } else { "" }
+        if ([string]::IsNullOrWhiteSpace($remainingWorkType)) {
+            $blockerContractFailures += "blocker $blockerId is missing remaining_work_type."
+        }
+        elseif ($allowedRemainingWorkTypes -notcontains $remainingWorkType) {
+            $blockerContractFailures += "blocker $blockerId has invalid remaining_work_type: $remainingWorkType"
         }
         if ((Get-ObjectArray -Object $blocker -Name "failures").Count -eq 0) {
             $blockerContractFailures += "blocker $blockerId lacks failures."
@@ -1171,6 +1233,18 @@ if ($null -ne $report) {
         }
 
         $externalBlockerIds = @(Get-ObjectArray -Object $item -Name "external_blocker_ids" | ForEach-Object { [string]$_ })
+        $itemRemainingWorkTypes = @(Get-ObjectArray -Object $item -Name "remaining_work_types" | ForEach-Object { [string]$_ })
+        if (-not $item.PSObject.Properties["remaining_work_types"]) {
+            $nextActionPlanFailures += "next_action_plan $itemId is missing remaining_work_types."
+        }
+        elseif ($itemRemainingWorkTypes.Count -eq 0) {
+            $nextActionPlanFailures += "next_action_plan $itemId remaining_work_types is empty."
+        }
+        foreach ($remainingType in $itemRemainingWorkTypes) {
+            if ($allowedRemainingWorkTypes -notcontains $remainingType) {
+                $nextActionPlanFailures += "next_action_plan $itemId has invalid remaining_work_type: $remainingType"
+            }
+        }
         if (-not $item.PSObject.Properties["external_blocker_count"]) {
             $nextActionPlanFailures += "next_action_plan $itemId is missing external_blocker_count."
         }
@@ -1209,6 +1283,15 @@ if ($null -ne $report) {
                     $nextActionPlanFailures += "next_action_plan $itemId is missing blocker command for $blockerId`: $blockerCommand"
                 }
             }
+        }
+
+        $expectedRemainingWorkTypes = @($itemBlockerIds | ForEach-Object {
+            if ($knownBlockerIds.ContainsKey([string]$_)) {
+                [string]$knownBlockerIds[[string]$_].remaining_work_type
+            }
+        } | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
+        if ((Join-StringSet -Values $itemRemainingWorkTypes) -ne (Join-StringSet -Values $expectedRemainingWorkTypes)) {
+            $nextActionPlanFailures += "next_action_plan $itemId remaining_work_types do not match covered blockers."
         }
     }
 
@@ -1283,6 +1366,11 @@ if ($null -ne $report) {
                     $markdownFailures += "Markdown does not include next_action_plan blocker id: $($item.id)"
                 }
             }
+            foreach ($remainingType in @(Get-ObjectArray -Object $item -Name "remaining_work_types")) {
+                if (-not [string]::IsNullOrWhiteSpace([string]$remainingType) -and $markdown -notmatch [regex]::Escape([string]$remainingType)) {
+                    $markdownFailures += "Markdown does not include next_action_plan remaining work type: $($item.id)"
+                }
+            }
             foreach ($command in @(Get-ObjectArray -Object $item -Name "commands")) {
                 if (-not [string]::IsNullOrWhiteSpace([string]$command) -and $markdown -notmatch [regex]::Escape([string]$command)) {
                     $markdownFailures += "Markdown does not include next_action_plan command: $($item.id)"
@@ -1302,6 +1390,9 @@ if ($null -ne $report) {
             }
             if ($blocker.PSObject.Properties["summary"] -and -not [string]::IsNullOrWhiteSpace([string]$blocker.summary) -and $markdown -notmatch [regex]::Escape([string]$blocker.summary)) {
                 $markdownFailures += "Markdown does not include blocker summary: $($blocker.id)"
+            }
+            if ($blocker.PSObject.Properties["remaining_work_type"] -and -not [string]::IsNullOrWhiteSpace([string]$blocker.remaining_work_type) -and $markdown -notmatch [regex]::Escape([string]$blocker.remaining_work_type)) {
+                $markdownFailures += "Markdown does not include blocker remaining_work_type: $($blocker.id)"
             }
             if ($blocker.PSObject.Properties["next_action"] -and -not [string]::IsNullOrWhiteSpace([string]$blocker.next_action) -and $markdown -notmatch [regex]::Escape([string]$blocker.next_action)) {
                 $markdownFailures += "Markdown does not include blocker next_action: $($blocker.id)"

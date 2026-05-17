@@ -139,6 +139,7 @@ function New-ActionRecord {
         external_blocker_ids = @($externalBlockerIds)
         categories = @(Get-ObjectArray -Object $Item -Name "categories" | ForEach-Object { [string]$_ })
         source_ids = @(Get-ObjectArray -Object $Item -Name "source_ids" | ForEach-Object { [string]$_ })
+        remaining_work_types = @(Get-ObjectArray -Object $Item -Name "remaining_work_types" | ForEach-Object { [string]$_ })
     }
 }
 
@@ -538,6 +539,9 @@ else {
         }
         $markdown.Add("- Action: $($action.action)")
         $markdown.Add("- Blockers covered: $((@($action.blocker_ids) -join ', '))")
+        if (@($action.remaining_work_types).Count -gt 0) {
+            $markdown.Add("- Remaining work types: $((@($action.remaining_work_types) -join ', '))")
+        }
         $markdown.Add("- Operator input required: $(([bool]$action.operator_input_required).ToString().ToLowerInvariant())")
         $markdown.Add("- Required operator input count: $($action.required_operator_input_count)")
         $markdown.Add("- External blocker count: $($action.external_blocker_count)")
@@ -673,6 +677,9 @@ foreach ($action in $actions) {
         }
     }
     $commandLines.Add("# Blockers: $((@($action.blocker_ids) -join ', '))")
+    if (@($action.remaining_work_types).Count -gt 0) {
+        $commandLines.Add("# Remaining work types: $((@($action.remaining_work_types) -join ', '))")
+    }
     $commandLines.Add("# Operator input required: $(([bool]$action.operator_input_required).ToString().ToLowerInvariant())")
     $commandLines.Add("# Required operator input count: $($action.required_operator_input_count)")
     $commandLines.Add("# External blocker count: $($action.external_blocker_count)")

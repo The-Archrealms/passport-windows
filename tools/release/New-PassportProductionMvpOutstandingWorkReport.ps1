@@ -555,6 +555,40 @@ function New-BlockerSummary {
     return ConvertTo-ReportText -Value $summary
 }
 
+function Get-RemainingWorkType {
+    param(
+        [string]$Id,
+        [string]$Category,
+        [string[]]$SourceIds = @(),
+        [object]$OperatorAction = $null
+    )
+
+    $parts = @($Id, $Category) + @($SourceIds)
+    if ($null -ne $OperatorAction) {
+        foreach ($name in @("id", "title", "action")) {
+            if ($OperatorAction.PSObject.Properties[$name]) {
+                $parts += [string]$OperatorAction.$name
+            }
+        }
+    }
+
+    $text = (($parts | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }) -join " ").ToLowerInvariant()
+
+    if ($Category -eq "input_failure" -or $Category -eq "closeout_failure") { return "production_closeout" }
+    if ($text -match "pre[_ -]?mvp|staff[_ -]?steward") { return "external_verification" }
+    if ($text -match "staging") { return "staging_provisioning" }
+    if ($text -match "canary") { return "canary_provisioning" }
+    if ($text -match "managed[_ -]?signing|signing[_ -]?custody|kms|hsm") { return "managed_signing_provisioning" }
+    if ($text -match "package[_ -]?signing|signing[_ -]?certificate|msix|timestamp") { return "package_signing" }
+    if ($text -match "managed[_ -]?storage|storage[_ -]?status|storage[_ -]?backups|storage readiness") { return "managed_storage_provisioning" }
+    if ($text -match "issuer|capacity|genesis|monetary|crown credit|\bcc\b|arch") { return "monetary_provisioning" }
+    if ($text -match "open[_ -]?weight|ai[_ -]?runtime|model|vector[_ -]?store|knowledge") { return "ai_runtime_provisioning" }
+    if ($text -match "telemetry|incident|production[_ -]?ops|backup|restore|release[_ -]?lane|endpoint|hosted[_ -]?runtime|hosted[_ -]?operator|hosted[_ -]?services|ops/runtime|ops/operator") { return "operations_provisioning" }
+    if ($text -match "approval|approved|signoff|security/privacy|crown monetary authority") { return "release_approval" }
+
+    return "production_closeout"
+}
+
 function New-Blocker {
     param(
         [string]$Id,
@@ -568,10 +602,12 @@ function New-Blocker {
 
     $actionCommands = Get-ActionCommandArray -Action $OperatorAction
     $actionPlaceholders = Get-CommandPlaceholders -Commands $actionCommands
+    $remainingWorkType = Get-RemainingWorkType -Id $Id -Category $Category -SourceIds $SourceIds -OperatorAction $OperatorAction
 
     return [pscustomobject][ordered]@{
         id = $Id
         category = $Category
+        remaining_work_type = $remainingWorkType
         title = ConvertTo-ReportText -Value $Title
         summary = New-BlockerSummary -Title $Title -Failures $Failures -OperatorAction $OperatorAction
         status = "blocked"
@@ -665,6 +701,7 @@ function New-NextActionPlan {
                 categories = New-Object System.Collections.Generic.List[string]
                 source_ids = New-Object System.Collections.Generic.List[string]
                 summaries = New-Object System.Collections.Generic.List[string]
+                remaining_work_types = New-Object System.Collections.Generic.List[string]
             }
         }
 
@@ -681,6 +718,7 @@ function New-NextActionPlan {
             Add-UniqueString -List $entry.commands -Value ([string]$command)
         }
         Add-UniqueString -List $entry.summaries -Value ([string]$blocker.summary)
+        Add-UniqueString -List $entry.remaining_work_types -Value ([string]$blocker.remaining_work_type)
     }
 
     $items = foreach ($entry in $plansById.Values) {
@@ -717,6 +755,7 @@ function New-NextActionPlan {
             external_blocker_ids = @($entry.external_blocker_ids)
             categories = @($entry.categories)
             source_ids = @($entry.source_ids)
+            remaining_work_types = @($entry.remaining_work_types | Sort-Object)
         }
     }
 
@@ -1614,6 +1653,19 @@ $externalBlockerCount = (@($nextActionPlan | ForEach-Object { [int]$_.external_b
 if ($null -eq $externalBlockerCount) {
     $externalBlockerCount = 0
 }
+$remainingWorkTypeCounts = [ordered]@{}
+foreach ($blocker in @($blockers)) {
+    $type = [string]$blocker.remaining_work_type
+    if ([string]::IsNullOrWhiteSpace($type)) {
+        $type = "unclassified"
+    }
+
+    if (-not $remainingWorkTypeCounts.Contains($type)) {
+        $remainingWorkTypeCounts[$type] = 0
+    }
+
+    $remainingWorkTypeCounts[$type] = [int]$remainingWorkTypeCounts[$type] + 1
+}
 
 $contractFailures = @()
 foreach ($item in @($readinessEvidenceItems)) {
@@ -1694,6 +1746,7 @@ $report = [pscustomobject][ordered]@{
         operator_placeholder_count = [int]$operatorPlaceholderCount
         operator_placeholder_occurrence_count = [int]$operatorPlaceholderOccurrenceCount
         external_blocker_count = [int]$externalBlockerCount
+        remaining_work_type_counts = [pscustomobject]$remainingWorkTypeCounts
         failed_readiness_gate_count = $failedReadinessGates.Count
         failed_provisioning_check_count = $failedProvisioningChecks.Count
         failed_provisioning_child_check_count = [int]$failedProvisioningChildCheckCount
@@ -1744,6 +1797,10 @@ if (-not [string]::IsNullOrWhiteSpace($MarkdownOutputPath)) {
     $lines.Add("- App commit: $($report.app_commit)")
     $lines.Add("- Ready for production testing: $($report.ready_for_production_testing.ToString().ToLowerInvariant())")
     $lines.Add("- Blockers: $($blockers.Count)")
+    if ($remainingWorkTypeCounts.Count -gt 0) {
+        $remainingWorkTypeSummary = @($remainingWorkTypeCounts.GetEnumerator() | ForEach-Object { "{0}={1}" -f $_.Key, $_.Value }) -join ", "
+        $lines.Add("- Remaining work types: $remainingWorkTypeSummary")
+    }
     $lines.Add("- Operator command placeholders: $([int]$operatorPlaceholderCount)")
     $lines.Add("- Failed readiness gates: $($failedReadinessGates.Count)")
     $lines.Add("- Failed provisioning checks: $($failedProvisioningChecks.Count)")
@@ -1788,6 +1845,9 @@ if (-not [string]::IsNullOrWhiteSpace($MarkdownOutputPath)) {
     else {
         foreach ($item in @($nextActionPlan)) {
             $lines.Add("- ``$($item.id)`` [$($item.phase)]: $($item.title)")
+            if (@($item.remaining_work_types).Count -gt 0) {
+                $lines.Add("  - Remaining work types: $((@($item.remaining_work_types) -join ', '))")
+            }
             if (-not [string]::IsNullOrWhiteSpace([string]$item.summary)) {
                 $lines.Add("  - Summary: $($item.summary)")
             }
@@ -1825,6 +1885,7 @@ if (-not [string]::IsNullOrWhiteSpace($MarkdownOutputPath)) {
     else {
         foreach ($blocker in @($blockers)) {
             $lines.Add("- ``$($blocker.id)`` [$($blocker.category)]: $($blocker.title)")
+            $lines.Add("  - Remaining work type: $($blocker.remaining_work_type)")
             if (-not [string]::IsNullOrWhiteSpace([string]$blocker.summary)) {
                 $lines.Add("  - Summary: $($blocker.summary)")
             }

@@ -501,7 +501,7 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
         if ([int]$packetAction.phase_order -ne [int]$sourceAction.phase_order) {
             $actionFailures += "packet action $id phase_order mismatch."
         }
-        foreach ($arrayName in @("commands", "blocker_ids", "blocker_summaries", "external_blocker_ids", "categories", "source_ids")) {
+        foreach ($arrayName in @("commands", "blocker_ids", "blocker_summaries", "external_blocker_ids", "categories", "source_ids", "remaining_work_types")) {
             $packetArray = @(Get-ObjectArray -Object $packetAction -Name $arrayName)
             $sourceArray = @(Get-ObjectArray -Object $sourceAction -Name $arrayName)
             if ((Join-ArrayForCompare -Values $packetArray) -ne (Join-ArrayForCompare -Values $sourceArray)) {
@@ -1156,6 +1156,11 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
                     $markdownFailures += "Markdown is missing blocker id for $($packetAction.id): $blockerId"
                 }
             }
+            foreach ($remainingType in @(Get-ObjectArray -Object $packetAction -Name "remaining_work_types")) {
+                if (-not [string]::IsNullOrWhiteSpace([string]$remainingType) -and $markdown -notmatch [regex]::Escape([string]$remainingType)) {
+                    $markdownFailures += "Markdown is missing remaining work type for $($packetAction.id): $remainingType"
+                }
+            }
             foreach ($summary in @(Get-ObjectArray -Object $packetAction -Name "blocker_summaries")) {
                 if (-not [string]::IsNullOrWhiteSpace([string]$summary) -and $markdown -notmatch [regex]::Escape([string]$summary)) {
                     $markdownFailures += "Markdown is missing blocker summary for $($packetAction.id): $summary"
@@ -1265,6 +1270,11 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
             foreach ($summary in @(Get-ObjectArray -Object $packetAction -Name "blocker_summaries")) {
                 if (-not [string]::IsNullOrWhiteSpace([string]$summary) -and $commandText -notmatch [regex]::Escape([string]$summary)) {
                     $commandFailures += "operator command checklist is missing blocker summary for $($packetAction.id): $summary"
+                }
+            }
+            foreach ($remainingType in @(Get-ObjectArray -Object $packetAction -Name "remaining_work_types")) {
+                if (-not [string]::IsNullOrWhiteSpace([string]$remainingType) -and $commandText -notmatch [regex]::Escape([string]$remainingType)) {
+                    $commandFailures += "operator command checklist is missing remaining work type for $($packetAction.id): $remainingType"
                 }
             }
             foreach ($placeholder in @(Get-ObjectArray -Object $packetAction -Name "operator_placeholders")) {
