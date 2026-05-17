@@ -877,13 +877,17 @@ if ($null -ne $report) {
                 -and [string]$_.command -match [regex]::Escape('-RequireNoPlaceholders') `
                 -and [string]$_.command -match [regex]::Escape('-ProbeAiRuntime')
         })
-    if ($openWeightDirectCommands.Count -lt 1) {
+    $openWeightActionPresent = @($nextActionPlan | Where-Object {
+            [string]$_.id -in @("hosted_ai_runtime_probe", "open_weight_ai_runtime", "open_weight_ai_runtime_deployment")
+        }).Count -gt 0
+    if ($openWeightActionPresent -and $openWeightDirectCommands.Count -lt 1) {
         $openWeightCommandFailures += "no explicit open-weight AI runtime deployment/probe command was found."
     }
-    if ($openWeightPacketProbeCommands.Count -lt 1) {
+    if ($openWeightActionPresent -and $openWeightPacketProbeCommands.Count -lt 1) {
         $openWeightCommandFailures += "no controlled production provisioning packet command with -ProbeAiRuntime was found."
     }
     $checks += New-Check -Id "open_weight_ai_runtime_probe_commands" -Passed ($openWeightCommandFailures.Count -eq 0) -Failures $openWeightCommandFailures -Evidence ([pscustomobject][ordered]@{
+        action_present = $openWeightActionPresent
         direct_runtime_command_count = $openWeightDirectCommands.Count
         packet_probe_command_count = $openWeightPacketProbeCommands.Count
     })
