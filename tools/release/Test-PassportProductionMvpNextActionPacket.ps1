@@ -503,7 +503,18 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
     }
 
     $pilotWorkspaceCommand = @($deduplicatedCommands | Where-Object { [string]$_.command -match "Start-PassportPreMvpStaffStewardPilot\.ps1" } | Select-Object -First 1)
+    $pilotFillCommand = @($deduplicatedCommands | Where-Object { [string]$_.command -match "Set-PassportPreMvpStaffStewardPilotEvidencePacket\.ps1" } | Select-Object -First 1)
     $pilotCloseoutCommand = @($deduplicatedCommands | Where-Object { [string]$_.command -match "Complete-PassportPreMvpStaffStewardPilotHandoff\.ps1" } | Select-Object -First 1)
+    if ($pilotWorkspaceCommand.Count -gt 0 -and $pilotFillCommand.Count -gt 0) {
+        if ([int]$pilotWorkspaceCommand[0].sequence -ge [int]$pilotFillCommand[0].sequence) {
+            $commandSequenceFailures += "staff/steward pilot workspace launcher must appear before the pilot evidence fill helper."
+        }
+    }
+    if ($pilotFillCommand.Count -gt 0 -and $pilotCloseoutCommand.Count -gt 0) {
+        if ([int]$pilotFillCommand[0].sequence -ge [int]$pilotCloseoutCommand[0].sequence) {
+            $commandSequenceFailures += "staff/steward pilot evidence fill helper must appear before the pilot closeout command."
+        }
+    }
     if ($pilotWorkspaceCommand.Count -gt 0 -and $pilotCloseoutCommand.Count -gt 0) {
         if ([int]$pilotWorkspaceCommand[0].sequence -ge [int]$pilotCloseoutCommand[0].sequence) {
             $commandSequenceFailures += "staff/steward pilot workspace launcher must appear before the pilot closeout command."
@@ -688,6 +699,29 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
 
     $checks += New-Check -Id "staff_steward_workspace_launcher_command" -Passed ($staffStewardLauncherFailures.Count -eq 0) -Failures $staffStewardLauncherFailures -Evidence ([pscustomobject][ordered]@{
         launcher_command_count = $staffStewardLauncherCommands.Count
+    })
+
+    $staffStewardEvidenceFillFailures = @()
+    $staffStewardActionIds = @("pre_mvp_internal_verification", "pre_mvp_passed")
+    $staffStewardActions = @($packetActions | Where-Object { $staffStewardActionIds -contains [string]$_.id })
+    $staffStewardHelperCommandCount = 0
+
+    foreach ($action in $staffStewardActions) {
+        $commands = @(Get-ObjectArray -Object $action -Name "commands" | ForEach-Object { [string]$_ })
+        $hasFillHelper = @($commands | Where-Object { $_ -match 'Set-PassportPreMvpStaffStewardPilotEvidencePacket\.ps1' }).Count -gt 0
+        $hasCloseout = @($commands | Where-Object { $_ -match 'Complete-PassportPreMvpStaffStewardPilotHandoff\.ps1' }).Count -gt 0
+        if ($hasFillHelper) { $staffStewardHelperCommandCount += 1 }
+        if (-not $hasFillHelper) {
+            $staffStewardEvidenceFillFailures += "staff/steward action $($action.id) must include Set-PassportPreMvpStaffStewardPilotEvidencePacket.ps1 before closeout."
+        }
+        if (-not $hasCloseout) {
+            $staffStewardEvidenceFillFailures += "staff/steward action $($action.id) must include Complete-PassportPreMvpStaffStewardPilotHandoff.ps1."
+        }
+    }
+
+    $checks += New-Check -Id "staff_steward_fill_helper_commands" -Passed ($staffStewardEvidenceFillFailures.Count -eq 0) -Failures $staffStewardEvidenceFillFailures -Evidence ([pscustomobject][ordered]@{
+        staff_steward_action_count = $staffStewardActions.Count
+        staff_steward_helper_command_count = $staffStewardHelperCommandCount
     })
 
     $evidenceFillHelperFailures = @()

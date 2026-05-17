@@ -743,7 +743,39 @@ if (Test-Path -LiteralPath $resolvedSimulationRunReportPath -PathType Leaf) {
 }
 
 $staffStewardPilotHandoffRoot = "artifacts\release\pre-mvp-staff-steward-pilot-handoff"
+$staffStewardPilotEvidenceRoot = "$staffStewardPilotHandoffRoot\pilot-evidence"
 $staffStewardPilotWorkspaceCommand = "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Start-PassportPreMvpStaffStewardPilot.ps1 -HandoffRoot $staffStewardPilotHandoffRoot -PilotOwner <pilot-owner> -Force"
+$staffStewardPilotEvidenceFillCommand = @(
+    "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Set-PassportPreMvpStaffStewardPilotEvidencePacket.ps1",
+    "-PacketRoot $staffStewardPilotEvidenceRoot",
+    '-PilotId "pre-mvp-staff-steward-pilot-001"',
+    '-PilotOwner "<pilot-owner>"',
+    '-ParticipantId "<staff-or-steward-id>"',
+    '-ParticipantRole "<staff-or-steward-role>"',
+    '-CrownOwnedDeviceId "<controlled-device-id>"',
+    '-SessionStartedUtc "<yyyy-mm-ddThh:mm:ssZ>"',
+    '-SessionEndedUtc "<yyyy-mm-ddThh:mm:ssZ>"',
+    '-SignedUtc "<yyyy-mm-ddThh:mm:ssZ>"',
+    '-SignoffReference "<signature-or-controlled-approval-id>"',
+    '-ReviewSignoffReference "<signature-or-controlled-approval-id>"',
+    '-IdentityCreateOrRecoverEvidenceReference "<evidence-id-or-uri>"',
+    '-DeviceAuthorizationEvidenceReference "<evidence-id-or-uri>"',
+    '-WalletKeyBindingEvidenceReference "<evidence-id-or-uri>"',
+    '-RecoveryRevocationEvidenceReference "<evidence-id-or-uri>"',
+    '-StorageContributionOptInRevocationEvidenceReference "<evidence-id-or-uri>"',
+    '-LedgerExportVerificationEvidenceReference "<evidence-id-or-uri>"',
+    '-HostedAiPrivacyEvidenceReference "<evidence-id-or-uri>"',
+    '-ProductionBlockerReviewEvidenceReference "<evidence-id-or-uri>"',
+    '-ConfirmStaffOrStewardParticipant',
+    '-ConfirmCrownOwnedDeviceUsed',
+    '-ConfirmSyntheticOrFakeBalancesUsed',
+    '-ConfirmNoCitizenProductionTokensUsed',
+    '-ConfirmNoProductionRecordsCreated',
+    '-ConfirmProductionReadinessBlockersReviewed',
+    '-ConfirmNoPilotBlockingDefects',
+    '-ConfirmPilotSignoffSigned',
+    '-Force'
+) -join " "
 $staffStewardPilotCloseoutCommand = "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Complete-PassportPreMvpStaffStewardPilotHandoff.ps1 -HandoffRoot $staffStewardPilotHandoffRoot -SimulationRunReportPath $simulationRunReportPath -SimulationRunReportSha256 $simulationRunReportSha256 -Force"
 $stagingEvidenceRoot = "<filled-staging-evidence-root>"
 $stagingEvidenceFillCommand = "powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\Set-PassportStagingReadinessEvidencePacket.ps1 -PacketRoot $stagingEvidenceRoot -OperationalDrillId ""<staging-operational-drill-id>"" -RollbackDrillId ""<staging-rollback-drill-id>"" -PromotionApprovalId ""<staging-promotion-approval-id>"" -EngineeringSignoffId ""<engineering-signoff-id>"" -SecurityPrivacySignoffId ""<security-privacy-signoff-id>"" -CrownMonetaryAuthoritySignoffId ""<crown-monetary-authority-signoff-id>"" -ApiBaseUrl ""<staging-api-base-url>"" -AiGatewayUrl ""<staging-ai-gateway-url>"" -LedgerNamespace ""<staging-ledger-namespace>"" -TelemetryDestination ""<staging-telemetry-destination>"" -PackageVersion ""<staging-package-version>"" -Operator ""<operator-id>"" -IncidentResponseOwner ""<incident-response-owner-id>"" -OperationalEvidenceReference ""<staging-operational-evidence-refs>"" -RollbackReasonCode ""<rollback-reason-code>"" -RollbackApprover ""<staging-rollback-approver-ids>"" -AffectedServiceClass ""identity;wallet;storage;ai;ledger-export"" -AffectedAsset ""ARCH;CC"" -RollbackUserFacingStatus ""<rollback-user-facing-status>"" -ConfirmOperationalDrillCompleted -ConfirmProductionCandidateUpgradeValidated -ConfirmEndpointFailoverValidated -ConfirmSigningVerificationValidated -ConfirmLedgerExportReplayValidated -ConfirmRecoveryRevocationValidated -ConfirmStorageProofValidationCompleted -ConfirmStorageRedemptionDryRunCompleted -ConfirmConversionDisclosureDryRunCompleted -ConfirmTelemetryPrivacyValidated -ConfirmIncidentResponseValidated -ConfirmSupportAccessControlsValidated -ConfirmAiGatewayAuthPrivacyValidated -ConfirmProhibitedClaimsBlocked -ConfirmRollbackDrillCompleted -ConfirmNewOperationsDisabledOrRouted -ConfirmLedgerEventsPreserved -ConfirmNoDeletionMutationOrBackdating -ConfirmPendingEscrowResolvedByPolicy -ConfirmExportAccessPreserved -ConfirmProductionRecordsUntouched -ConfirmCanaryOrProductionReleaseApproved -ConfirmProductApprovalSigned -ConfirmEngineeringSignoffSigned -ConfirmSecurityPrivacySignoffSigned -ConfirmCrownMonetaryAuthoritySignoffSigned -Force"
@@ -760,6 +792,7 @@ $readinessActionMap = @{
         -Action "Open the staff/steward pilot workspace, perform the controlled pilot, fill the evidence packet, validate it with no placeholders, generate the final pilot report, and rerun pre-MVP internal verification with the report path and SHA-256." `
         -Commands @(
             $staffStewardPilotWorkspaceCommand,
+            $staffStewardPilotEvidenceFillCommand,
             $staffStewardPilotCloseoutCommand
         )
     staging_readiness = New-Action `
@@ -957,6 +990,7 @@ $releaseEvidenceActionMap = @{
         -Action "Open the staff/steward pilot workspace, complete the staff/steward pilot packet, and rerun pre-MVP verification until the report passes." `
         -Commands @(
             $staffStewardPilotWorkspaceCommand,
+            $staffStewardPilotEvidenceFillCommand,
             $staffStewardPilotCloseoutCommand
         )
     provisioning_packet_passed = New-Action `
