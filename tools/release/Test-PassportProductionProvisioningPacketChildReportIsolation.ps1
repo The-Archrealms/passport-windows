@@ -1,6 +1,7 @@
 param(
     [string]$FixtureRoot = "artifacts\release\production-provisioning-child-report-isolation-fixture",
     [string]$OutputRoot = "artifacts\release\production-provisioning-child-report-isolation-validation",
+    [string]$OutputPath = "artifacts\release\production-provisioning-child-report-isolation-validation-report.json",
     [switch]$NoFail
 )
 
@@ -218,6 +219,13 @@ $report = [pscustomobject][ordered]@{
 }
 
 $json = $report | ConvertTo-Json -Depth 8
+$resolvedOutputPath = Resolve-RepoPath -Path $OutputPath
+$resolvedOutputParent = Split-Path -Parent $resolvedOutputPath
+if ($resolvedOutputParent) {
+    New-Item -ItemType Directory -Force -Path $resolvedOutputParent | Out-Null
+}
+
+Set-Content -LiteralPath $resolvedOutputPath -Value $json -Encoding UTF8
 $json
 
 if ($failures.Count -gt 0 -and -not $NoFail) {
