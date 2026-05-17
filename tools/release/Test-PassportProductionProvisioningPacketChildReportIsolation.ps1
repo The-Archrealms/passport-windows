@@ -108,6 +108,25 @@ function Test-ReportPathsUnderRoot {
     return $true
 }
 
+function Get-CheckById {
+    param(
+        [object]$Report,
+        [string]$Id
+    )
+
+    if ($null -eq $Report -or $null -eq $Report.checks) {
+        return $null
+    }
+
+    foreach ($check in @($Report.checks)) {
+        if ([string]$check.id -eq $Id) {
+            return $check
+        }
+    }
+
+    return $null
+}
+
 $resolvedFixtureRoot = Resolve-RepoPath -Path $FixtureRoot
 $resolvedOutputRoot = Resolve-RepoPath -Path $OutputRoot
 New-Item -ItemType Directory -Force -Path $resolvedOutputRoot | Out-Null
@@ -199,6 +218,21 @@ if ($filledReport -and -not (Test-ReportPathsUnderRoot -Report $filledReport -Ro
     $failures += "filled child report paths must stay under filled child_report_root"
 }
 
+$filledReleaseEndpointCheck = Get-CheckById -Report $filledReport -Id "release_lane_endpoint_provisioning"
+$filledReleaseEndpointReportPath = ""
+if ($filledReleaseEndpointCheck -and $filledReleaseEndpointCheck.evidence -and $filledReleaseEndpointCheck.evidence.PSObject.Properties["report_path"]) {
+    $filledReleaseEndpointReportPath = [string]$filledReleaseEndpointCheck.evidence.report_path
+}
+
+$filledReleaseEndpointReport = if ([string]::IsNullOrWhiteSpace($filledReleaseEndpointReportPath)) { $null } else { Read-JsonFile -Path $filledReleaseEndpointReportPath }
+$hostedProgramRouteCheck = Get-CheckById -Report $filledReleaseEndpointReport -Id "hosted_program_route_contract"
+if ($null -eq $hostedProgramRouteCheck) {
+    $failures += "filled release-lane endpoint child report must include hosted_program_route_contract"
+}
+elseif ($hostedProgramRouteCheck.passed -ne $true) {
+    $failures += "hosted_program_route_contract must pass in filled-gate validation; C# generics must not be treated as operator placeholders"
+}
+
 $report = [pscustomobject][ordered]@{
     schema = "archrealms.passport.production_provisioning_child_report_isolation_validation.v1"
     created_utc = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
@@ -213,6 +247,7 @@ $report = [pscustomobject][ordered]@{
         filled_gate = $filledResult
         template_report_path = $templateOutput
         filled_gate_report_path = $filledOutput
+        filled_release_lane_endpoint_report_path = $filledReleaseEndpointReportPath
         template_child_report_root = if ($templateReport) { [string]$templateReport.child_report_root } else { "" }
         filled_child_report_root = if ($filledReport) { [string]$filledReport.child_report_root } else { "" }
     }

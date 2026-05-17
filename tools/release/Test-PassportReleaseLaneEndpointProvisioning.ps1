@@ -47,7 +47,8 @@ function Test-Document {
         [string]$Id,
         [string]$Path,
         [string[]]$RequiredText,
-        [string[]]$ForbiddenText = @()
+        [string[]]$ForbiddenText = @(),
+        [switch]$AllowAngleBrackets
     )
 
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
@@ -68,7 +69,7 @@ function Test-Document {
         }
     }
 
-    if ($RequireNoPlaceholders -and $text -match '<[^>\r\n]+>') {
+    if ($RequireNoPlaceholders -and -not $AllowAngleBrackets -and $text -match '<[^>\r\n]+>') {
         $failures += "placeholder values remain in $Path"
     }
 
@@ -103,7 +104,7 @@ $checks += Test-Document -Id "hosted_program_route_contract" -Path $hostedProgra
 ) -ForbiddenText @(
     'app.MapPost("/ai/runtime/probe"',
     'app.MapPost("/storage/delivery",'
-)
+) -AllowAngleBrackets
 $checks += Test-Document -Id "readme_contract" -Path $readmePath -RequiredText @(
     "PASSPORT_WINDOWS_PRODUCTION_MVP_API_BASE_URL",
     "PASSPORT_WINDOWS_PRODUCTION_MVP_AI_GATEWAY_URL",
