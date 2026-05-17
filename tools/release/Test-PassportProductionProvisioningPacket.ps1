@@ -282,7 +282,15 @@ else {
     $resolvedPacketRoot = ""
 }
 
-$childReportRoot = "artifacts\release\production-provisioning-packet"
+$resolvedOutput = Resolve-RepoPath -Path $OutputPath
+$outputParent = Split-Path -Parent $resolvedOutput
+if ([string]::IsNullOrWhiteSpace($outputParent)) {
+    $outputParent = $repoRoot
+}
+
+$childReportRoot = Join-Path $outputParent (([System.IO.Path]::GetFileNameWithoutExtension($resolvedOutput)) + ".child-reports")
+New-Item -ItemType Directory -Force -Path $childReportRoot | Out-Null
+
 $checks = @()
 
 $placeholderArgs = @()
@@ -437,12 +445,12 @@ $report = [pscustomobject][ordered]@{
     monetary_operator_key_configured = [bool]$monetaryOperatorKeyConfigured
     monetary_operator_key_source = $monetaryOperatorKeySource
     monetary_endpoint_timeout_seconds = [int]$MonetaryEndpointTimeoutSeconds
+    child_report_root = $childReportRoot
     passed = $failed.Count -eq 0
     failed_check_count = $failed.Count
     checks = $checks
 }
 
-$resolvedOutput = Resolve-RepoPath -Path $OutputPath
 $parent = Split-Path -Parent $resolvedOutput
 if ($parent) {
     New-Item -ItemType Directory -Force -Path $parent | Out-Null
