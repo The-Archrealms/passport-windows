@@ -171,6 +171,21 @@ function Add-UniqueString {
     }
 }
 
+function Get-PlaceholderTokensFromCommand {
+    param([string]$Command)
+
+    $tokens = New-Object System.Collections.Generic.List[string]
+    if ([string]::IsNullOrWhiteSpace($Command)) {
+        return @()
+    }
+
+    foreach ($match in [regex]::Matches($Command, "<[A-Za-z0-9][A-Za-z0-9_.:-]*>")) {
+        Add-UniqueString -List $tokens -Value ([string]$match.Value)
+    }
+
+    return @($tokens)
+}
+
 function Get-SafeFileNamePart {
     param([string]$Value)
 
@@ -228,8 +243,8 @@ function New-CommandGroupRecords {
             foreach ($blockerId in @(Get-ObjectArray -Object $action -Name "blocker_ids")) {
                 Add-UniqueString -List $entry.blocker_ids -Value ([string]$blockerId)
             }
-            foreach ($placeholder in @(Get-ObjectArray -Object $action -Name "operator_placeholders")) {
-                Add-UniqueString -List $entry.placeholder_tokens -Value ([string]$placeholder.token)
+            foreach ($placeholderToken in @(Get-PlaceholderTokensFromCommand -Command $command)) {
+                Add-UniqueString -List $entry.placeholder_tokens -Value $placeholderToken
             }
         }
     }

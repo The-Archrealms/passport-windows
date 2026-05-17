@@ -166,6 +166,24 @@ function Get-ObjectArray {
     return @($Object.$Name)
 }
 
+function Get-PlaceholderTokensFromCommand {
+    param([string]$Command)
+
+    $tokens = New-Object System.Collections.Generic.List[string]
+    if ([string]::IsNullOrWhiteSpace($Command)) {
+        return @()
+    }
+
+    foreach ($match in [regex]::Matches($Command, "<[A-Za-z0-9][A-Za-z0-9_.:-]*>")) {
+        $token = [string]$match.Value
+        if (-not $tokens.Contains($token)) {
+            $tokens.Add($token)
+        }
+    }
+
+    return @($tokens)
+}
+
 function Join-ArrayForCompare {
     param([object[]]$Values)
 
@@ -493,6 +511,19 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
         }
         if (@(Get-ObjectArray -Object $group -Name "blocker_ids").Count -eq 0 -and $packetActions.Count -gt 0) {
             $commandSequenceFailures += "deduplicated command group is missing blocker_ids."
+        }
+
+        $expectedPlaceholderTokens = @(Get-PlaceholderTokensFromCommand -Command $groupCommand)
+        $actualPlaceholderTokens = @(Get-ObjectArray -Object $group -Name "placeholder_tokens" | ForEach-Object { [string]$_ })
+        foreach ($token in $expectedPlaceholderTokens) {
+            if ($actualPlaceholderTokens -notcontains $token) {
+                $commandSequenceFailures += "deduplicated command group placeholder_tokens missing $token for command: $groupCommand"
+            }
+        }
+        foreach ($token in $actualPlaceholderTokens) {
+            if ($expectedPlaceholderTokens -notcontains $token) {
+                $commandSequenceFailures += "deduplicated command group placeholder_tokens includes $token not present in command: $groupCommand"
+            }
         }
     }
 
