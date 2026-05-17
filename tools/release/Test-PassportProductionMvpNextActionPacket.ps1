@@ -166,6 +166,29 @@ function Get-ObjectArray {
     return @($Object.$Name)
 }
 
+function Get-CommandParameterValue {
+    param(
+        [string]$Command,
+        [string]$ParameterName
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Command) -or [string]::IsNullOrWhiteSpace($ParameterName)) {
+        return ""
+    }
+
+    $pattern = "(?i)(?:^|\s)-$([regex]::Escape($ParameterName))\s+(?:""([^""]+)""|([^\s]+))"
+    $match = [regex]::Match($Command, $pattern)
+    if (-not $match.Success) {
+        return ""
+    }
+
+    if ($match.Groups[1].Success) {
+        return [string]$match.Groups[1].Value
+    }
+
+    return [string]$match.Groups[2].Value
+}
+
 function Get-PlaceholderTokensFromCommand {
     param([string]$Command)
 
@@ -786,6 +809,73 @@ if ($null -ne $manifest -and $null -ne $plan -and $null -ne $sourceReport) {
 
     $checks += New-Check -Id "staff_steward_workspace_launcher_command" -Passed ($staffStewardLauncherFailures.Count -eq 0) -Failures $staffStewardLauncherFailures -Evidence ([pscustomobject][ordered]@{
         launcher_command_count = $staffStewardLauncherCommands.Count
+    })
+
+    $staffStewardHandoffFailures = @()
+    $staffStewardHandoffReferences = New-Object System.Collections.Generic.List[string]
+    $expectedStaffStewardHandoffRoot = Resolve-RepoPath -Path "artifacts\release\pre-mvp-staff-steward-pilot-handoff"
+    foreach ($packetAction in $packetActions) {
+        foreach ($command in @(Get-ObjectArray -Object $packetAction -Name "commands")) {
+            $commandText = [string]$command
+            if ($commandText -notmatch '(Start-PassportPreMvpStaffStewardPilot|Set-PassportPreMvpStaffStewardPilotEvidencePacket|Complete-PassportPreMvpStaffStewardPilotHandoff)\.ps1') {
+                continue
+            }
+
+            $handoffRoot = Get-CommandParameterValue -Command $commandText -ParameterName "HandoffRoot"
+            if ([string]::IsNullOrWhiteSpace($handoffRoot)) {
+                $staffStewardEvidencePacketRoot = Get-CommandParameterValue -Command $commandText -ParameterName "PacketRoot"
+                if (-not [string]::IsNullOrWhiteSpace($staffStewardEvidencePacketRoot)) {
+                    $resolvedStaffStewardEvidencePacketRoot = Resolve-RepoPath -Path $staffStewardEvidencePacketRoot
+                    $leaf = Split-Path -Leaf $resolvedStaffStewardEvidencePacketRoot
+                    $handoffRoot = if ($leaf -eq "pilot-evidence") { Split-Path -Parent $resolvedStaffStewardEvidencePacketRoot } else { $resolvedStaffStewardEvidencePacketRoot }
+                }
+            }
+
+            if ([string]::IsNullOrWhiteSpace($handoffRoot)) {
+                $staffStewardHandoffFailures += "staff/steward command is missing -HandoffRoot or -PacketRoot: $commandText"
+                continue
+            }
+
+            $resolvedHandoffRoot = Resolve-RepoPath -Path $handoffRoot
+            if (-not $staffStewardHandoffReferences.Contains($resolvedHandoffRoot)) {
+                $staffStewardHandoffReferences.Add($resolvedHandoffRoot)
+            }
+
+            if ([System.IO.Path]::GetFullPath($resolvedHandoffRoot) -ne [System.IO.Path]::GetFullPath($expectedStaffStewardHandoffRoot)) {
+                $staffStewardHandoffFailures += "staff/steward command references unexpected handoff root $resolvedHandoffRoot; expected $expectedStaffStewardHandoffRoot"
+            }
+        }
+    }
+
+    $expectedStaffStewardManifestPath = Join-Path $expectedStaffStewardHandoffRoot "pilot-handoff.manifest.json"
+    $staffStewardManifest = Read-JsonFile -Path $expectedStaffStewardManifestPath
+    $staffStewardManifestSha256 = Get-Sha256Hex -Path $expectedStaffStewardManifestPath
+    $staffStewardManifestCommit = ""
+    if ($staffStewardHandoffReferences.Count -gt 0) {
+        if ($null -eq $staffStewardManifest) {
+            $staffStewardHandoffFailures += "staff/steward handoff manifest is missing or unreadable: $expectedStaffStewardManifestPath"
+        }
+        else {
+            if ($staffStewardManifest.PSObject.Properties["app_commit"]) {
+                $staffStewardManifestCommit = [string]$staffStewardManifest.app_commit
+            }
+
+            if ($staffStewardManifestCommit -notmatch '^[0-9a-f]{7,40}$') {
+                $staffStewardHandoffFailures += "staff/steward handoff manifest app_commit is missing or invalid."
+            }
+            elseif (-not [string]::IsNullOrWhiteSpace($currentCommit) -and $staffStewardManifestCommit -ne $currentCommit) {
+                $staffStewardHandoffFailures += "staff/steward handoff manifest app_commit $staffStewardManifestCommit does not match current app commit $currentCommit."
+            }
+        }
+    }
+
+    $checks += New-Check -Id "staff_steward_handoff_root_freshness" -Passed ($staffStewardHandoffFailures.Count -eq 0) -Failures $staffStewardHandoffFailures -Evidence ([pscustomobject][ordered]@{
+        expected_handoff_root = $expectedStaffStewardHandoffRoot
+        referenced_handoff_roots = @($staffStewardHandoffReferences)
+        manifest_path = $expectedStaffStewardManifestPath
+        manifest_sha256 = $staffStewardManifestSha256
+        manifest_app_commit = $staffStewardManifestCommit
+        current_app_commit = $currentCommit
     })
 
     $staffStewardEvidenceFillFailures = @()
