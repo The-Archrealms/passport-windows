@@ -324,6 +324,7 @@ function New-CompletionAuditFixture {
             failed_provisioning_check_count = 0
             failed_release_evidence_check_count = 0
             failed_closeout_count = 0
+            report_reference_refresh_count = 0
         }
     })
     $sourceReportRecord = [pscustomobject][ordered]@{
@@ -1218,6 +1219,19 @@ $checks += New-Check -Id "local_ready_remaining_actions_external" -Passed ($exte
 
 $inputFailures = Get-ObjectArray -Object $report -Name "input_failures"
 $checks += Add-Check -Id "input_failures_absent" -Condition ($null -ne $report -and $inputFailures.Count -eq 0) -Failure "completion audit has input failures" -Evidence $inputFailures
+
+$reportReferenceFailures = @()
+$outstandingSummary = if ($null -ne $report -and $report.PSObject.Properties["outstanding_summary"]) { $report.outstanding_summary } else { $null }
+if ($null -eq $outstandingSummary) {
+    $reportReferenceFailures += "completion audit outstanding_summary is missing"
+}
+elseif (-not $outstandingSummary.PSObject.Properties["report_reference_refresh_count"]) {
+    $reportReferenceFailures += "completion audit outstanding_summary is missing report_reference_refresh_count"
+}
+elseif ([int]$outstandingSummary.report_reference_refresh_count -ne 0) {
+    $reportReferenceFailures += "production MVP report references are stale; report_reference_refresh_count=$([int]$outstandingSummary.report_reference_refresh_count)"
+}
+$checks += New-Check -Id "report_references_current" -Passed ($reportReferenceFailures.Count -eq 0) -Failures $reportReferenceFailures -Evidence $outstandingSummary
 
 $requiredChecklistIds = @(
     "prd_success_pre_mvp_internal_verification",

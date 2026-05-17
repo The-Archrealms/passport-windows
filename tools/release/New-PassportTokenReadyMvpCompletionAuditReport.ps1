@@ -503,6 +503,14 @@ foreach ($file in $files.Values) {
     }
 }
 
+$reportReferenceRefreshCount = 0
+if ($null -ne $outstanding -and $outstanding.PSObject.Properties["summary"] -and $outstanding.summary.PSObject.Properties["report_reference_refresh_count"]) {
+    $reportReferenceRefreshCount = [int]$outstanding.summary.report_reference_refresh_count
+}
+if ($reportReferenceRefreshCount -gt 0) {
+    $inputFailures += "Production MVP report references need refresh before completion audit: $reportReferenceRefreshCount stale report reference(s)."
+}
+
 $items = @()
 $preMvpImplementationReady = Test-PreMvpImplementationReady -PreMvpReport $preMvp
 
